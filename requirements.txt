@@ -1,0 +1,36 @@
+# Core dependencies
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Data processing
+numpy>=1.24.0
+
+# ML/Embeddings
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+
+# PDF processing
+PyMuPDF>=1.23.0
+
+# ArXiv API
+arxiv>=2.0.0
+
+# LLM APIs
+anthropic>=0.18.0
+
+# Database
+# (Using SQLite - included in Python standard library)
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: For future web interface
+# fastapi>=0.104.0
+# uvicorn>=0.24.0
+# celery>=5.3.0
+
+# Development
+black>=23.0.0
+flake8>=6.1.0
+mypy>=1.6.0
