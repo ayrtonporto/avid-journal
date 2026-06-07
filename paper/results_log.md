@@ -41,15 +41,44 @@
 
 **Resumen del cierre:** WSL2 instalado correctamente con Ubuntu 22.04 en D:. Venv y entorno Python listos. LeanDojo instalado pero pausado para uso manual en Día 7. Descubierto que LeanDojo traza dependencias transitivas, no tracing puntual. Reorientación arquitectural del sprint hacia demo en tiempo real con D1+D2 automáticos y D3 a pedido. Cierra Día 3 con setup completo pero alcance redirigido.
 
-## Día 4 — Filtro de trivialidad (D2)
+## Día 4 — Filtro de trivialidad (D2) ✓
 
 **Objetivo:** módulo `triviality_filter.py` que toma un enunciado en Lean e intenta cerrarlo con `T_auto = {decide, omega, simp, norm_num, aesop, tauto}` + `exact?`. Output: bandera + táctica que lo cerró.
 
 **Hecho:**
 
-**Pendiente:**
+- `src/novelty_v2/dimensions/d2_triviality.py`: implementación completa de `check_triviality(lean_statement, lean_project_dir, budgets) → D2Result`. Itera `T_AUTO_ORDER = [decide, norm_num, simp, omega, tauto, exact?, aesop]`, detiene en primer éxito. Timeouts: `budget_seconds + LEAN_STARTUP_OVERHEAD_S` (45 s overhead medido empíricamente en Windows).
+- `src/novelty_v2/types.py`: añadido campo `all_attempts: List[Tuple[str, bool, float, Optional[str]]]` a `D2Result`.
+- `scripts/d2/test_eval_set.py`: script de evaluación con T14-T18 + T23. Pre-warm step para calentar caché de OS antes del cronómetro. Default `--lean-project` apunta a Windows nativo.
+- **Decisión arquitectural crítica:** abandono de WSL como entorno primario. Pipeline automatizado corre en Windows nativo. WSL preservado solo para D3 manual del Día 7. Documentado en `decisions.md`.
+- Mathlib en Windows confirmada funcional: 8 247 oleans, 0 vacíos, `Mathlib.olean` presente. `lake env lean` → `exit=0` en 165.8 s primera corrida fría, ~30 s con OS cache caliente.
 
-**Resultados sobre eval set (preliminar):**
+**Pendiente:** ninguno para Día 4.
+
+**Resultados sobre eval set (corrida 2026-06-07, Windows nativo, Lean 4.29.0):**
+
+| Test | Descripción | Resultado | Táctica | Tiempo total | Esperado | OK |
+|------|-------------|-----------|---------|-------------|----------|----|
+| T14 | 4 enteros pares → par | TRIVIAL | aesop | 215 s | trivial | ✓ |
+| T15 | 2 + 2 = 4 | TRIVIAL | decide | 29 s | trivial | ✓ |
+| T16 | ∀ n : Nat, n + 0 = n | TRIVIAL | norm_num | 61 s | trivial | ✓ |
+| T17 | ∀ n : Nat, n ≤ n + 1 | TRIVIAL | norm_num | 60 s | trivial | ✓ |
+| T18 | Σ primeros n impares = n² (trampa) | NO TRIVIAL | — | 214 s | no trivial | ✓ |
+| T23 | grafo conexo + acíclico → árbol (FP esperado) | TRIVIAL | tauto | 146 s | FP esperado | registrado |
+
+**Score: 5/5 con expectativa booleana. T23 registrado como falso positivo esperado.**
+
+**Observaciones:**
+
+1. **T14 requirió aesop** (se esperaba simp u omega). `Even` en Lean 4 es una proposición existencial — `simp` no la resuelve por unfolding automático; `omega` tampoco maneja `Even` directamente. `aesop` lo cierra buscando el camino. Consecuencia: T14 tarda 215 s en total (7 tácticas × ~30 s c/u).
+
+2. **T16 y T17 cerraron con norm_num** (se esperaba simp/omega). `norm_num` generaliza más que `decide` sobre ecuaciones e inecuaciones numéricas con cuantificadores sobre `Nat`.
+
+3. **T23 cerró con `tauto`** (se esperaba `aesop`). En Mathlib v4.29.0, `SimpleGraph.IsTree` está definido como `Connected ∧ IsAcyclic` (una conjunción), y `tauto` maneja lógica proposicional trivialmente. Falso positivo confirmado — D2 clasifica este teorema como trivial aunque no lo sea matemáticamente. Registrado como limitación conocida del filtro.
+
+4. **Overhead de inicio de Lean en Windows**: ~30 s por invocación con OS cache caliente. Cada `lake env lean` carga todos los oleans desde cero. Absorber con `LEAN_STARTUP_OVERHEAD_S = 45`. Para la demo, esto implica que D2 tarda ~30–215 s por teorema dependiendo de qué táctica lo cierra primero.
+
+5. **T18 (trampa) no se cerró**: ninguna de las 7 tácticas pudo con `Finset.range n).sum (fun k => 2 * k + 1) = n ^ 2`. Inducción necesaria. D2 funciona correctamente como filtro.
 
 ## Día 5 — Extracción de premisas con LeanDojo (parte 1)
 

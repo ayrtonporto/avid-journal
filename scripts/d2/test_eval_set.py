@@ -1,27 +1,89 @@
 """Test de D2 (trivialidad) sobre T14-T18 y T23 del eval set.
 
-Ejecutar desde WSL, desde la raíz del repo:
+Ejecutar desde la raíz del repo (Windows nativo):
 
-    python scripts/d2/test_eval_set.py \
-        --lean-project /home/ayrton/avid-journal/lean_project
+    python scripts/d2/test_eval_set.py
 
-Si --lean-project no se especifica, se intenta detectar automáticamente
-(útil si el repo está en el filesystem nativo de WSL).
+    python scripts/d2/test_eval_set.py --verbose
 
-Tiempo estimado por caso: 10-90 s (carga de ambiente Mathlib primera vez).
+    python scripts/d2/test_eval_set.py --lean-project "D:/ruta/al/lean_project"
+
+Si --lean-project no se especifica, usa el default de Windows:
+  D:\\Mis documentos\\Documentos\\AViD Journal\\lean_project
+
+Tiempo estimado por caso: ~30-60 s con caché de OS caliente.
+Primera corrida del día puede tardar ~3 min en carga inicial de oleans.
 """
 
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
+import tempfile
+import os
 import time
 from pathlib import Path
+
+# En Windows la consola puede ser cp1252; forzamos UTF-8 para que los enunciados
+# matemáticos (∀, →, ≤, etc.) se impriman correctamente.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 # Permite importar src/ desde repo root aunque se llame como script suelto.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.novelty_v2.dimensions.d2_triviality import check_triviality
+
+
+# ---------------------------------------------------------------------------
+# Default lean_project para Windows nativo
+# ---------------------------------------------------------------------------
+
+_WIN_DEFAULT = Path("D:/Mis documentos/Documentos/AViD Journal/lean_project")
+_RELATIVE_DEFAULT = Path(__file__).resolve().parents[2] / "lean_project"
+
+DEFAULT_LEAN_PROJECT = _WIN_DEFAULT if _WIN_DEFAULT.exists() else _RELATIVE_DEFAULT
+
+
+def _prewarm(lean_project_dir: Path) -> None:
+    """Pre-carga oleans de Mathlib para que los casos de test no paguen cold start.
+
+    En Windows el primer `lake env lean` del día puede tardar 2-3 min cargando
+    oleans desde NTFS. Hacemos una corrida vacía aquí para calentar el caché de OS
+    antes del cronómetro de los tests.
+    """
+    src = "import Mathlib\n\nexample : True := trivial\n"
+    fd, path = tempfile.mkstemp(suffix=".lean", prefix="avid_prewarm_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(src)
+        print("Pre-calentando entorno Lean (primera carga de oleans)...")
+        t0 = time.monotonic()
+        r = subprocess.run(
+            ["lake", "env", "lean", path],
+            cwd=lean_project_dir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=300,
+        )
+        elapsed = time.monotonic() - t0
+        if r.returncode == 0:
+            print(f"  ✓ Listo en {elapsed:.1f}s — caché caliente\n")
+        else:
+            print(f"  ⚠ Prewarm falló (rc={r.returncode}, {elapsed:.1f}s) — tests pueden ser lentos\n")
+            if r.stderr:
+                print(f"  stderr: {r.stderr[:200]}\n")
+    except subprocess.TimeoutExpired:
+        print("  ⚠ Prewarm timeout (>300s) — tests pueden ser muy lentos\n")
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 # ---------------------------------------------------------------------------
 # Enunciados del eval set en Lean 4 + Mathlib
@@ -160,7 +222,7 @@ def run_tests(lean_project_dir: Path, verbose: bool = False) -> None:
             # T23 y otros donde expected es string (caso especial)
             print(f"      ℹ Caso especial: {notas}")
             if result.trivial:
-                print(f"        → aesop cerró el enunciado (falso positivo registrado)")
+                print(f"        → {result.tactica} cerró el enunciado (falso positivo registrado)")
             else:
                 print(f"        → D2 correcto: no marcó como trivial")
 
@@ -190,14 +252,20 @@ def main() -> None:
     parser.add_argument(
         "--lean-project",
         type=Path,
-        default=Path.home() / "avid-journal" / "lean_project",
+        default=DEFAULT_LEAN_PROJECT,
         help="Ruta al lean_project/ con Mathlib pre-compilado. "
-             "Por defecto: ~/avid-journal/lean_project",
+             f"Por defecto: {DEFAULT_LEAN_PROJECT}",
     )
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Mostrar todos los intentos de tácticas, no solo el ganador.",
+    )
+    parser.add_argument(
+        "--no-prewarm",
+        action="store_true",
+        help="Saltear el paso de pre-calentamiento de oleans (útil si ya hay "
+             "una sesión Lean reciente activa).",
     )
     args = parser.parse_args()
 
@@ -205,6 +273,9 @@ def main() -> None:
         print(f"ERROR: lean_project no encontrado en {args.lean_project}")
         print("Especificá --lean-project /ruta/al/lean_project con Mathlib compilado.")
         sys.exit(1)
+
+    if not args.no_prewarm:
+        _prewarm(args.lean_project)
 
     run_tests(args.lean_project, verbose=args.verbose)
 

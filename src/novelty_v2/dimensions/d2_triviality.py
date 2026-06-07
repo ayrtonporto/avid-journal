@@ -10,8 +10,10 @@ Valores de presupuesto (registrados en paper/decisions.md):
   - decide, omega, simp, norm_num, tauto, exact?: 10 s
   - aesop: 30 s  (búsqueda más exhaustiva)
 
-Invocar desde WSL con lean_project_dir apuntando al filesystem nativo de Linux
-para aprovechar los oleans pre-compilados de Mathlib.
+Entorno de ejecución: Windows nativo con Lean 4.29.0 (x86_64-w64-windows-gnu).
+`lake env lean` en Windows tarda ~30 s con caché de OS caliente solo en inicialización
+de entorno (carga de oleans de Mathlib). El OS timeout incluye un overhead constante
+LEAN_STARTUP_OVERHEAD_S para absorber esa latencia.
 """
 
 from __future__ import annotations
@@ -35,6 +37,11 @@ T_AUTO_ORDER: List[str] = [
     "exact?",
     "aesop",
 ]
+
+# Overhead constante de inicialización de entorno Lean (carga de oleans de Mathlib).
+# En Windows nativo con OS cache caliente: ~28-32 s medidos experimentalmente.
+# Se usa como margen extra en el OS timeout: timeout_os = budget_s + LEAN_STARTUP_OVERHEAD_S.
+LEAN_STARTUP_OVERHEAD_S: int = 45
 
 DEFAULT_BUDGETS: Dict[str, int] = {
     "decide": 10,
@@ -84,7 +91,7 @@ def _run_tactic(
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
-                timeout=budget_seconds + 5,
+                timeout=budget_seconds + LEAN_STARTUP_OVERHEAD_S,
             )
             elapsed = time.monotonic() - t0
             success = proc.returncode == 0
@@ -92,13 +99,13 @@ def _run_tactic(
             return success, elapsed, out
         except subprocess.TimeoutExpired:
             elapsed = time.monotonic() - t0
-            return False, elapsed, f"timeout after {budget_seconds}s"
+            return False, elapsed, f"timeout after {budget_seconds + LEAN_STARTUP_OVERHEAD_S}s"
         except FileNotFoundError:
             elapsed = time.monotonic() - t0
             return (
                 False,
                 elapsed,
-                "lake not found — ejecutar desde WSL con lean en PATH",
+                "lake no encontrado — asegurate de que lake/lean estén en PATH",
             )
     finally:
         try:
@@ -121,8 +128,8 @@ def check_triviality(
         lean_statement: Expresión de tipo Lean τ, sin 'example :' ni ':= by'.
             Ej.: '∀ (n : Nat), n + 0 = n'
         lean_project_dir: Ruta al lean_project/ del repo (debe tener Mathlib y
-            sus oleans pre-compilados). Por defecto: detectado relativo al módulo.
-            En WSL usar '/home/<user>/avid-journal/lean_project' explícitamente.
+            sus oleans pre-compilados). Por defecto: detectado relativo al módulo
+            (parents[3]/lean_project). Pasar explícitamente si el auto-detect falla.
         budgets: Presupuesto en segundos por táctica.
             Valores por defecto: 10 s para todas salvo aesop (30 s).
 

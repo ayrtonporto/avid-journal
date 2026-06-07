@@ -163,3 +163,23 @@
 **Razonamiento:** el demo es simultáneamente una herramienta técnica y un dispositivo narrativo. La interfaz asíncrona refleja honestamente la arquitectura real del sistema y comunica que D3 es una operación cara — un dato relevante para la audiencia de Wenda Li / Welleck / van Doorn.
 
 **Reversibilidad:** media. La cola SQLite y el endpoint asincrónico se pueden extraer del demo público si en algún momento se desea servirlo a escala con backend dedicado.
+
+### 2026-06-07 — Pipeline automatizado corre en Windows nativo; WSL preservado solo para D3 manual
+
+**Decisión:** el pipeline de formación y la métrica de novedad (D1 + D2) corren en **Windows nativo** (Lean 4.29.0 `x86_64-w64-windows-gnu`, commit `98dc76e3`). WSL queda preservado exclusivamente para el **Día 7**: corrida manual de LeanDojo sobre los pares T07/T08/T09 (necesita Python ≥3.10 + LeanDojo en Linux). El resto del sprint es 100% Windows.
+
+**Contexto de la decisión:** se intentó usar WSL como entorno primario para el pipeline automatizado (razón original: LeanDojo solo funciona en Linux). Durante el Día 4 se peleó con el caché de Mathlib en WSL: dos corridas de `lake exe cache get` resultaron en archivos `.ltar` corruptos (lectura y escritura concurrentes), dejando 5 759 oleans válidos pero `Mathlib.olean` faltante. La pipeline de D2 falló completamente. Al mismo tiempo, Windows nativo tenía 8 247 oleans completos (0 vacíos), `Mathlib.olean` presente, y el pipeline de formalizción ya funcionaba ahí.
+
+**Evidencia que soporta la decisión:**
+- `lake env lean` en Windows: `exit=0` en 165.8 s (primera corrida fría) y ~30 s con caché de OS caliente.
+- WSL post-corrupción: `import Mathlib` → error, `Mathlib.olean` ausente sin corrección fácil.
+- Overhead de inicio fijo: ~30 s/invocación en Windows con caché caliente (medido empíricamente: decide=31.6s, norm_num=28.8s, omega=28.4s). Absorber con `LEAN_STARTUP_OVERHEAD_S = 45`.
+
+**Alternativas consideradas:**
+- Reparar el caché de Mathlib en WSL: descartado. El problema era concurrencia en la descompresión de `.ltar` — requería una corrida limpia larga y arriesgada. Windows ya funciona.
+- Mantener WSL como entorno principal con Mathlib reconstruido: descartado. Tiempo del sprint > valor de uniformidad de entorno.
+- Docker con imagen Lean: descartado para el sprint actual (overhead de setup + no resuelve LeanDojo en D3).
+
+**Razonamiento:** el criterio es pragmático — usar el entorno que ya funciona. LeanDojo (la única razón para WSL) es manual y puntual (Día 7). Todo lo demás ya corría bien en Windows. La decisión elimina una fuente de bloqueo sin comprometer nada.
+
+**Reversibilidad:** alta. Si en el futuro se necesita Linux para CI u otra razón, los archivos de Python son agnósticos de plataforma; el único cambio necesario es ajustar `LEAN_STARTUP_OVERHEAD_S` y los paths por defecto.
