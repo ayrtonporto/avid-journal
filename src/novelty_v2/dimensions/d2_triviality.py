@@ -60,9 +60,14 @@ def _heartbeats(budget_seconds: int) -> int:
     return budget_seconds * 400_000
 
 
-def _lean_source(statement: str, tactic: str, heartbeats: int) -> str:
+def _lean_source(
+    statement: str,
+    tactic: str,
+    heartbeats: int,
+    lean_imports: str = "import Mathlib",
+) -> str:
     return (
-        "import Mathlib\n\n"
+        f"{lean_imports}\n\n"
         f"set_option maxHeartbeats {heartbeats}\n\n"
         f"example : {statement} := by\n"
         f"  {tactic}\n"
@@ -74,9 +79,10 @@ def _run_tactic(
     tactic: str,
     lean_project_dir: Path,
     budget_seconds: int,
+    lean_imports: str = "import Mathlib",
 ) -> Tuple[bool, float, Optional[str]]:
     """Ejecuta un intento con una táctica. Devuelve (success, elapsed_s, output)."""
-    source = _lean_source(lean_statement, tactic, _heartbeats(budget_seconds))
+    source = _lean_source(lean_statement, tactic, _heartbeats(budget_seconds), lean_imports)
 
     fd, tmppath = tempfile.mkstemp(suffix=".lean", prefix="avid_d2_")
     try:
@@ -118,6 +124,7 @@ def check_triviality(
     lean_statement: str,
     lean_project_dir: Optional[str | Path] = None,
     budgets: Optional[Dict[str, int]] = None,
+    lean_imports: str = "import Mathlib",
 ) -> D2Result:
     """Intenta cerrar lean_statement con cada táctica en T_auto + exact?.
 
@@ -132,6 +139,11 @@ def check_triviality(
             (parents[3]/lean_project). Pasar explícitamente si el auto-detect falla.
         budgets: Presupuesto en segundos por táctica.
             Valores por defecto: 10 s para todas salvo aesop (30 s).
+        lean_imports: Líneas de import para el archivo Lean generado.
+            Por defecto 'import Mathlib'. Usar imports mínimos para reducir
+            tiempo de carga. Ej.: 'import Mathlib.Tactic\\nimport Mathlib.Data.Nat.Prime'
+            NOTA: cambiar este parámetro NO afecta el comportamiento validado de los
+            tests del Día 4 (todos usaron el default 'import Mathlib').
 
     Returns:
         D2Result con trivial flag, táctica ganadora, tiempo, y all_attempts.
@@ -147,7 +159,7 @@ def check_triviality(
     for tactic in T_AUTO_ORDER:
         budget = budgets.get(tactic, 10)
         success, elapsed, out = _run_tactic(
-            lean_statement, tactic, lean_project_dir, budget
+            lean_statement, tactic, lean_project_dir, budget, lean_imports
         )
         all_attempts.append((tactic, success, elapsed, out))
         if success:
