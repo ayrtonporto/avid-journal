@@ -24,9 +24,9 @@ novelty_v2/
 ├── __init__.py          ← exporta NoveltyVerdict, Verdict, D1/D2/D3Result
 ├── types.py             ← dataclasses de veredictos (los 5 de la spec + ZONA_GRIS)
 ├── dimensions/
-│   ├── d1_existence.py  ← Día 7: no-existencia en C_F y C_I
+│   ├── d1_existence.py  ← Día 5 (adelantado): no-existencia en C_F y C_I
 │   ├── d2_triviality.py ← Día 4: cierre por tácticas T_auto
-│   └── d3_premises.py   ← Días 5-6: LeanDojo + Jaccard
+│   └── d3_premises.py   ← Días 8-9: LeanDojo + Jaccard
 └── orchestrator.py      ← Día 8: árbol de decisión combinado
 ```
 
