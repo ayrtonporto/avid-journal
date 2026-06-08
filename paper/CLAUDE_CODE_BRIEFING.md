@@ -1,214 +1,207 @@
-# Briefing para Claude Code — AViD Journal sprint, Día 4 en adelante
+# CLAUDE_CODE_BRIEFING.md
 
-**Este es tu primer mensaje. Leelo entero antes de cualquier acción.**
+**Documento de orientación para Claude Code trabajando en el sprint de AViD Journal.**
 
-Sos Claude Code retomando un sprint de investigación ya en marcha. La sesión anterior (Día 3) cerró con setup de infraestructura completo y una reorientación arquitectural importante. Tu trabajo es continuar desde Día 4 sin que Ayrton tenga que repetir contexto.
+Este archivo es el punto de entrada para cualquier chat nuevo de Claude Code en el proyecto. Si estás leyendo esto como Claude Code recién empezado, leelo entero y después dame un resumen de 5-10 puntos confirmando qué entendiste, antes de tocar código.
+
+**Última actualización:** 8 de junio de 2026 — comienzo del Día 5 del sprint.
 
 ---
 
 ## 1. Qué es AViD Journal
 
-AViD Journal es un sistema automatizado para chequear la **novedad matemática** de teoremas formalizados en Lean 4. Recibe un paper `.tex`, lo parsea en bloques (definiciones, teoremas, lemas, proposiciones, corolarios), autoformaliza cada bloque a Lean usando Claude Code como subprocess, verifica con Lean, y luego — la parte central del sprint — clasifica la novedad de cada teorema contra un corpus compuesto por mathlib (formal) y arXiv + Semantic Scholar (informal). Stack: Python orchestrator + Lean 4 + LeanDojo + SQLite + Gradio (este último a construir).
+AViD Journal es un sistema automatizado para chequear novedad y verificar formalmente teoremas de papers matemáticos. El usuario sube un `.tex`, el sistema parsea bloques, los autoformaliza a Lean 4, los verifica, y mide novedad contra dos corpus: mathlib (formal) y arXiv/Semantic Scholar (informal).
 
-El proyecto vive en `D:\Mis documentos\Documentos\AViD Journal\` (Windows) con clon de trabajo dentro de WSL2 en `/home/ayrton/avid-journal/` (filesystem nativo de Linux). El autor es **Ayrton Porto** (UNICEN, matemático argentino, Lean 4 nivel intermedio, no programador experimentado).
+El proyecto vive en `D:\Mis documentos\Documentos\AViD Journal\` (Windows nativo, NO WSL para flujo automático). Repo público: `https://github.com/ayrtonporto/avid-journal`.
 
----
+El autor es Ayrton Porto, matemático argentino de UNICEN. El proyecto tiene dos objetivos simultáneos: ser un producto funcional ofreciendo chequeo de novedad como servicio, y producir un paper que sirva como credencial para aplicaciones de PhD (Wenda Li en Edinburgh, Welleck en CMU, van Doorn en Bonn).
 
-## 2. Qué es el sprint de 15 días
+## 2. El sprint en curso
 
-Sprint para producir simultáneamente **cuatro artefactos**:
+Cuatro entregables para el 7 de julio de 2026:
 
-- **A — Demo web público funcional** (Gradio + Hugging Face Spaces) con URL estable.
-- **B — Métrica de novedad implementada** con sus tres dimensiones (D1, D2, D3) según `paper/metric_spec.md`.
-- **C — Evidencia preliminar**: corrida sobre el eval set de `paper/eval_set.csv` (29 teoremas firmes + 9 TBD) con tabla de aciertos por categoría.
-- **D — Preprint v1 listo** (no publicado) en `paper/preprint/draft.md`.
+1. **Demo web público con URL estable.** Versión 2: pipeline asíncrono que acepta papers `.tex`, los procesa con D1+D2 en tiempo real con streaming visible, ofrece D3 como análisis a pedido.
+2. **Métrica implementada** según `paper/metric_spec.md`. Tres dimensiones (D1 existencia en corpus, D2 trivialidad, D3 distancia de premisas). D1+D2 automatizadas, D3 manual para pares estrella.
+3. **Evidencia sobre el eval set** de `paper/eval_set.csv` (26 teoremas firmes + slots TBD).
+4. **Preprint subido a arXiv** referenciando demo URL y resultados.
 
-Los tres entregables son la **"credential mínima"** que permite a Ayrton mandar emails a tres supervisores potenciales de PhD (Wenda Li / Edinburgh, Sean Welleck / CMU, Floris van Doorn / Bonn) y al contacto Heath Sanchez (Metalogic Labs).
+El día 7 de julio se envían emails de outreach a supervisores con el preprint + URL + write-up.
 
----
+## 3. Decisiones arquitecturales clave (irrevocables salvo nueva evidencia)
 
-## 3. Decisiones arquitecturales clave
+1. **Pipeline corre en Windows nativo.** WSL2 está preservado solo para D3 manual en Días 8-9. No tocar WSL para el flujo automático.
 
-Cada una está expandida en `paper/decisions.md` con alternativas consideradas y reversibilidad. Acá la lista corta:
+2. **`src/novelty/` se congela.** Es el pipeline previo (stages 0-3) que funcionaba antes del sprint. Se importa como dependencia desde `src/novelty_v2/`, no se modifica.
 
-1. **Métrica = conjunción de 3 dimensiones independientes**: D1 (no-existencia), D2 (no-trivialidad), D3 (distancia estructural de premisas vía Jaccard). El veredicto final es uno de cinco (NOVEDAD_ENUNCIADO / NOVEDAD_DEMOSTRACION / CONOCIDO_LITERATURA / NO_NOVEDOSO_redundante / NO_NOVEDOSO_trivial) más ZONA_GRIS (Caso 5 de la matriz taxonómica).
+3. **`src/novelty_v2/` implementa la spec.** Tres dimensiones según `paper/metric_spec.md`. Cinco veredictos finales: NOVEDAD_ENUNCIADO, NOVEDAD_DEMOSTRACION, CONOCIDO_LITERATURA, NO_NOVEDOSO_redundante, NO_NOVEDOSO_trivial. Más ZONA_GRIS para los casos `generalization`/`specialization` del juez LLM.
 
-2. **Camino B — adaptar el código a la spec, no al revés.** `src/novelty/` (la implementación previa de stages 0–3) **se congela y no se toca**. Se importa como dependencia externa desde `src/novelty_v2/`, que es la implementación nueva alineada con `paper/metric_spec.md`.
+4. **D3 (distancia de premisas) es manual offline** para los pares estrella del eval set (T07, T08, T09). LeanDojo se usa una sola vez en WSL para extraer premisas de esos pares. NO se intenta automatizar D3 en el sprint.
 
-3. **Mapeo `generalization`/`specialization` del juez LLM al Caso 5 (ZONA_GRIS)**, no se descartan. Ver `types.py`.
+5. **Demo en tiempo real con streaming.** D1 y D2 corren en tiempo real mostrando progreso al usuario en pantalla. D3 se ofrece como botón "Solicitar análisis estructural fino" con cola SQLite procesada offline por Ayrton.
 
-4. **LeanDojo v1 para D3, LeanDojo-v2 para futura segunda capa del demo (P4 en `future_work.md`).** Son herramientas distintas con propósitos distintos, no versiones de la misma cosa.
+6. **Back-translation y verificación de fidelidad de autoformalización** quedan como future work explícito. Mencionar como dirección de research para el PhD pero no implementar en el sprint.
 
-5. **D3 NO está en el pipeline automático del demo.** Hallazgo del Día 3: LeanDojo traza dependencias transitivas, no archivos sueltos. Procesar un teorema cualquiera implica trazar todos los imports, lo que en el caso de Mathlib son horas. Por eso:
-   - **D1 y D2 corren automáticamente en tiempo real** sobre cada teorema.
-   - **D3 se ofrece a pedido** vía cola SQLite. Ayrton procesa offline en su WSL.
-   - Para la evidencia del paper, D3 se mide manualmente sobre los pares estrella (T07, T08, T09) en Día 7.
+7. **Hallazgo empírico documentado del Día 3:** LeanDojo traza dependencias transitivas, no archivos sueltos. Esto descartó la posibilidad de tracing puntual y justificó D3 manual.
 
-6. **Demo es Versión 2 asíncrona incompleta**: pipeline end-to-end con streaming visual del progreso (no galería de ejemplos precomputados). Input: paper `.tex` completo. Output: tabla de teoremas con veredicto + botón "solicitar análisis fino" para D3.
+8. **Hallazgo empírico documentado del Día 4:** D2 tarda ~30s por invocación de `lake env lean` en Windows con cache caliente. LEAN_STARTUP_OVERHEAD_S = 45 en el código. Implicación: D2 sobre el eval set entero tarda decenas de minutos por corrida. Demo necesita streaming visual.
 
----
+9. **T23 cierra por `tauto`, no por `aesop`,** porque `IsTree = Connected ∧ IsAcyclic` en mathlib v4.29.0 es una conjunción proposicional. Falso positivo de D2 documentado, no es bug.
 
-## 4. Estado del repo y entorno
+## 4. Estado del repo y del entorno
 
-### Repo
+**Última actualización en branch main:** commit `c2e52df` "feat(novelty_v2): D2 runs on Windows native, validate on eval set T14-T18+T23" (cerró Día 4).
 
-- Working tree limpio en commit **`a0cbd05`** (último al cierre del Día 3 antes del commit de cierre que Ayrton mismo va a hacer).
-- Ramas: solo `main`. Sincronizado con `origin/main` en GitHub (`ayrtonporto/avid-journal`).
-- Si en el chat actual ya hay un commit posterior con mensaje `docs: end of Day 3 — pivot to real-time D1+D2, D3 manual`, ese es el HEAD de partida.
-
-### Estructura
+**Estructura relevante:**
 
 ```
 src/
-├── parser/             ← LaTeX → bloques (funciona, no tocar)
-├── formalization/      ← Lean pipeline existente (funciona, no tocar)
-├── novelty/            ← Stages 0-3 vieja implementación (CONGELADA, importar como dependencia)
-└── novelty_v2/         ← scaffold del sprint
-    ├── __init__.py
-    ├── types.py        ← 5 veredictos + ZONA_GRIS, dataclasses D1/D2/D3
-    ├── README.md       ← relación con src/novelty/
-    └── dimensions/
-        ├── d1_existence.py    ← stub, implementar Día 7
-        ├── d2_triviality.py   ← stub, implementar Día 4
-        └── d3_premises.py     ← stub, implementar Días 5-6 (manual con LeanDojo)
+├── novelty/              ← congelado
+│   ├── novelty_checker.py
+│   ├── mathlib_checker.py     (D1 sobre C_F, vía Leandex)
+│   ├── arxiv_search.py        (D1 sobre C_I, etapa A)
+│   ├── block_comparator.py    (embeddings MiniLM)
+│   ├── llm_judge.py           (juez LLM, etapa B)
+│   ├── paper_extractor.py
+│   └── _cache.py
+├── novelty_v2/           ← código nuevo del sprint
+│   ├── types.py          (D1Result, D2Result, D3Result, NoveltyVerdict)
+│   ├── dimensions/
+│   │   ├── d1_existence.py    (vacío)
+│   │   ├── d2_triviality.py   (✅ implementado y validado)
+│   │   └── d3_proof_distance.py (vacío)
+│   └── README.md
+├── formalization/        ← no se toca (pipeline de formalización previo)
+└── parser/               ← no se toca (parser LaTeX)
+
+scripts/
+└── d2/test_eval_set.py   (✅ script que corre D2 sobre el eval set)
+
+paper/
+├── metric_spec.md, eval_set.csv, related_work.md,
+├── decisions.md, results_log.md, limitations.md, future_work.md,
+├── outreach.md, CLAUDE_CODE_BRIEFING.md (este archivo),
+└── preprint/draft.md, preprint/abstract.md
 ```
 
-### Entorno
+**Entorno técnico (Windows nativo):**
+- Lean 4.29.0 instalado (`lean --version` desde `lean_project/`)
+- Mathlib compilada con 7871 oleans en `lean_project/.lake/`
+- Python 3.10+ con venv en `D:\...\AViD Journal\.venv\` (si existe; si no, crear)
+- Dependencias en `requirements.txt`
 
-- **WSL2 + Ubuntu 22.04** instalado en `D:\WSL\Ubuntu2204\`.
-- **Usuario WSL:** `ayrton` con `systemd=true` en `/etc/wsl.conf`.
-- **Repo clonado en:** `/home/ayrton/avid-journal/` (NO trabajar desde `/mnt/d/...` — performance de I/O es mala para Lean).
-- **Venv:** `/home/ayrton/avid-journal/.venv/` (Python 3.10.12, pesa ~5.5 GB con torch+CUDA libs traídos por `sentence-transformers`).
-- **Paquetes ya instalados en el venv:** todo `requirements.txt` (anthropic, arxiv, sentence-transformers, faiss-cpu, PyMuPDF, pytest…) + **lean-dojo 4.20.0** (pausado para uso manual del Día 7).
-- **Lean:** elan 4.2.2 + toolchain `leanprover/lean4:v4.29.0` (único toolchain instalado).
-- **SSH a GitHub:** key ed25519 en `~/.ssh/id_ed25519`, registrada en la cuenta `ayrtonporto`.
+**Entorno WSL (preservado para Días 8-9):**
+- Ubuntu 22.04 en `D:\WSL\Ubuntu2204\`
+- Repo clonado en `~/avid-journal/`
+- Venv con `lean-dojo 4.20.0` ya instalado
+- Toolchain Lean v4.29.0
+- Mathlib en WSL: caché corrupto, NO usable para D1+D2 (ese fue el motivo del pivot a Windows)
 
----
+## 5. Roadmap día por día (8 de junio a 7 de julio)
 
-## 5. Plan reorganizado de los días 4 al 15
+**Notas:** Ayrton trabaja de 19:00 a 03:00 hora Argentina (UTC-3). Cada "día" del roadmap corresponde a una sesión nocturna que empieza esa fecha. Los descansos son innegociables — la calidad cae con fatiga.
 
-**Día 4 — D2 (filtro de trivialidad).**
-Entregable: `src/novelty_v2/dimensions/d2_triviality.py` con función `is_trivial(theorem_lean_source, statement) → D2Result`. Genera `example : τ := by T` para cada táctica de `T_auto = {decide, omega, simp, norm_num, aesop, tauto}` + `exact?`, ejecuta `lean` con presupuesto de tiempo `b`, devuelve qué táctica cerró (si alguna). Probar sobre T14-T18 (triviales del eval set) + T23 (caso de falla esperado).
+### Semana 1 — Pipeline core (9-15 de junio)
 
-**Día 5 — Esquema D3 + LeanDojo offline setup.**
-Entregable: script `scripts/d3/trace_mathlib_v4_29.py` que orquesta una corrida única (probablemente nocturna) de tracing de mathlib `v4.29.0` con LeanDojo, persistiendo el resultado a disco. NO lo ejecuta en este día — solo deja el script listo y verificado. Avisar a Ayrton antes de cualquier ejecución larga.
+- **Día 5 (lunes 9):** Correr D2 sobre los 30 teoremas del eval set completo. Producir tabla de aciertos por categoría y tiempos por táctica.
+- **Día 6 (martes 10):** Integración D1 con novelty_v2. Envolver `mathlib_checker` y `llm_judge` en `D1Result`. Primer `NoveltyVerdict` end-to-end.
+- **Día 7 (miércoles 11):** Pipeline D1+D2 sobre los 30 teoremas. Guardar en SQLite.
+- **Día 8 (jueves 12):** Reactivar WSL. LeanDojo sobre pares T07 y T08. Anotar tiempos reales del tracing transitivo.
+- **Día 9 (viernes 13):** Completar T09 si T07/T08 funcionaron. Aplicar math filter. Calcular Jaccard.
+- **Sábado 14:** DESCANSO.
 
-**Día 6 — Implementación D3 (sobre output de LeanDojo).**
-Entregable: `src/novelty_v2/dimensions/d3_premises.py` con `compute_premise_distance(theorem_a, theorem_b) → D3Result`. Math filter (whitelist mathlib) + Jaccard. Sin LeanDojo embebido en el pipeline: lee resultados pre-trazados.
+### Semana 2 — Demo web (15-21 de junio)
 
-**Día 7 — D1 + corrida manual de D3 sobre pares estrella.**
-Entregable A: `src/novelty_v2/dimensions/d1_existence.py` reusando `mathlib_checker.check_in_mathlib` (de v1) para C_F y `arxiv_search` + `block_comparator` + `llm_judge` para C_I. Mapeo de `generalization`/`specialization` a ZONA_GRIS.
-Entregable B: ejecutar LeanDojo offline UNA VEZ sobre el `lean_project/` para extraer las premisas de T07/T08/T09 (Euclides vs Euler, paridad vs raíz racional, Gauss inducción vs Gauss emparejamiento). Calibrar umbral θ inicial = 0.5.
+- **Día 11 (lunes 15):** Scaffold Gradio. Landing con matriz de cuatro casos y caso Axiom.
+- **Día 12 (martes 16):** Upload .tex + pipeline conectado con streaming visible.
+- **Día 13 (miércoles 17):** Tabla de veredictos por teorema. Botón D3. Cola SQLite.
+- **Día 14 (jueves 18):** Pulido, robustez, manejo de errores.
+- **Día 15 (viernes 19):** Deploy a Hugging Face Spaces (o alternativa). URL pública estable.
+- **Sábado 20:** Buffer o descanso.
 
-**Día 8 — Orquestador + árbol de decisión combinado.**
-Entregable: `src/novelty_v2/orchestrator.py` con `evaluate(block) → NoveltyVerdict` siguiendo el árbol de la spec §6 (D2 → D1 sobre C_F → D1 sobre C_I → D3 sólo si match).
+### Semana 3 — Preprint (22-28 de junio)
 
-**Día 9 — Corrida sobre eval set + tabla.**
-Entregable: script que procesa las 26 filas firmes (excluye 9 TBD), produce tabla aciertos/total por categoría. Llenar tabla en `paper/results_log.md`.
+- **Día 17 (lunes 22):** Preprint: Introduction + Related Work.
+- **Día 18 (martes 23):** Preprint: Methodology.
+- **Día 19 (miércoles 24):** Preprint: Implementation + Evaluation.
+- **Día 20 (jueves 25):** Preprint: Limitations + Future Work + Conclusion.
+- **Día 21 (viernes 26):** Figuras (árbol, matriz, tabla, arquitectura).
+- **Sábado 27:** DESCANSO.
 
-**Día 10 — Gradio backend + cola SQLite para D3.**
-Entregable: app Gradio con input textarea (paper `.tex`) + streaming de progreso + tabla de salida. Endpoint asincrónico que encola pedidos de D3 en SQLite para procesar offline. Botón "solicitar análisis fino" por teorema.
+### Semana 4 — Publicación y outreach (29 junio - 7 julio)
 
-**Día 11 — Landing + pulido visual.**
-Entregable: bloques narrativos del demo (header, problema, demo interactivo, cómo funciona, footer) según `paper/demo/notes.md`. Ejemplos pre-cargados.
+- **Día 23 (lunes 29):** Abstract + pulido del preprint.
+- **Día 24 (martes 30):** Referencias + segunda lectura.
+- **Día 25 (miércoles 1 jul):** Compilar PDF + revisión final.
+- **Día 26 (jueves 2):** Subir a arXiv. Esperar moderación.
+- **Día 27 (viernes 3):** Preparar emails personalizados + write-up técnico de 2-3 páginas.
+- **Sábado 4:** Buffer.
+- **Día 29 (domingo 5):** Última revisión de outreach.
+- **Día 30 (lunes 7):** ENVÍO DE EMAILS A SUPERVISORES.
 
-**Día 12 — Deploy.**
-Entregable: URL pública estable (Hugging Face Spaces). Verificada con un par de inputs.
+## 6. Reglas de trabajo no-negociables
 
-**Día 13 — Draft del preprint.**
-Entregable: `paper/preprint/draft.md` lleno siguiendo el esqueleto. Importar de `metric_spec.md`, `related_work.md`, `limitations.md`.
+1. **No tocar src/novelty/, src/parser/, ni src/formalization/.** Son código previo que funciona y se usa como dependencia.
 
-**Día 14 — Figuras + pasada final.**
-Entregable: diagrama pipeline, tabla resultados, matriz taxonómica. Caza de afirmaciones débiles.
+2. **Marcar siempre hechos vs. inferencias.** Si decís algo como afirmación, debe ser cosa que verificaste con código o documento. Si es inferencia, marcala con "probablemente" o "según mi entendimiento".
 
-**Día 15 — Preprint listo (no publicado).**
-Entregable: PDF final en `paper/preprint/AViD_novelty_preprint_v1.pdf`.
+3. **Mostrar output real, no descripciones.** Después de implementar, correr el código y mostrar el output literal. No "debería funcionar".
 
----
+4. **Conventional Commits siempre.** `feat(scope): ...`, `fix(scope): ...`, `docs: ...`, `refactor: ...`, `chore: ...`.
 
-## 6. Reglas de trabajo con Ayrton
+5. **No AI attribution en commits.** El commit es del autor del repo.
 
-1. **Antes de cualquier cambio importante, explicar qué vas a hacer y por qué.** No improvisar.
-2. **Después de cada implementación, correr el código sobre el caso concreto y mostrar output real.** No "debería funcionar" — mostrar que funcionó.
-3. **Si tenés dudas conceptuales (matemática o métrica), preguntar — no inventar.**
-4. **Implementar SOLO lo pedido.** No agregar features, logging avanzado, tests exhaustivos ni reescrituras "para que quede más limpio" salvo pedido explícito. La spec define exactamente qué hace v1.
-5. **Commits frecuentes con mensajes Conventional Commits.** Cada pieza que funciona, un commit.
-6. **Marcar siempre hecho documentado vs. inferencia.** Esta regla es no-negociable: si decís algo basado en lo que leíste en una doc/archivo, citá la fuente. Si es inferencia tuya, decilo explícito ("inferencia mía"). Mezclar los dos sin marcar = pérdida de confianza.
-7. **No corras procesos de larga duración (>1 min) sin avisar primero.** Estimar tiempo → avisar → esperar OK → ejecutar. LeanDojo en particular puede colgar la máquina (mathlib trace = horas). Sin excepciones.
-8. **No uses `run_in_background` salvo que Ayrton lo pida explícitamente.** Procesos en background corrompieron el venv en Día 3.
-9. **Actualizar `paper/results_log.md` al final de cada día** con 2-3 oraciones sobre qué se hizo, qué quedó, qué cambió.
-10. **Registrar decisiones de diseño no triviales en `paper/decisions.md`** con el formato existente (fecha, decisión, alternativas, razonamiento, reversibilidad).
-11. **Si aparece una limitación nueva durante implementación, agregarla a `paper/limitations.md`** con el formato existente (status, caso del eval set que lo documenta, impacto).
-12. **No AI attribution en commits, PRs ni código generado.** Sin `Co-Authored-By: Claude`, sin "Generated with Claude Code". El código se lee como escrito por Ayrton.
+6. **No procesos largos sin avisar.** Si algo va a tardar más de 1 minuto, avisar primero. Si tarda más de 5, parar y reconsultar.
 
----
+7. **No `run_in_background` salvo pedido explícito.**
 
-## 7. Archivos clave en `paper/` — orden de lectura recomendado
+8. **Regla del cuelgue de 2 horas.** Si un setup técnico nos come más de 2 horas sin avanzar el día planeado, pivotear sin discutir. Avisar a Ayrton y reconsiderar la estrategia.
 
-1. `paper/metric_spec.md` — la spec formal de la métrica. **Fuente de verdad para implementación.** Cualquier cosa que la implementación haga distinto a esto requiere decisión registrada en `decisions.md`.
-2. `paper/eval_set.csv` — 26 teoremas firmes + 9 TBD con etiqueta esperada por categoría.
-3. `paper/decisions.md` — historial cronológico de decisiones de diseño. **Leer entero antes de proponer cambios arquitecturales.**
-4. `paper/results_log.md` — log día por día. Estado actual al cierre del Día 3.
-5. `paper/limitations.md` — qué reconocemos como limitación de v1.
-6. `paper/related_work.md` — siete ramas de literatura + síntesis del hueco de AViD.
-7. `paper/future_work.md` — F1-F12, P1-P4. Lo que NO entra en v1.
-8. `paper/demo/notes.md` — diseño del demo Gradio (Días 10-12).
-9. `paper/preprint/draft.md` — esqueleto del paper para los Días 13-15.
+9. **Implementar solo lo pedido.** No agregar features extra, logging avanzado, tests exhaustivos, ni refactors no pedidos.
 
-Adicional: `.claude/CLAUDE.md` del repo tiene instrucciones generales del proyecto (formato de commits, convenciones de unicode/Windows, módulos que no tocar, etc.). Leerlo también.
+10. **Actualizar paper/results_log.md al final de cada día.** Dos o tres oraciones honestas: qué se hizo, qué quedó andando, qué quedó pendiente.
 
----
+## 7. Archivos a leer en orden de prioridad
 
-## 8. Eval set y pipeline existente
+Para entrar al proyecto, leé en este orden antes de tocar código:
 
-### Eval set (`paper/eval_set.csv`)
+1. Este archivo (CLAUDE_CODE_BRIEFING.md).
+2. `paper/metric_spec.md` — la métrica conceptual completa.
+3. `paper/eval_set.csv` — los teoremas que evalúan la métrica.
+4. `paper/decisions.md` — todas las decisiones de diseño y por qué.
+5. `paper/results_log.md` — qué se hizo cada día.
+6. `paper/limitations.md` — limitaciones declaradas (importa para el paper).
+7. `paper/related_work.md` — qué hay en la literatura, dónde se ubica AViD.
+8. `paper/future_work.md` — qué queda fuera del sprint conscientemente.
 
-29 teoremas firmes ya escritos + 9 slots TBD que se llenan durante implementación. Categorías cubiertas:
+Para implementación:
 
-- **clasico_en_mathlib** (T01-T06): √2 irracional, infinitos primos, TFC, Fermat pequeño, Pitágoras, suma de Gauss. Esperado: `NO_NOVEDOSO_redundante`.
-- **par_distinta_prueba** (T07a/b Euclides/Euler, T08a/b paridad/raíz racional, T09a/b Gauss inducción/emparejamiento): **los pares estrella**. Esperado: `NOVEDAD_DEMOSTRACION`.
-- **enunciados_cercanos_distintos** (T10-T13, T26): zona gris. Esperado: `NOVEDAD_ENUNCIADO` o revisión.
-- **trivial** (T14-T17 + T18 como trampa de control). Esperado: `NO_NOVEDOSO_trivial`.
-- **generado_IA** (T19-T21): casos motivantes. Etiqueta depende del caso.
-- **caso_falla** (T22-T25): documentan falsos negativos esperados de D1 nivel sintáctico, falsos positivos de D2 con aesop, etc.
+9. `src/novelty/__init__.py` — entender qué exporta el pipeline existente.
+10. `src/novelty_v2/types.py` — los tipos del pipeline nuevo.
+11. `src/novelty_v2/dimensions/d2_triviality.py` — referencia de cómo está armado D2 (es el modelo para D1 y D3).
 
-### Módulos existentes (NO modificar)
+## 8. Lo que NO hay que hacer
 
-`src/novelty/` implementa stages 0-3 del pipeline viejo. Está en producción y se usa como dependencia desde `novelty_v2`. Tabla de reutilización en `src/novelty_v2/README.md`:
+- **No reescribir `metric_spec.md`** sin pedirlo. Es la fuente de verdad de la métrica.
+- **No tocar `src/novelty/`.** Importarlo como dependencia.
+- **No volver a discutir si LeanDojo entra al flujo automático.** Esa decisión está cerrada: no entra.
+- **No volver a discutir WSL como entorno principal.** Está cerrado: el flujo automático corre en Windows nativo, WSL solo para Días 8-9.
+- **No agregar Versión 3 del demo** (servicio pleno, paralelización, etc.) al alcance del sprint. Va a future work.
+- **No ofrecer "casos demo" sintéticos** generados ad-hoc. El demo público trabaja sobre el eval set real y sobre uploads del usuario.
+- **No asumir que algo "debería funcionar".** Probarlo con código y mostrar el output.
 
-| Función importada | Uso en v2 |
-|---|---|
-| `mathlib_checker.check_in_mathlib()` | D1 sobre C_F |
-| `arxiv_search.search_semantic_scholar/arxiv()` | D1 sobre C_I etapa A |
-| `block_comparator` (MiniLM) | D1 sobre C_I etapa A |
-| `llm_judge.judge_theorem_pair()` | D1 sobre C_I etapa B |
-| `_cache.cache_or_fetch()` | caching compartido |
+## 9. Estado actual al arrancar este chat
 
-`src/parser/` y `src/formalization/` también funcionan y se usan upstream del pipeline de novedad. Tampoco tocar.
+- **Día 4 cerrado el 8 de junio.** D2 validado en Windows nativo sobre T14-T18+T23 (5/5 correctos + falso positivo registrado en T23).
+- **Próximo día:** Día 5 (9 de junio, sesión 19:00-03:00 ART). Objetivo: D2 sobre los 30 teoremas del eval set entero.
+- **Bloqueos conocidos:** ninguno. El entorno Windows está validado y funcionando.
 
----
+## 10. Cómo arrancar este chat
 
-## 9. Cosas que NO hay que hacer
+Si sos un Claude Code recién empezado y leíste hasta acá, hacé lo siguiente:
 
-- **NO reescribir `paper/metric_spec.md` sin pedir.** Es el contrato del sprint con la realidad. Si encontrás algo que no cierra, traer a Ayrton, no editar la spec por tu cuenta.
-- **NO tocar `src/novelty/`.** Se congeló por decisión. Se importa, no se modifica.
-- **NO asumir que LeanDojo es parte del flujo automático del sprint.** Es offline-manual para D3 sobre pares estrella en Día 7. El demo público corre solo D1 + D2.
-- **NO trabajar desde `/mnt/d/...` en WSL.** Performance de I/O es 5-10x peor que filesystem nativo. Todo en `~/avid-journal/`.
-- **NO instalar paquetes en el venv con múltiples comandos `pip install` simultáneos en background.** Eso corrompió el venv en Día 3 (binarios `.so` truncados). Una operación por vez.
-- **NO instalar PyPantograph, LeanDojo-v2, torch-CUDA explícitamente.** Lo que está, sirve. Lo que se agregue es decisión explícita.
-- **NO agregar database layer (SQLite con esquema complejo, Postgres) más allá de la cola asincrónica simple para pedidos de D3.** El estado del proyecto vive en archivos markdown.
-- **NO agregar attribution de Claude en commits ni en código.** Regla absoluta del proyecto.
-- **NO usar `run_in_background` salvo pedido explícito de Ayrton.**
+1. Leé los archivos en el orden de la Sección 7.
+2. Dame un resumen de 5-10 puntos confirmando qué entendiste sobre: objetivo, arquitectura, decisiones clave, plan del día actual, reglas de trabajo.
+3. **NO toques código todavía.** Esperá mi aprobación.
+4. Cuando te apruebe, procedé con el día que corresponda según el roadmap (Sección 5) y el estado actual (Sección 9).
 
----
-
-## 10. Cómo seguir — primer turno
-
-En tu primer respuesta a Ayrton, hacé esto en orden:
-
-1. Confirmá brevemente que leíste este briefing y los archivos clave (al menos `metric_spec.md`, `decisions.md`, `results_log.md`, y `src/novelty_v2/README.md` + `types.py`).
-2. Resumí en **5-10 puntos** tu entendimiento del estado actual: objetivo, arquitectura, decisiones clave, qué hay implementado, qué viene en Día 4.
-3. **Esperá aprobación de Ayrton antes de tocar código.** Aun si te parece que "el plan es claro", la regla 1 dice esperar.
-4. Si encontrás contradicciones o cosas que no entendés, preguntá. No improvises.
-
-Bienvenido al sprint.
+Si algo del briefing te parece contradictorio o incompleto, decímelo antes de empezar. Es mejor aclarar ahora que descubrirlo después.
