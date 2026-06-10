@@ -47,9 +47,9 @@ from pathlib import Path
 
 # UTF-8 en consola Windows para que los enunciados con ∀ ≤ ℝ etc. se impriman.
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace", line_buffering=True)
 if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace", line_buffering=True)
 
 # Permite importar src/ desde repo root aunque se llame como script suelto.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

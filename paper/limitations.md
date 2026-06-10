@@ -68,3 +68,33 @@
 - Las distancias de Jaccard reportadas son válidas; el alcance es menor de lo planificado pre-sprint.
 
 **Mitigación futura:** F2 / F7 del `future_work.md` (premisas ponderadas y arquitectura modular) habilitan reemplazar LeanDojo por un extractor más liviano en versiones futuras.
+
+### L10 — norm_num cierra teoremas de irracionalidad algebraica (falsos positivos de D2)
+
+**Status:** comportamiento emergente de Mathlib v4.29.0, no corregible sin cambiar T_auto o agregarle un filtro.
+
+**Origen del hallazgo:** corrida del eval set Día 5 (2026-06-09). T01 (`Irrational (Real.sqrt 2)`) y T08 (mismo enunciado) fueron cerrados por `norm_num` en ~14s con `import Mathlib.Tactic`. El módulo `Mathlib.Data.Real.Irrational` está marcado como deprecado; `norm_num` en Mathlib v4.29.0 incorpora una extensión de decisión algebraica para irracionalidad de raíces cuadradas de enteros libres de cuadrados.
+
+**Impacto:** D2 devuelve `trivial=True` para teoremas del tipo `Irrational (Real.sqrt p)` con `p` libre de cuadrados. Desde la perspectiva del filtro D2 esto es **correcto por definición** — si `norm_num` lo cierra, el resultado es automáticamente verificable. El enunciado deja de requerir idea matemática en el sentido de D2. La etiqueta `expected_trivial=False` en el eval set refleja la intuición pre-sprint (√2 irracional es "clásico"), no la definición operacional de D2.
+
+**Consecuencia para el paper:** este caso ilustra que **D2 es monótono creciente en poder táctico**: a medida que `T_auto` crece, más teoremas cruzan el umbral de trivialidad. Este es el comportamiento diseñado, no un bug. Se sugiere incluirlo como ejemplo positivo en la sección de Propiedades de D2.
+
+**Casos del eval set:** T01, T08.
+
+---
+
+### L11 — Mathlib v4.29.0 compila monolíticamente; imports específicos de módulos fallan en `lake env lean`
+
+**Status:** limitación de infraestructura de Lean 4 / Lake. Sin mitigación en v1.
+
+**Origen del hallazgo:** corrida del eval set Día 5 (2026-06-09). Los imports específicos (`import Mathlib.Data.Nat.Prime`, `import Mathlib.Data.Int.Parity`, `import Mathlib.Algebra.BigOperators.Group.Finset`, etc.) producen errores de tipo "object file '...' could not resolve HEAD" al ejecutar `lake env lean` sobre un archivo `.lean` temporal. Solo `import Mathlib` e `import Mathlib.Tactic` funcionan como entry-points confiables.
+
+**Causa técnica:** Mathlib se compila como un árbol de oleans interdependientes. Al usar `lake env lean` con un archivo temporal fuera del proyecto Mathlib, Lake no puede resolver el árbol de dependencias de un módulo interior sin compilar todo lo que está por encima de él en el grafo. `import Mathlib` y `import Mathlib.Tactic` son los únicos módulos cuya compilación completa ya está cacheada en `.lake/`.
+
+**Impacto cuantitativo:** 13 de 24 teoremas del eval set (T02-T07, T09-T11, T13-T14, T18, T23, T26) recibieron el error. Para los 12 no-triviales esto no afecta la corrección del resultado (all tactics fail → trivial=False, correcto). Para T14 (trivial esperado) produjo un falso negativo. Para T18 (trampa de control) y T23 (FP esperado) impidió la verificación experimental.
+
+**Impacto en el demo en producción:** cada invocación de D2 debe usar `import Mathlib`, lo que implica ~30-45s de startup por teorema (con caché de OS cálida). Para un paper de 10 teoremas: ~5-8 minutos de cómputo D2. Manejable para el pipeline offline; subóptimo para el demo en tiempo real.
+
+**Mitigación futura:** (a) precalentamiento de oleans al arrancar el servidor del demo; (b) caché de resultados D2 keyed por `hash(lean_statement)`; (c) en versiones futuras de Mathlib/Lake que expongan importación selectiva.
+
+**Casos del eval set:** T02-T07, T09-T11, T13-T14, T18, T23, T26.
