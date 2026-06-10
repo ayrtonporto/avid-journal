@@ -112,6 +112,7 @@ def _call_claude(prompt: str, model: str, max_tokens: int = 400) -> str:
     message = client.messages.create(
         model=model,
         max_tokens=max_tokens,
+        temperature=0,
         messages=[{"role": "user", "content": prompt}],
     )
     parts = []
