@@ -248,22 +248,27 @@ def check_novelty_verdict_simple(
     lean_project_dir: Optional[str | Path] = None,
     lean_imports: str = "import Mathlib",
     use_cache: bool = True,
+    ci_top_k: int = 3,
+    ci_threshold: float = CI_SIMILARITY_THRESHOLD_A,
 ) -> NoveltyVerdict:
     """Orquestación mínima D2 → D1 → NoveltyVerdict.
 
-    Implementa los pasos 1-3 del árbol de decisión de la spec (§6).
-    D3 (distancia de premisas) queda como None — se completará en orchestrator.py (Día 8).
+    Implementa el árbol de decisión de la spec (§6) según DECISIÓN A
+    (2026-06-09): C_F prevalece sobre C_I — si hay match en Mathlib, se
+    emite MATCH_ENCONTRADO_PENDIENTE_D3 sin correr C_I.
 
-    Árbol implementado:
+    D3 (distancia de premisas) queda pendiente — se completa en
+    orchestrator.py (Día 8) cuando D3 se implementa.
+
+    Árbol:
       1. D2 (trivialidad):
          Si trivial → NO_NOVEDOSO_trivial, fin.
-      2. D1 sobre C_F (Leandex):
-         Si match → anotar existe_en_C_F, continuar a D3 (pendiente).
-      3. D1 sobre C_I (Semantic Scholar + llm_judge):
-         - Sin match en C_F ni C_I → NOVEDAD_ENUNCIADO
-         - Match en C_I, no en C_F → CONOCIDO_LITERATURA
-         - Generalization/Specialization → ZONA_GRIS
-         - Match en C_F (y D3 aún no implementado) → NO_NOVEDOSO_redundante provisional
+      2. D1 C_F (Leandex / Mathlib):
+         Si match → MATCH_ENCONTRADO_PENDIENTE_D3, fin. (NO corre C_I)
+      3. D1 C_I (Semantic Scholar + llm_judge), solo si C_F no dio match:
+         - equivalent → CONOCIDO_LITERATURA
+         - generalization / specialization → ZONA_GRIS
+         - different / vacío → NOVEDAD_ENUNCIADO
 
     Args:
         block: dict con "title" y "content_latex".
@@ -271,6 +276,8 @@ def check_novelty_verdict_simple(
         lean_project_dir: ruta al lean_project/ con Mathlib compilado.
         lean_imports: imports para el archivo Lean de D2.
         use_cache: compartido con los módulos de src/novelty/.
+        ci_top_k: candidatos Semantic Scholar que pasan a llm_judge.
+        ci_threshold: umbral de similitud MiniLM para C_I etapa A.
     """
     d2 = D2Result()
     d1 = D1Result()
@@ -297,10 +304,37 @@ def check_novelty_verdict_simple(
             stage_detenido=2,
         )
 
-    # ── Pasos 2-3: D1 ─────────────────────────────────────────────────────────
-    d1 = check_d1(block, use_cache=use_cache)
+    # ── Paso 2: D1 C_F ────────────────────────────────────────────────────────
+    d1 = _check_cf(block, use_cache)
 
-    # Determinar veredicto según árbol de la spec §6
+    if d1.existe_en_C_F:
+        # DECISIÓN A: C_F match → MATCH_ENCONTRADO_PENDIENTE_D3. NO corre C_I.
+        lean_name = (d1.match_C_F or {}).get("lean_name", "?")
+        sim = (d1.match_C_F or {}).get("similarity", 0.0)
+        return NoveltyVerdict(
+            veredicto=Verdict.MATCH_ENCONTRADO_PENDIENTE_D3,
+            d1=d1,
+            d2=d2,
+            d3=d3,
+            revision_humana=False,
+            razonamiento=(
+                f"D1 C_F: match en Mathlib — '{lean_name}' (sim={sim:.2f}). "
+                f"Enunciado conocido. Novedad de prueba pendiente de D3 "
+                f"(análisis offline con LeanDojo)."
+            ),
+            stage_detenido=1,
+        )
+
+    # ── Paso 3: D1 C_I (solo si C_F no dio match) ─────────────────────────────
+    ci_candidates = _run_ci_stage_a(block, use_cache, ci_top_k, ci_threshold)
+    if ci_candidates:
+        ci_result = _run_ci_stage_b(block, ci_candidates, use_cache)
+        d1.existe_en_C_I = ci_result.existe_en_C_I
+        d1.match_C_I = ci_result.match_C_I
+        d1.llm_judge_verdict = ci_result.llm_judge_verdict
+        if ci_result.traduccion_incierta:
+            d1.traduccion_incierta = True
+
     llm_v = d1.llm_judge_verdict or "different"
 
     if llm_v in ("generalization", "specialization"):
@@ -311,29 +345,14 @@ def check_novelty_verdict_simple(
             d3=d3,
             revision_humana=True,
             razonamiento=(
-                f"D1: juez LLM marcó '{llm_v}' con candidato "
+                f"D1 C_I: juez LLM marcó '{llm_v}' con candidato "
                 f"'{(d1.match_C_I or {}).get('title', '?')}'. "
                 f"Tipos relacionados pero no iguales — revisión humana."
             ),
             stage_detenido=1,
         )
 
-    if not d1.existe_en_C_F and not d1.existe_en_C_I:
-        return NoveltyVerdict(
-            veredicto=Verdict.NOVEDAD_ENUNCIADO,
-            d1=d1,
-            d2=d2,
-            d3=d3,
-            revision_humana=d1.traduccion_incierta,
-            razonamiento=(
-                "D1: sin match en C_F (Mathlib) ni en C_I (arXiv/SS). "
-                "Enunciado genuinamente nuevo."
-                + (" [traducción incierta — revisar]" if d1.traduccion_incierta else "")
-            ),
-            stage_detenido=1,
-        )
-
-    if d1.existe_en_C_I and not d1.existe_en_C_F:
+    if d1.existe_en_C_I:
         return NoveltyVerdict(
             veredicto=Verdict.CONOCIDO_LITERATURA,
             d1=d1,
@@ -341,81 +360,118 @@ def check_novelty_verdict_simple(
             d3=d3,
             revision_humana=d1.traduccion_incierta,
             razonamiento=(
-                f"D1: sin match en C_F (Mathlib) pero match en C_I: "
+                f"D1 C_I: match en literatura informal — "
                 f"'{(d1.match_C_I or {}).get('title', '?')}'. "
-                f"Formalización puede ser aporte de ingeniería, no contribución matemática nueva."
+                f"Sin match en Mathlib. Formalización puede ser aporte de ingeniería."
             ),
             stage_detenido=1,
         )
 
-    if d1.existe_en_C_F:
-        # Encontrado en Mathlib. D3 (distancia de premisas) aún no implementado.
-        # Retornamos NO_NOVEDOSO_redundante provisional — D3 puede cambiarlo a
-        # NOVEDAD_DEMOSTRACION si las premisas son distantes.
-        return NoveltyVerdict(
-            veredicto=Verdict.NO_NOVEDOSO_redundante,
-            d1=d1,
-            d2=d2,
-            d3=d3,
-            revision_humana=False,
-            razonamiento=(
-                f"D1: match en C_F (Mathlib): "
-                f"'{(d1.match_C_F or {}).get('lean_name', '?')}' "
-                f"(sim={((d1.match_C_F or {}).get('similarity', 0.0)):.2f}). "
-                f"D3 (distancia de premisas) pendiente — si la prueba es distinta, "
-                f"el veredicto cambiará a NOVEDAD_DEMOSTRACION (orchestrator.py Día 8)."
-            ),
-            stage_detenido=1,
-        )
-
-    # Fallback (no debería llegar acá)
+    # Sin match en C_F ni C_I → enunciado genuinamente nuevo
     return NoveltyVerdict(
         veredicto=Verdict.NOVEDAD_ENUNCIADO,
         d1=d1,
         d2=d2,
         d3=d3,
-        revision_humana=True,
-        razonamiento="Estado inesperado en el árbol de decisión — revisar D1 manualmente.",
-        stage_detenido=-1,
+        revision_humana=d1.traduccion_incierta,
+        razonamiento=(
+            "D1: sin match en C_F (Mathlib) ni en C_I (arXiv/SS). "
+            "Enunciado genuinamente nuevo."
+            + (" [traducción incierta — revisar]" if d1.traduccion_incierta else "")
+        ),
+        stage_detenido=1,
     )
 
 
 # ---------------------------------------------------------------------------
-# Demo: primer NoveltyVerdict end-to-end (adelanto Día 5)
+# Demo: tres NoveltyVerdicts end-to-end (adelanto Día 6)
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    import argparse
+    import json
     import sys
+    from pathlib import Path
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
 
-    # ── T15: "2 + 2 = 4" ──────────────────────────────────────────────────────
-    # Esperado: NO_NOVEDOSO_trivial (D2 cierra con decide; D1 no corre)
-    # No requiere ANTHROPIC_API_KEY ni red.
-    print("=" * 64)
-    print("Demo: primer NoveltyVerdict end-to-end")
-    print("Caso T15: '2 + 2 = 4' (trivial — decide)")
-    print("=" * 64)
+    parser = argparse.ArgumentParser(description="Demo D1+D2 end-to-end")
+    parser.add_argument(
+        "--lean-project",
+        default=None,
+        help="Ruta al lean_project/ con Mathlib compilado",
+    )
+    args = parser.parse_args()
+    lean_project = Path(args.lean_project) if args.lean_project else None
 
-    block_t15 = {
-        "title": "2 + 2 = 4",
-        "content_latex": "2 + 2 = 4",
-    }
-    lean_t15 = "(2 : Nat) + 2 = 4"
+    def _demo(label: str, block: dict, lean_stmt: str, imports: str = "import Mathlib.Tactic"):
+        print(f"\n{'='*64}")
+        print(f"Demo: {label}")
+        print("="*64)
+        v = check_novelty_verdict_simple(
+            block=block,
+            lean_statement=lean_stmt,
+            lean_project_dir=lean_project,
+            lean_imports=imports,
+        )
+        print(f"Veredicto:       {v.veredicto.value}")
+        print(f"Stage detenido:  {v.stage_detenido}")
+        print(f"Razonamiento:    {v.razonamiento}")
+        print(f"D2 trivial:      {v.d2.trivial}, tactica: {v.d2.tactica}")
+        print(f"D1 C_F match:    {v.d1.existe_en_C_F} | C_I match: {v.d1.existe_en_C_I}")
+        if v.d1.match_C_F:
+            print(f"  C_F: {v.d1.match_C_F.get('lean_name')} (sim={v.d1.match_C_F.get('similarity', 0):.2f})")
+        return v
 
-    verdict = check_novelty_verdict_simple(
-        block=block_t15,
-        lean_statement=lean_t15,
-        lean_imports="import Mathlib.Tactic",
+    # ── Caso 1: trivial — T15 "2+2=4" ─────────────────────────────────────────
+    # Esperado: NO_NOVEDOSO_trivial (D2 cierra; D1 no corre)
+    v1 = _demo(
+        "T15 — trivial: (2:Nat)+2=4",
+        block={"title": "2 + 2 = 4", "content_latex": "2 + 2 = 4"},
+        lean_stmt="(2 : Nat) + 2 = 4",
+        imports="import Mathlib.Tactic",
     )
 
-    print(f"\nVeredicto: {verdict.veredicto.value}")
-    print(f"Stage detenido: {verdict.stage_detenido}")
-    print(f"Razonamiento: {verdict.razonamiento}")
-    print(f"D2 trivial: {verdict.d2.trivial}, táctica: {verdict.d2.tactica}")
-    print(f"D1 C_F: {verdict.d1.existe_en_C_F}, D1 C_I: {verdict.d1.existe_en_C_I}")
-    print()
-    print("to_dict():")
-    import json
-    print(json.dumps(verdict.to_dict(), indent=2, ensure_ascii=False))
+    # ── Caso 2: clásico en Mathlib — T01 raíz de 2 irracional ─────────────────
+    # Esperado: MATCH_ENCONTRADO_PENDIENTE_D3 (Leandex devuelve irrational_sqrt_two)
+    _IMP_REAL = (
+        "import Mathlib.Tactic\n"
+        "import Mathlib.Analysis.SpecialFunctions.Pow.Real\n"
+        "import Mathlib.Data.Real.Irrational"
+    )
+    v2 = _demo(
+        "T01 — clásico en Mathlib: Irrational (sqrt 2)",
+        block={
+            "title": "Irrationality of sqrt(2)",
+            "content_latex": r"$\sqrt{2}$ is irrational",
+        },
+        lean_stmt="Irrational (Real.sqrt 2)",
+        imports=_IMP_REAL,
+    )
+
+    # ── Caso 3: potencial novedad — T26 suma n enteros pares es par ─────────────
+    # Esperado: NOVEDAD_ENUNCIADO o MATCH_ENCONTRADO_PENDIENTE_D3 según Leandex
+    # No requiere ANTHROPIC_API_KEY (C_I no corre si C_F da match; si no da match,
+    # C_I falla silenciosamente sin clave y el veredicto es NOVEDAD_ENUNCIADO).
+    _IMP_PARITY_FINSET = (
+        "import Mathlib.Tactic\n"
+        "import Mathlib.Data.Int.Parity\n"
+        "import Mathlib.Algebra.BigOperators.Group.Finset"
+    )
+    v3 = _demo(
+        "T26 — generalización: suma de n enteros pares es par",
+        block={
+            "title": "Sum of n even integers is even",
+            "content_latex": r"If $f(i)$ is even for all $i$, then $\sum_{i} f(i)$ is even",
+        },
+        lean_stmt=(
+            "∀ (n : ℕ) (f : Fin n → ℤ), (∀ i, Even (f i)) → Even (∑ i, f i)"
+        ),
+        imports=_IMP_PARITY_FINSET,
+    )
+
+    print("\n" + "="*64)
+    print("Resumen:")
+    for label, v in [("T15 (trivial)", v1), ("T01 (en Mathlib)", v2), ("T26 (potencial novedad)", v3)]:
+        print(f"  {label:35s} → {v.veredicto.value}")

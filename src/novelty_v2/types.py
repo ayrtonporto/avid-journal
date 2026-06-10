@@ -41,6 +41,11 @@ class Verdict(str, Enum):
     """Caso 5: tipos relacionados pero no iguales (generalization / specialization
     según el juez LLM). No se fuerza etiqueta; se recomienda revisión humana."""
 
+    MATCH_ENCONTRADO_PENDIENTE_D3 = "MATCH_ENCONTRADO_PENDIENTE_D3"
+    """D1 encontró match de tipo en C_F (Mathlib), pero D3 aún no se ejecutó.
+    Veredicto provisional: enunciado conocido, novedad de prueba por determinar.
+    Cuando D3 corra, se reemplaza por NOVEDAD_DEMOSTRACION o NO_NOVEDOSO_redundante."""
+
 
 @dataclass
 class D1Result:
