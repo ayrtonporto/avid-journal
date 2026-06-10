@@ -183,3 +183,55 @@
 **Razonamiento:** el criterio es pragmático — usar el entorno que ya funciona. LeanDojo (la única razón para WSL) es manual y puntual (Día 7). Todo lo demás ya corría bien en Windows. La decisión elimina una fuente de bloqueo sin comprometer nada.
 
 **Reversibilidad:** alta. Si en el futuro se necesita Linux para CI u otra razón, los archivos de Python son agnósticos de plataforma; el único cambio necesario es ajustar `LEAN_STARTUP_OVERHEAD_S` y los paths por defecto.
+
+### 2026-06-09 — Orden de D1 sobre corpus: C_F prevalece sobre C_I
+
+**Decisión:** cuando D1 sobre C_F (Mathlib vía Leandex) encuentra match, el pipeline **no** ejecuta D1 sobre C_I. El veredicto provisional es `MATCH_ENCONTRADO_PENDIENTE_D3`.
+
+**Alternativas consideradas:**
+- Siempre correr ambas D1 (C_F y C_I): rechazado por costo computacional sin beneficio claro para el árbol de decisión — un hit en C_F ya determina el camino relevante (D3).
+- Correr C_I en paralelo con C_F y consolidar al final: rechazado por complejidad sin ganancia de precisión.
+
+**Razonamiento:**
+1. Estar formalizado en Mathlib es información más fuerte que estar mencionado en literatura informal. Un hit en C_F + D3 es la vía de decisión relevante.
+2. Una funcionalidad secundaria de AViD es recomendar teoremas candidatos a agregar a Mathlib. Buscar en C_I después de un hit en C_F no aporta a esa funcionalidad.
+3. Reduce costo computacional (una llamada a Semantic Scholar + una a Claude) sin perder precisión en el árbol de decisión.
+
+**Reversibilidad:** alta. Se puede agregar flag `mode="full_evaluation"` después si conviene para la sección de evaluación del paper (correr ambas C_F y C_I siempre).
+
+### 2026-06-09 — Veredicto provisional MATCH_ENCONTRADO_PENDIENTE_D3
+
+**Decisión:** cuando un teorema tiene match en D1-C_F pero D3 no se ha ejecutado (D3 es manual offline para pares estrella), el sistema emite veredicto `MATCH_ENCONTRADO_PENDIENTE_D3`. El mensaje al usuario es: "El enunciado se encontró en Mathlib. Para determinar si la prueba propuesta es novedosa o redundante, solicite análisis estructural fino (D3)."
+
+**Alternativas consideradas:**
+- `NO_NOVEDOSO_redundante` con caveat: rechazado — es conjetural y viola el principio de honestidad operacional (asume que las pruebas son cercanas sin medirlo).
+- `PROBABLE_REDUNDANTE`: rechazado por la misma razón.
+- Bloquear el pipeline hasta que D3 responda: rechazado — D3 puede tardar horas (LeanDojo traza Mathlib completo).
+
+**Razonamiento:** el demo presenta resultados honestos. Si D3 no corrió, decirle al usuario "probablemente redundante" es incorrecto. El veredicto provisional hace explícita la incertidumbre y la resuelve a pedido.
+
+**Reversibilidad:** alta. Cuando D3 se automatice post-sprint, este veredicto provisional desaparece y se reemplaza por `NOVEDAD_DEMOSTRACION` o `NO_NOVEDOSO_redundante` según el valor de Jaccard.
+
+### 2026-06-09 — Cache organizado por endpoint con políticas de invalidación separadas
+
+**Decisión:** toda función que consume API externa usa `src/novelty/_cache.cache_or_fetch` con `namespace` específico por endpoint. La estructura en disco es `cache/novelty/<namespace>/`. Los namespaces activos y su correspondencia con los endpoints son:
+
+| Namespace (en código) | Endpoint | Equivalente en DECISIÓN C |
+|---|---|---|
+| `mathlib` | Leandex (búsquedas Mathlib) | `leandex/` |
+| `judge_theorem` | Anthropic API (comparación enunciados) | `llm_judge/` |
+| `judge_method` | Anthropic API (comparación métodos) | `llm_judge/` |
+| `d2_lean` | (reservado, opcional) | `d2_lean/` |
+
+Reglas adicionales:
+- Para `judge_theorem` y `judge_method`, la clave incluye el texto completo del prompt (que contiene ambos enunciados + versión del modelo), hasheada con SHA1.
+- `temperature=0` en **todas** las llamadas al LLM judge (ver PASO 3.C para implementación).
+- Política de invalidación: las entradas no se invalidan automáticamente. Invalidación manual por namespace completo cuando cambia el modelo o la versión del prompt.
+
+**Alternativas consideradas:**
+- Cache plano en un solo directorio: rechazado por dificultad de invalidación selectiva.
+- Base de datos SQLite: rechazado — overhead de setup sin ganancia para el sprint.
+
+**Razonamiento:** la estructura por namespace permite borrar (e.g.) todas las respuestas del LLM judge sin tocar el cache de Leandex, y viceversa. Costo de setup: cero (ya implementado en `_cache.py`).
+
+**Reversibilidad:** media. Los nombres de namespace están hardcodeados en `src/novelty/` (congelado). Cambiarlos requeriría migrar archivos de cache. Para `novelty_v2`, usar siempre los nombres de la tabla.
