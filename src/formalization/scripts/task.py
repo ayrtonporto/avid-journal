@@ -99,6 +99,11 @@ class TaskMetadata:
     def build_env(self) -> dict:
         """Build environment variables (including MCP_LOG_DIR and MCP_LOG_NAME)."""
         env = os.environ.copy()
+        # AViD formalization must use the local Claude Code subscription flow.
+        # If these API keys are inherited, Claude Code prioritizes them and may
+        # fail with API-credit errors even when `claude auth` is logged in.
+        env.pop("ANTHROPIC_API_KEY", None)
+        env.pop("CLAUDE_API_KEY", None)
         if self.mcp_log_dir:
             # Ensure directory exists
             Path(self.mcp_log_dir).mkdir(parents=True, exist_ok=True)

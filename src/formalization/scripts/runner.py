@@ -65,8 +65,9 @@ PAT_REASON = re.compile(r"(?m)^\s*END_REASON:(LIMIT|COMPLETE|SELECTED_TARGET_COM
 # LIMIT/COMPLETE so the orchestrator can abort the run gracefully (otherwise
 # it wastes max_rounds * blocks_remaining minutes on impossible work).
 PAT_RATE_LIMIT = re.compile(
-    r"\b(hit your limit|usage limit reached|rate.?limit|out of credit|"
-    r"quota exceeded|insufficient credit)\b",
+    r"\b(hit your limit|hit your session limit|session limit|"
+    r"usage limit reached|rate.?limit|out of credit|"
+    r"quota exceeded|insufficient credit|credit balance is too low)\b",
     re.IGNORECASE,
 )
 
@@ -120,6 +121,7 @@ def run_claude_once(
 
     # AViD: resolve `claude` to an absolute path on Windows (.cmd wrapper)
     args = _resolve_executable(args)
+    print(f"[V] Invoking Claude Code binary: {' '.join(args)}")
 
     # AViD: send prompt via stdin to bypass the Windows cmd.exe arg length limit.
     # Without this, prompts >~8K chars cause `claude.cmd` to abort with

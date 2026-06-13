@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -196,34 +195,15 @@ def test_search_semantic_scholar_mocked(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Stage 3 - judge_theorem_pair with mocked Anthropic
+# Stage 3 - judge_theorem_pair with mocked Claude Code
 # ---------------------------------------------------------------------------
-
-class _FakeMessage:
-    def __init__(self, text):
-        self.content = [SimpleNamespace(text=text)]
-
-
-class _FakeMessages:
-    def __init__(self, response_text):
-        self.response_text = response_text
-
-    def create(self, model, max_tokens, messages):
-        return _FakeMessage(self.response_text)
-
-
-class _FakeAnthropic:
-    def __init__(self, response_text):
-        self.messages = _FakeMessages(response_text)
-
 
 def test_judge_theorem_pair_equivalent(monkeypatch, tmp_path):
     fake_response = (
         '{"verdict": "equivalent", "confidence": 0.95, '
         '"reasoning": "Both state Pythagoras."}'
     )
-    fake_client = _FakeAnthropic(fake_response)
-    monkeypatch.setattr(llm_judge, "_client", fake_client)
+    monkeypatch.setattr(llm_judge, "_call_claude", lambda *args, **kwargs: fake_response)
     monkeypatch.setattr(llm_judge._cache, "CACHE_ROOT", tmp_path)
 
     block_a = {
@@ -243,8 +223,7 @@ def test_judge_theorem_pair_equivalent(monkeypatch, tmp_path):
 
 def test_judge_theorem_pair_handles_invalid_verdict(monkeypatch, tmp_path):
     fake_response = '{"verdict": "nonsense", "confidence": 0.5}'
-    fake_client = _FakeAnthropic(fake_response)
-    monkeypatch.setattr(llm_judge, "_client", fake_client)
+    monkeypatch.setattr(llm_judge, "_call_claude", lambda *args, **kwargs: fake_response)
     monkeypatch.setattr(llm_judge._cache, "CACHE_ROOT", tmp_path)
 
     verdict = llm_judge.judge_theorem_pair(

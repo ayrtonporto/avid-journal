@@ -16,7 +16,10 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -27,9 +30,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-5"
+DEFAULT_MODEL = "sonnet"
 THEOREM_VERDICTS = {"equivalent", "generalization", "specialization", "different"}
 METHOD_VERDICTS = {"same_method", "different_method", "unknown"}
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass
@@ -89,37 +93,62 @@ JSON:"""
 
 
 # ---------------------------------------------------------------------------
-# Cliente Anthropic (lazy)
+# Claude Code local
 # ---------------------------------------------------------------------------
 
-_client = None
+def _claude_code_env() -> Dict[str, str]:
+    """Entorno para Claude Code local, sin API keys directas de Anthropic."""
+    env = os.environ.copy()
+    env.pop("ANTHROPIC_API_KEY", None)
+    env.pop("CLAUDE_API_KEY", None)
+    return env
 
 
-def _get_client():
-    global _client
-    if _client is None:
-        import anthropic
-
-        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-        if not api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY not set")
-        _client = anthropic.Anthropic(api_key=api_key)
-    return _client
+def _claude_code_binary() -> str:
+    configured = os.getenv("CLAUDE_CODE_BINARY", "").strip()
+    if configured:
+        return configured
+    return shutil.which("claude") or "claude"
 
 
 def _call_claude(prompt: str, model: str, max_tokens: int = 400) -> str:
-    client = _get_client()
-    message = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
+    """Llama a Claude Code local via subprocess; no usa Anthropic API key."""
+    cmd = [
+        _claude_code_binary(),
+        "-p",
+        "--output-format",
+        "json",
+        "--model",
+        model,
+    ]
+    print(f"[V] Invoking Claude Code binary: {' '.join(cmd)}")
+    result = subprocess.run(
+        cmd,
+        input=prompt,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        timeout=180,
+        env=_claude_code_env(),
+        cwd=str(_REPO_ROOT),
     )
-    parts = []
-    for block in message.content:
-        text = getattr(block, "text", None)
-        if text:
-            parts.append(text)
-    return "".join(parts).strip()
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        detail = stderr or stdout or f"returncode={result.returncode}"
+        raise RuntimeError(f"Claude Code failed: {detail}")
+
+    output = (result.stdout or "").strip()
+    if not output:
+        return ""
+    try:
+        parsed = json.loads(output)
+        if isinstance(parsed, dict):
+            return str(parsed.get("result") or parsed.get("content") or "").strip()
+    except json.JSONDecodeError:
+        pass
+    return output
 
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
