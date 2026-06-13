@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -122,6 +123,14 @@ def _ss_headers() -> Dict[str, str]:
     return headers
 
 
+def _ss_key_preview(headers: Dict[str, str]) -> str:
+    """Devuelve una version segura de la API key para logs verbose."""
+    api_key = headers.get("x-api-key", "").strip()
+    if not api_key:
+        return "(anonymous)"
+    return f"{api_key[:6]}..."
+
+
 def _ss_rate_limit() -> None:
     """Bloquea hasta que hayan pasado al menos SS_MIN_INTERVAL segundos desde
     la última llamada a Semantic Scholar. Thread-safe.
@@ -144,6 +153,8 @@ def _truncate_query(text: str, max_chars: int = 250) -> str:
 
 def _fetch_semantic_scholar(query: str, top_k: int) -> Dict[str, Any]:
     _ss_rate_limit()
+    headers = _ss_headers()
+    print(f"[V] Using API key: {_ss_key_preview(headers)}")
     try:
         response = requests.get(
             SEMANTIC_SCHOLAR_ENDPOINT,
@@ -152,37 +163,36 @@ def _fetch_semantic_scholar(query: str, top_k: int) -> Dict[str, Any]:
                 "limit": top_k,
                 "fields": SEMANTIC_SCHOLAR_FIELDS,
             },
-            headers=_ss_headers(),
+            headers=headers,
             timeout=REQUEST_TIMEOUT,
         )
+        status_code = response.status_code
         response.raise_for_status()
     except requests.RequestException as exc:
         logger.warning("Semantic Scholar request failed: %s", exc)
         return {"data": [], "error": str(exc)}
     try:
-        return response.json()
+        payload = response.json()
     except ValueError:
         return {"data": [], "error": "invalid_json"}
+    if isinstance(payload, dict):
+        raw_papers = payload.get("data") or []
+        total = payload.get("total")
+        payload["_meta"] = {
+            "status_code": status_code,
+            "used_api_key": "x-api-key" in headers,
+            "data_len": len(raw_papers),
+            "total": total,
+        }
+        if status_code == 200 and not raw_papers:
+            print(
+                "[V] Semantic Scholar returned 0 real results "
+                f"(HTTP 200, total={total}, api_key={_ss_key_preview(headers)})"
+            )
+    return payload
 
 
-def search_semantic_scholar(
-    abstract: str,
-    top_k: int = 20,
-    use_cache: bool = True,
-) -> List[PaperCandidate]:
-    """Busca candidatos via Semantic Scholar y los rankea por similitud MiniLM."""
-    if not abstract or not abstract.strip():
-        return []
-
-    query = _truncate_query(abstract)
-    cache_key = f"ss::{top_k}::{query}"
-    payload = _cache.cache_or_fetch(
-        namespace="search_ss",
-        key=cache_key,
-        fetch_fn=lambda: _fetch_semantic_scholar(query, top_k),
-        use_cache=use_cache,
-    )
-
+def _payload_to_candidates(payload: Dict[str, Any]) -> List[PaperCandidate]:
     raw_papers = payload.get("data") or []
     candidates: List[PaperCandidate] = []
     for paper in raw_papers:
@@ -194,16 +204,67 @@ def search_semantic_scholar(
         embedding_vector = (
             embedding_obj.get("vector") if isinstance(embedding_obj, dict) else None
         )
-        candidate = PaperCandidate(
-            paper_id=str(paper.get("paperId") or ""),
-            title=paper.get("title") or "",
-            abstract=paper.get("abstract") or "",
-            arxiv_id=str(arxiv_id),
-            similarity_score=0.0,
-            embedding=embedding_vector,
-            source="semantic_scholar",
+        candidates.append(
+            PaperCandidate(
+                paper_id=str(paper.get("paperId") or ""),
+                title=paper.get("title") or "",
+                abstract=paper.get("abstract") or "",
+                arxiv_id=str(arxiv_id),
+                similarity_score=0.0,
+                embedding=embedding_vector,
+                source="semantic_scholar",
+            )
         )
-        candidates.append(candidate)
+    return candidates
+
+
+def search_semantic_scholar(
+    abstract: str,
+    top_k: int = 20,
+    use_cache: bool = True,
+    fallback_queries: Optional[Iterable[str]] = None,
+    exclude_arxiv_ids: Optional[Iterable[str]] = None,
+) -> List[PaperCandidate]:
+    """Busca candidatos via Semantic Scholar y los rankea por similitud MiniLM."""
+    if not abstract or not abstract.strip():
+        return []
+
+    query = _truncate_query(abstract)
+    queries = [query]
+    for fallback in fallback_queries or []:
+        fallback_query = _truncate_query(fallback)
+        if fallback_query and fallback_query not in queries:
+            queries.append(fallback_query)
+
+    payload: Dict[str, Any] = {"data": []}
+    for idx, candidate_query in enumerate(queries):
+        cache_key = f"ss::{top_k}::{candidate_query}"
+        payload = _cache.cache_or_fetch(
+            namespace="search_ss",
+            key=cache_key,
+            fetch_fn=lambda q=candidate_query: _fetch_semantic_scholar(q, top_k),
+            use_cache=use_cache,
+        )
+        raw_papers = payload.get("data") or []
+        if raw_papers or idx == len(queries) - 1:
+            break
+        logger.info(
+            "Semantic Scholar returned 0 results for primary query; "
+            "trying fallback query"
+        )
+
+    candidates = _payload_to_candidates(payload)
+    excluded = {
+        _normalize_arxiv_id(arxiv_id)
+        for arxiv_id in (exclude_arxiv_ids or [])
+        if _normalize_arxiv_id(arxiv_id)
+    }
+    if excluded:
+        candidates = [
+            cand
+            for cand in candidates
+            if _normalize_arxiv_id(cand.arxiv_id) not in excluded
+        ]
 
     # Score por similitud MiniLM entre abstract de consulta y de cada candidato.
     for cand in candidates:
@@ -380,6 +441,8 @@ def _normalize_arxiv_id(arxiv_id: Optional[str]) -> Optional[str]:
     aid = arxiv_id.strip()
     aid = aid.replace("arXiv:", "").replace("arxiv:", "")
     aid = aid.split("/")[-1]
+    aid = re.sub(r"v\d+$", "", aid)
+    aid = aid.lower()
     return aid or None
 
 

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import textwrap
 import time
@@ -75,6 +76,8 @@ ARXIV_TOP_K = 10
 
 # Global verbose flag — se asigna en run() desde el argumento CLI.
 VERBOSE: bool = False
+
+_TITLE_PATTERN = re.compile(r"\\title\s*\{(?P<title>.*?)\}", re.DOTALL)
 
 
 # ── helpers de presentación ───────────────────────────────────────────────────
@@ -156,6 +159,30 @@ def vraw(title: str, obj: Any, max_chars: int = 700) -> None:
         snippet += f"\n    ... [{len(text) - max_chars} chars más]"
     print(f"\n  [V] {title}:")
     print(textwrap.indent(snippet, "    "))
+
+
+def _extract_title_from_latex(text: str) -> Optional[str]:
+    """Extrae un titulo LaTeX simple y lo limpia para usarlo como query."""
+    match = _TITLE_PATTERN.search(text or "")
+    if not match:
+        return None
+    title = strip_latex_for_query(match.group("title")).strip()
+    return title or None
+
+
+def _title_fallback_query(arxiv_id: Optional[str], tex_path: Optional[str]) -> Optional[str]:
+    """Obtiene un titulo del .tex para reintentar Semantic Scholar si el abstract falla."""
+    try:
+        if tex_path is not None:
+            return _extract_title_from_latex(
+                Path(tex_path).read_text(encoding="utf-8", errors="ignore")
+            )
+        if arxiv_id is not None:
+            latex_text = paper_extractor.download_arxiv_latex(arxiv_id)
+            return _extract_title_from_latex(latex_text or "")
+    except Exception as exc:  # noqa: BLE001
+        vprint(f"  [V] No se pudo extraer titulo fallback para SS: {exc}")
+    return None
 
 
 # ── función principal ─────────────────────────────────────────────────────────
@@ -296,6 +323,9 @@ def run(
     print(f"\n  Fuente del abstract: {abstract_source}")
     print(f"  Abstract para búsqueda (primeros 150 chars):")
     print(f"    {paper_abstract[:150]} [...]")
+    ss_title_fallback = _title_fallback_query(arxiv_id, tex_path)
+    if ss_title_fallback:
+        vprint(f"\n  [V] Fallback title query para SS: {ss_title_fallback}")
 
     # ════════════════════════════════════════════════════════
     # STAGE 0 — Mathlib via Leandex
@@ -365,50 +395,66 @@ def run(
         # En verbose: llamamos a las funciones privadas para capturar raw JSON
         # sin hacer doble llamada HTTP.
         ss_query_str = arxiv_search._truncate_query(paper_abstract)
-        vprint(f"\n  [V] Query exacta enviada a SS ({len(ss_query_str)} chars):")
-        vprint(f"      {ss_query_str}")
         vprint(f"  [V] Endpoint : {arxiv_search.SEMANTIC_SCHOLAR_ENDPOINT}")
         vprint(
             f"  [V] Params   : query=<arriba>, limit={SS_TOP_K},"
             f" fields={arxiv_search.SEMANTIC_SCHOLAR_FIELDS}"
         )
 
-        t_sub = time.perf_counter()
-        try:
-            raw_ss_payload = arxiv_search._fetch_semantic_scholar(ss_query_str, SS_TOP_K)
-        except Exception as exc:
-            raw_ss_payload = {"data": [], "error": str(exc)}
-        vlap("HTTP fetch Semantic Scholar", t_sub)
+        ss_queries = [("abstract proxy", ss_query_str)]
+        if ss_title_fallback and ss_title_fallback != ss_query_str:
+            ss_queries.append(("title fallback", ss_title_fallback))
+
+        raw_ss_payload: Dict[str, Any] = {"data": []}
+        for idx, (query_label, query_text) in enumerate(ss_queries, 1):
+            vprint(
+                f"\n  [V] Query SS #{idx} ({query_label}, {len(query_text)} chars):"
+            )
+            vprint(f"      {query_text}")
+            t_sub = time.perf_counter()
+            try:
+                raw_ss_payload = arxiv_search._fetch_semantic_scholar(
+                    query_text, SS_TOP_K
+                )
+            except Exception as exc:
+                raw_ss_payload = {"data": [], "error": str(exc)}
+            vlap(f"HTTP fetch Semantic Scholar ({query_label})", t_sub)
+            raw_papers = raw_ss_payload.get("data") or []
+            meta = raw_ss_payload.get("_meta") or {}
+            if meta:
+                vprint(
+                    "  [V] SS meta: "
+                    f"status={meta.get('status_code')} "
+                    f"total={meta.get('total')} "
+                    f"data_len={meta.get('data_len')} "
+                    f"used_api_key={meta.get('used_api_key')}"
+                )
+            if raw_papers or idx == len(ss_queries):
+                break
+            vprint("  [V] SS devolvio 0 resultados; probando fallback.")
 
         raw_papers = raw_ss_payload.get("data") or []
         if "error" in raw_ss_payload:
             vprint(f"  [V] SS error: {raw_ss_payload['error']}")
+        elif not raw_papers:
+            vprint(
+                "  [V] SS devolvio 0 resultados reales con HTTP 200; "
+                "esto no implica por si solo que la API key sea invalida."
+            )
 
         vprint(f"\n  [V] JSON crudo SS — {len(raw_papers)} entradas. Mostrando primeros 3:")
         for idx, p in enumerate(raw_papers[:3], 1):
             vraw(f"Paper SS #{idx}", p, max_chars=500)
 
         # Construir candidatos desde el JSON crudo (replica search_semantic_scholar)
-        for paper in raw_papers:
-            external = paper.get("externalIds") or {}
-            aid = external.get("ArXiv") or external.get("arxiv")
-            if not aid:
-                continue
-            embedding_obj = paper.get("embedding") or {}
-            embedding_vector = (
-                embedding_obj.get("vector") if isinstance(embedding_obj, dict) else None
-            )
-            ss_results.append(
-                arxiv_search.PaperCandidate(
-                    paper_id=str(paper.get("paperId") or ""),
-                    title=paper.get("title") or "",
-                    abstract=paper.get("abstract") or "",
-                    arxiv_id=str(aid),
-                    similarity_score=0.0,
-                    embedding=embedding_vector,
-                    source="semantic_scholar",
-                )
-            )
+        ss_results.extend(arxiv_search._payload_to_candidates(raw_ss_payload))
+        if arxiv_id:
+            current_aid = arxiv_search._normalize_arxiv_id(arxiv_id)
+            ss_results = [
+                cand
+                for cand in ss_results
+                if arxiv_search._normalize_arxiv_id(cand.arxiv_id) != current_aid
+            ]
 
         t_sub = time.perf_counter()
         for cand in ss_results:
@@ -425,7 +471,11 @@ def run(
         try:
             print(f"  Query: abstract proxy (top_k={SS_TOP_K})...")
             ss_results = arxiv_search.search_semantic_scholar(
-                paper_abstract, top_k=SS_TOP_K, use_cache=False
+                paper_abstract,
+                top_k=SS_TOP_K,
+                use_cache=False,
+                fallback_queries=[ss_title_fallback] if ss_title_fallback else None,
+                exclude_arxiv_ids=[arxiv_id] if arxiv_id else None,
             )
         except Exception as exc:
             stage_error("STAGE 1 / Semantic Scholar", exc)
@@ -833,7 +883,10 @@ def run(
         # Para el smoke test esto está bien: si el caché fue poblado en los
         # stages anteriores, check_block lo usará — coherente con un run real.
         final_verdict = checker.check_block(
-            target_block, paper_abstract=paper_abstract
+            target_block,
+            paper_abstract=paper_abstract,
+            ss_fallback_queries=[ss_title_fallback] if ss_title_fallback else None,
+            exclude_arxiv_ids=[arxiv_id] if arxiv_id else None,
         )
     except Exception as exc:
         stage_error("VEREDICTO FINAL / check_block", exc)

@@ -15,7 +15,7 @@ import logging
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from src.novelty import arxiv_search, block_comparator, llm_judge, mathlib_checker, paper_extractor
 from src.novelty.block_comparator import strip_latex_for_query
@@ -129,7 +129,11 @@ class NoveltyChecker:
     # ------------------------------------------------------------------
 
     def check_block(
-        self, block: Dict[str, Any], paper_abstract: str
+        self,
+        block: Dict[str, Any],
+        paper_abstract: str,
+        ss_fallback_queries: Optional[Iterable[str]] = None,
+        exclude_arxiv_ids: Optional[Iterable[str]] = None,
     ) -> BlockVerdict:
         btype = (block.get("type") or "").lower()
 
@@ -172,7 +176,10 @@ class NoveltyChecker:
         candidates: List[arxiv_search.PaperCandidate] = []
         try:
             ss = arxiv_search.search_semantic_scholar(
-                paper_abstract, top_k=self.ss_top_k
+                paper_abstract,
+                top_k=self.ss_top_k,
+                fallback_queries=ss_fallback_queries,
+                exclude_arxiv_ids=exclude_arxiv_ids,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Semantic Scholar failed: %s", exc)
