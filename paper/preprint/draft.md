@@ -71,6 +71,15 @@ We introduce AViD Journal, a system for automatically assessing the novelty of m
 
 ### 3.1 Dimension 1 — Prior existence
 ### 3.2 Dimension 2 — Non-triviality
+
+<!-- TODO DÍA 18: SUBSECCIÓN "Operational triviality is relative"
+     Desarrollar aquí que D2 se calibra al par (T_auto, Mathlib_version) en el
+     momento de la evaluación. El veredicto "trivial" es relativo, no absoluto.
+     Usar T01/T08 (Irrational sqrt 2 cerrado por norm_num en v4.29.0) como
+     ejemplo canónico. Citar DECISIÓN D de decisions.md.
+     Contrastar con la noción estática de trivialidad (rechazada en esa decisión).
+     Ver también L10 en limitations.md para la formulación completa.
+-->
 ### 3.3 Dimension 3 — Structural distance via premises
 ### 3.4 The taxonomic matrix
 ### 3.5 Combined decision rule

@@ -235,3 +235,19 @@ Reglas adicionales:
 **Razonamiento:** la estructura por namespace permite borrar (e.g.) todas las respuestas del LLM judge sin tocar el cache de Leandex, y viceversa. Costo de setup: cero (ya implementado en `_cache.py`).
 
 **Reversibilidad:** media. Los nombres de namespace están hardcodeados en `src/novelty/` (congelado). Cambiarlos requeriría migrar archivos de cache. Para `novelty_v2`, usar siempre los nombres de la tabla.
+
+### 2026-06-10 — Trivialidad operacional como propiedad relativa a (T_auto, Mathlib_version)
+
+**Decisión:** D2 define trivialidad respecto al par exacto `(T_auto, Mathlib_version)` en el momento de la evaluación. En este paper: `T_auto = {decide, omega, simp, norm_num, aesop, tauto, exact?}`; Mathlib v4.29.0 (commit `8a178386`). Esta relatividad **no es limitación** — es la definición operacional correcta de trivialidad para novelty checking. Si un resultado se obtiene sin idea matemática usando herramientas estándar actuales, no es contribución genuina.
+
+**Caso paradigmático:** T01 y T08 (`Irrational (Real.sqrt 2)`) son cerrados por `norm_num` en Mathlib v4.29.0 en 14 s. La intuición pre-sprint los marcaba como "no triviales" desde la perspectiva matemática clásica (requieren ~5 páginas en estilo Weierstrass). D2 los marca trivial porque `norm_num` incorpora decisión algebraica de irracionalidad de raíces. Esto es correcto — ya no requieren idea matemática.
+
+**Implicación para reproducibilidad:** el paper reporta explícitamente `T_auto` y la versión de Mathlib usada. Reproducciones cross-versión deben actualizar ambos; es esperable que resultados difieran cuando Mathlib amplía las extensiones de tácticas.
+
+**Alternativas consideradas:**
+- Definir trivialidad respecto a una versión congelada de Mathlib como "trivialidad canónica": rechazado porque congela la métrica contra el avance del campo. Un resultado que hoy requiere 5 páginas y mañana cierra con `omega` ES menos novedoso mañana.
+- No mencionar la relatividad en el paper y reportar resultados como absolutos: rechazado — un reviewer sofisticado (Wenda Li, Jeremy Avigad) lo notará y lo señalará como ingenuidad metodológica.
+
+**Razonamiento:** la relatividad bien declarada es una fortaleza metodológica. Permite que el paper contribuya dos cosas: (1) el framework de novelty checking y (2) una instantánea del estado de la automatización matemática en Mathlib v4.29.0. Comparar con futuras versiones es investigación derivada válida.
+
+**Reversibilidad:** alta. Solo afecta narrativa del paper y sección de Methodology. El código no cambia.
