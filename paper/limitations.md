@@ -68,3 +68,41 @@
 - Las distancias de Jaccard reportadas son válidas; el alcance es menor de lo planificado pre-sprint.
 
 **Mitigación futura:** F2 / F7 del `future_work.md` (premisas ponderadas y arquitectura modular) habilitan reemplazar LeanDojo por un extractor más liviano en versiones futuras.
+
+### L10 — Relatividad de D2 a (T_auto, Mathlib_version): comportamiento esperado, no bug
+
+**Status:** propiedad de diseño. No es una limitación operacional — ver DECISIÓN D en `decisions.md`.
+
+**Descripción:** D2 produce veredictos respecto a un estado específico de tácticas y librería matemática. Un teorema es trivial bajo D2 cuando puede cerrarse usando solo las tácticas de `T_auto` contra la versión actual de Mathlib. Cuando Mathlib evolucione (extensiones de `norm_num` agregadas, `aesop` más sofisticado, nuevas tácticas), algunos teoremas pueden cruzar el umbral de trivialidad. Esta relatividad **no es limitación del diseño** — es propiedad esperada y deseable de novelty checking operacional.
+
+**Implicación práctica:** reproducciones del eval set en versiones futuras de Mathlib pueden dar resultados parcialmente distintos. Reportamos `T_auto` y Mathlib_version exactos para permitir reproducción fiel del estado evaluativo (ver Appendix B del preprint).
+
+**Caso ilustrativo:** T01 y T08 (`Irrational (Real.sqrt 2)`) son cerrados por `norm_num` en ~14s en Mathlib v4.29.0. La intuición pre-sprint los marcaba como "no triviales" desde una perspectiva matemática clásica (en 1870, requería ~5 páginas de análisis real). D2 los marca trivial porque `norm_num` incorpora decisión algebraica de irracionalidad de raíces cuadradas de enteros libres de cuadrados. Esto es correcto — ya no requieren idea matemática para ser verificados.
+
+**Por qué no decimos "monótono":** en la práctica, Mathlib puede refactorizar o eliminar extensiones de tácticas (caso real en la historia de `norm_num`). El espacio de teoremas triviales bajo D2 no crece estrictamente con el tiempo — depende del estado actual del par `(T_auto, Mathlib_version)`. La propiedad correcta es relatividad bien definida, no monotonicidad.
+
+**Casos del eval set:** T01, T08 (norm_num cierra irracionalidad); T26 (exact? cierra suma de enteros pares con import Mathlib).
+
+---
+
+### L11 — Mathlib v4.29.0 compila monolíticamente; imports específicos de módulos fallan en `lake env lean`
+
+**Status:** limitación de infraestructura de Lean 4 / Lake. Sin mitigación en v1.
+
+**Origen del hallazgo:** corrida del eval set Día 5 (2026-06-09). Los imports específicos (`import Mathlib.Data.Nat.Prime`, `import Mathlib.Data.Int.Parity`, `import Mathlib.Algebra.BigOperators.Group.Finset`, etc.) producen errores de tipo "object file '...' could not resolve HEAD" al ejecutar `lake env lean` sobre un archivo `.lean` temporal. Solo `import Mathlib` e `import Mathlib.Tactic` funcionan como entry-points confiables.
+
+**Causa técnica:** Mathlib se compila como un árbol de oleans interdependientes. Al usar `lake env lean` con un archivo temporal fuera del proyecto Mathlib, Lake no puede resolver el árbol de dependencias de un módulo interior sin compilar todo lo que está por encima de él en el grafo. `import Mathlib` y `import Mathlib.Tactic` son los únicos módulos cuya compilación completa ya está cacheada en `.lake/`.
+
+**Impacto cuantitativo:** 13 de 24 teoremas del eval set (T02-T07, T09-T11, T13-T14, T18, T23, T26) recibieron el error. Para los 12 no-triviales esto no afecta la corrección del resultado (all tactics fail → trivial=False, correcto). Para T14 (trivial esperado) produjo un falso negativo. Para T18 (trampa de control) y T23 (FP esperado) impidió la verificación experimental con imports mínimos.
+
+**Impacto en el demo en producción:** cada invocación de D2 debe usar `import Mathlib`. El tiempo de startup de `lake env lean` con `import Mathlib` tiene dos componentes distintos:
+1. **Primera invocación (oleans fríos):** ~6-10 min. `lake env lean` carga todos los oleans de Mathlib desde disco a RAM. Medido empíricamente: T14 con `import Mathlib` tomó 405s totales (7 tácticas × ~58s/táctica) porque cada subprocess inicia con los oleans fuera de caché de OS.
+2. **Invocaciones posteriores (oleans cálidos):** ~15-25s de startup por subprocess. Una vez que los oleans están en caché de OS (RAM page cache), los procesos subsiguientes cargan en segundos. Medido: T18 tomó 257s total (inmediatamente después de T14), T23 tomó 154s, T26 tomó 196s.
+
+Consecuencia práctica: el primer teorema de cada sesión D2 paga el costo de carga (3-10 min); los siguientes son ~15-25s. Para el demo, el prewarm explícito (`import Mathlib\n\nexample : True := trivial`) al arrancar el servidor amortiza este costo.
+
+**Para un paper de 10 teoremas con prewarm:** ~10-25s de startup × 7 tácticas × 10 teoremas = ~12-30 min. Sin prewarm, el primer teorema puede tomar 3-10 min solo él. Manejable para pipeline offline; el prewarm es condición necesaria para el demo en tiempo real.
+
+**Mitigación futura:** (a) precalentamiento de oleans al arrancar el servidor del demo; (b) caché de resultados D2 keyed por `hash(lean_statement)`; (c) en versiones futuras de Mathlib/Lake que expongan importación selectiva.
+
+**Casos del eval set:** T02-T07, T09-T11, T13-T14, T18, T23, T26.

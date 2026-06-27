@@ -183,3 +183,71 @@
 **Razonamiento:** el criterio es pragmático — usar el entorno que ya funciona. LeanDojo (la única razón para WSL) es manual y puntual (Día 7). Todo lo demás ya corría bien en Windows. La decisión elimina una fuente de bloqueo sin comprometer nada.
 
 **Reversibilidad:** alta. Si en el futuro se necesita Linux para CI u otra razón, los archivos de Python son agnósticos de plataforma; el único cambio necesario es ajustar `LEAN_STARTUP_OVERHEAD_S` y los paths por defecto.
+
+### 2026-06-09 — Orden de D1 sobre corpus: C_F prevalece sobre C_I
+
+**Decisión:** cuando D1 sobre C_F (Mathlib vía Leandex) encuentra match, el pipeline **no** ejecuta D1 sobre C_I. El veredicto provisional es `MATCH_ENCONTRADO_PENDIENTE_D3`.
+
+**Alternativas consideradas:**
+- Siempre correr ambas D1 (C_F y C_I): rechazado por costo computacional sin beneficio claro para el árbol de decisión — un hit en C_F ya determina el camino relevante (D3).
+- Correr C_I en paralelo con C_F y consolidar al final: rechazado por complejidad sin ganancia de precisión.
+
+**Razonamiento:**
+1. Estar formalizado en Mathlib es información más fuerte que estar mencionado en literatura informal. Un hit en C_F + D3 es la vía de decisión relevante.
+2. Una funcionalidad secundaria de AViD es recomendar teoremas candidatos a agregar a Mathlib. Buscar en C_I después de un hit en C_F no aporta a esa funcionalidad.
+3. Reduce costo computacional (una llamada a Semantic Scholar + una a Claude) sin perder precisión en el árbol de decisión.
+
+**Reversibilidad:** alta. Se puede agregar flag `mode="full_evaluation"` después si conviene para la sección de evaluación del paper (correr ambas C_F y C_I siempre).
+
+### 2026-06-09 — Veredicto provisional MATCH_ENCONTRADO_PENDIENTE_D3
+
+**Decisión:** cuando un teorema tiene match en D1-C_F pero D3 no se ha ejecutado (D3 es manual offline para pares estrella), el sistema emite veredicto `MATCH_ENCONTRADO_PENDIENTE_D3`. El mensaje al usuario es: "El enunciado se encontró en Mathlib. Para determinar si la prueba propuesta es novedosa o redundante, solicite análisis estructural fino (D3)."
+
+**Alternativas consideradas:**
+- `NO_NOVEDOSO_redundante` con caveat: rechazado — es conjetural y viola el principio de honestidad operacional (asume que las pruebas son cercanas sin medirlo).
+- `PROBABLE_REDUNDANTE`: rechazado por la misma razón.
+- Bloquear el pipeline hasta que D3 responda: rechazado — D3 puede tardar horas (LeanDojo traza Mathlib completo).
+
+**Razonamiento:** el demo presenta resultados honestos. Si D3 no corrió, decirle al usuario "probablemente redundante" es incorrecto. El veredicto provisional hace explícita la incertidumbre y la resuelve a pedido.
+
+**Reversibilidad:** alta. Cuando D3 se automatice post-sprint, este veredicto provisional desaparece y se reemplaza por `NOVEDAD_DEMOSTRACION` o `NO_NOVEDOSO_redundante` según el valor de Jaccard.
+
+### 2026-06-09 — Cache organizado por endpoint con políticas de invalidación separadas
+
+**Decisión:** toda función que consume API externa usa `src/novelty/_cache.cache_or_fetch` con `namespace` específico por endpoint. La estructura en disco es `cache/novelty/<namespace>/`. Los namespaces activos y su correspondencia con los endpoints son:
+
+| Namespace (en código) | Endpoint | Equivalente en DECISIÓN C |
+|---|---|---|
+| `mathlib` | Leandex (búsquedas Mathlib) | `leandex/` |
+| `judge_theorem` | Anthropic API (comparación enunciados) | `llm_judge/` |
+| `judge_method` | Anthropic API (comparación métodos) | `llm_judge/` |
+| `d2_lean` | (reservado, opcional) | `d2_lean/` |
+
+Reglas adicionales:
+- Para `judge_theorem` y `judge_method`, la clave incluye el texto completo del prompt (que contiene ambos enunciados + versión del modelo), hasheada con SHA1.
+- `temperature=0` en **todas** las llamadas al LLM judge (ver PASO 3.C para implementación).
+- Política de invalidación: las entradas no se invalidan automáticamente. Invalidación manual por namespace completo cuando cambia el modelo o la versión del prompt.
+
+**Alternativas consideradas:**
+- Cache plano en un solo directorio: rechazado por dificultad de invalidación selectiva.
+- Base de datos SQLite: rechazado — overhead de setup sin ganancia para el sprint.
+
+**Razonamiento:** la estructura por namespace permite borrar (e.g.) todas las respuestas del LLM judge sin tocar el cache de Leandex, y viceversa. Costo de setup: cero (ya implementado en `_cache.py`).
+
+**Reversibilidad:** media. Los nombres de namespace están hardcodeados en `src/novelty/` (congelado). Cambiarlos requeriría migrar archivos de cache. Para `novelty_v2`, usar siempre los nombres de la tabla.
+
+### 2026-06-10 — Trivialidad operacional como propiedad relativa a (T_auto, Mathlib_version)
+
+**Decisión:** D2 define trivialidad respecto al par exacto `(T_auto, Mathlib_version)` en el momento de la evaluación. En este paper: `T_auto = {decide, omega, simp, norm_num, aesop, tauto, exact?}`; Mathlib v4.29.0 (commit `8a178386`). Esta relatividad **no es limitación** — es la definición operacional correcta de trivialidad para novelty checking. Si un resultado se obtiene sin idea matemática usando herramientas estándar actuales, no es contribución genuina.
+
+**Caso paradigmático:** T01 y T08 (`Irrational (Real.sqrt 2)`) son cerrados por `norm_num` en Mathlib v4.29.0 en 14 s. La intuición pre-sprint los marcaba como "no triviales" desde la perspectiva matemática clásica (requieren ~5 páginas en estilo Weierstrass). D2 los marca trivial porque `norm_num` incorpora decisión algebraica de irracionalidad de raíces. Esto es correcto — ya no requieren idea matemática.
+
+**Implicación para reproducibilidad:** el paper reporta explícitamente `T_auto` y la versión de Mathlib usada. Reproducciones cross-versión deben actualizar ambos; es esperable que resultados difieran cuando Mathlib amplía las extensiones de tácticas.
+
+**Alternativas consideradas:**
+- Definir trivialidad respecto a una versión congelada de Mathlib como "trivialidad canónica": rechazado porque congela la métrica contra el avance del campo. Un resultado que hoy requiere 5 páginas y mañana cierra con `omega` ES menos novedoso mañana.
+- No mencionar la relatividad en el paper y reportar resultados como absolutos: rechazado — un reviewer sofisticado (Wenda Li, Jeremy Avigad) lo notará y lo señalará como ingenuidad metodológica.
+
+**Razonamiento:** la relatividad bien declarada es una fortaleza metodológica. Permite que el paper contribuya dos cosas: (1) el framework de novelty checking y (2) una instantánea del estado de la automatización matemática en Mathlib v4.29.0. Comparar con futuras versiones es investigación derivada válida.
+
+**Reversibilidad:** alta. Solo afecta narrativa del paper y sección de Methodology. El código no cambia.
