@@ -92,7 +92,7 @@
   - DECISIÓN B: veredicto provisional `MATCH_ENCONTRADO_PENDIENTE_D3` cuando C_F encuentra match y D3 aún no corrió.
   - DECISIÓN C: caché organizada por endpoint (`mathlib/`, `judge_theorem/`, `judge_method/`), `temperature=0` en todas las llamadas al juez LLM.
 - **`src/novelty_v2/types.py`**: añadido `MATCH_ENCONTRADO_PENDIENTE_D3` al enum `Verdict`.
-- **`src/novelty_v2/dimensions/d1_existence.py`**: `check_novelty_verdict_simple` reescrito con árbol DECISIÓN A completo (D2 → C_F → C_I).
+- **`src/novelty_v2/dimensions/d1_existence.py`**: `check_novelty_verdict_simple` reescrito con árbol DECISIÓN A completo (D2 → C_F → C_I). Mergeado a `main` el 2026-06-27 (480 líneas).
 - **`src/novelty/llm_judge.py`**: `temperature=0` añadido a `_call_claude` (fix de configuración para DECISIÓN C).
 - **Corrida D2 completa**: `scripts/d2/test_eval_set_full.py` sobre 24 teoremas. Lean 4.29.0, Windows nativo, 2026-06-09. Duración total: ~30 min (26.1 min de test + ~4 min prewarm). Corrida secundaria con `import Mathlib` sobre T14/T18/T23/T26.
 - **Limitaciones L10 y L11** documentadas en `limitations.md`.
@@ -158,107 +158,86 @@
 
 **Pendiente para Días siguientes:**
 
+- Merge del branch `claude/agitated-lovelace-e10f00` a `main` (contiene D1 implementación + eval set scripts + resultados).
 - D3 (distancia de premisas): LeanDojo + Jaccard sobre pares T07/T08/T09. Días 8-9.
-- `orchestrator.py`: árbol D2→D1→D3 completo. Día 8.
+- `orchestrator.py`: árbol D2→D1→D3 completo. 
 - D1 (C_I via Semantic Scholar): requiere `ANTHROPIC_API_KEY` para `llm_judge`. Pendiente de configurar en `.env`.
 
-## Día 6 — Extracción de premisas con LeanDojo (parte 2)
+---
 
-**Objetivo:** extracción funcionando sobre los pares T07, T08, T09 + math filter (whitelist mathlib).
+## Día 6 — Mejoras de infraestructura y búsqueda ✓
+
+**Fecha:** 13 de junio de 2026.
+
+**Hecho:**
+
+- **`fix(novelty): improve semantic scholar candidate search`** (commit `d604cbc`): mejora en la búsqueda de candidatos en Semantic Scholar para la etapa A de D1 sobre C_I. Mayor precisión en el filtro grueso.
+- **`fix(claude): use local Claude Code for AViD agents`** (commit `3c81710`): configuración de Claude Code local para los agentes de formalización de AViD. Elimina dependencia de API externa para el pipeline de autoformalización.
+- **Worktree `claude/infallible-yonath-b5dfe3`** activo con estos fixes aplicados.
+
+**Pendiente:**
+
+- ~~Merge de `claude/agitated-lovelace-e10f00` a `main`~~ → mergeado el 2026-06-27.
+- Decisión sobre implementación del `llm_judge`: API Anthropic con saldo prepagado vs. modelo local vs. Claude Code como juez.
+- Resolver cuestión de `ANTHROPIC_API_KEY` para continuar con D1 sobre C_I.
+
+---
+
+## Día 7 — Pendiente: integración D1+D2 end-to-end
+
+**Objetivo:** conectar D1 (`d1_existence.py`, actualmente en branch `claude/agitated-lovelace-e10f00`) con D2 (`d2_triviality.py`, en `main`) en un pipeline unificado. Implementar `orchestrator.py` con el árbol de decisión completo D2→D1→D3.
+
+**Bloqueo:** requiere decisión sobre `llm_judge` (API Anthropic vs. local vs. Claude Code). Sin `ANTHROPIC_API_KEY` configurada, D1 sobre C_I no puede ejecutarse.
 
 **Hecho:**
 
 **Pendiente:**
 
-## Día 7 — Eje 1: comparación de tipos (D1)
+---
 
-**Objetivo:** `type_compare.py` que decide si dos enunciados Lean tienen el mismo tipo (nivel 0 sintáctico tras normalización).
+## Día 8 — Pendiente: D3 distancia de premisas (pares estrella)
 
-**Hecho:**
-
-**Pendiente:**
-
-## Día 8 — Distancia de Jaccard + integración de la métrica
-
-**Objetivo:** `novelty_score.py` que toma un teorema y devuelve el veredicto combinado (las tres dimensiones).
+**Objetivo:** extracción de premisas con LeanDojo en WSL2 sobre los pares T07, T08, T09. Aplicar math filter. Calcular Jaccard. Calibrar umbral θ.
 
 **Hecho:**
 
 **Pendiente:**
 
-## Día 9 — Corrida sobre eval set + tabla de resultados
+---
 
-**Objetivo:** procesar las 26 filas firmes del eval set. Tabla con etiqueta esperada vs. veredicto real. Cálculo de accuracy por categoría.
+## Día 9 — Pendiente: completar D3 + integrar árbol completo
 
-**Hecho:**
-
-**Resultados:**
-
-| Categoría | Aciertos | Total | % |
-| --- | --- | --- | --- |
-| Clásicos en mathlib | | 6 | |
-| Pares distinta prueba | | 6 | |
-| Enunciados cercanos | | 5 | |
-| Triviales | | 5 | |
-| Generados por IA | | 3 | |
-| Casos de falla | | 4 | |
-| **Total** | | **29** | |
-
-**Hallazgos importantes (para Limitations y Future Work):**
-
-## Día 10 — Demo web (Gradio) backend
-
-**Objetivo:** interfaz Gradio que toma un enunciado en lenguaje natural, lo autoformaliza, corre la métrica, y muestra veredicto + las tres sub-puntuaciones.
+**Objetivo:** terminar D3 si T07/T08/T09 están listos. Integrar `orchestrator.py` con el árbol D2→D1→D3 completo produciendo `NoveltyVerdict` final.
 
 **Hecho:**
 
 **Pendiente:**
 
-## Día 11 — Pulido del demo + página de landing
+---
 
-**Objetivo:** página explicando la idea (matriz de cuatro casos, caso Axiom, qué hace AViD distinto) + demo embebido con ejemplos pre-cargados.
+## Días 10-12 — Pendiente: Demo web (Gradio + deploy)
 
-**Hecho:**
+**Objetivo:** scaffold Gradio con upload .tex + pipeline D1+D2 con streaming + tabla de veredictos + botón D3 (cola SQLite). Deploy a Hugging Face Spaces. URL pública estable.
 
-**Pendiente:**
+**Estado:** landing page desplegada en `avid-journal.github.io`. Demo funcional pendiente.
 
-## Día 12 — Deploy del demo
+---
 
-**Objetivo:** URL pública estable (Hugging Face Spaces o equivalente).
+## Días 13-15 — Pendiente: Preprint
 
-**URL del demo:**
+**Objetivo:** draft completo: Introduction, Related Work, Methodology, Implementation, Evaluation, Limitations, Future Work, Conclusion. Figuras (árbol de decisión, matriz taxonómica, tabla de resultados, diagrama de arquitectura). Compilar PDF, subir a arXiv.
 
-## Día 13 — Draft del preprint
+---
 
-**Objetivo:** draft completo siguiendo la estructura de `preprint/draft.md`.
+## Días 16+ — Pendiente: Outreach
 
-**Hecho:**
+**Objetivo:** emails personalizados a Wenda Li (Edinburgh), Sean Welleck (CMU), Floris van Doorn (Bonn), Heath Sanchez (Metalogic Labs) con preprint + URL del demo + write-up técnico.
 
-**Pendiente:**
-
-## Día 14 — Figuras + pulido del paper
-
-**Objetivo:** diagrama del pipeline, tabla de resultados, matriz taxonómica. Pasada final buscando afirmaciones débiles.
-
-**Hecho:**
-
-**Pendiente:**
-
-## Día 15 — Preprint listo (no publicado todavía)
-
-**Objetivo:** versión final en PDF lista para subir. Decisión de dónde/cómo publicar queda para después del sprint.
-
-**Hecho:**
-
-**Entregables finales:**
-- `preprint/draft.md` (versión final)
-- `preprint/AViD_novelty_preprint_v1.pdf`
-- URL del demo
-- Repo limpio
+---
 
 ## Post-mortem del sprint
 
-*(se completa el Día 15 o 16)*
+*(se completa al finalizar)*
 
 **Qué salió bien:**
 

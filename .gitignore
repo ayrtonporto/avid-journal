@@ -45,9 +45,6 @@ audit/
 # Carpeta huérfana de Claude Code (typo histórico)
 .claire/
 
-# Instrucciones internas de Claude Code (raíz del repo)
-CLAUDE.md
-
 # Proyectos Lean standalone generados por el orquestador (--standalone / tests)
 lean_papers/
 
