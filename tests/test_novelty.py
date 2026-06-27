@@ -203,7 +203,7 @@ def test_judge_theorem_pair_equivalent(monkeypatch, tmp_path):
         '{"verdict": "equivalent", "confidence": 0.95, '
         '"reasoning": "Both state Pythagoras."}'
     )
-    monkeypatch.setattr(llm_judge, "_call_claude", lambda *args, **kwargs: fake_response)
+    monkeypatch.setattr(llm_judge, "_call_deepseek", lambda *args, **kwargs: fake_response)
     monkeypatch.setattr(llm_judge._cache, "CACHE_ROOT", tmp_path)
 
     block_a = {
@@ -223,7 +223,7 @@ def test_judge_theorem_pair_equivalent(monkeypatch, tmp_path):
 
 def test_judge_theorem_pair_handles_invalid_verdict(monkeypatch, tmp_path):
     fake_response = '{"verdict": "nonsense", "confidence": 0.5}'
-    monkeypatch.setattr(llm_judge, "_call_claude", lambda *args, **kwargs: fake_response)
+    monkeypatch.setattr(llm_judge, "_call_deepseek", lambda *args, **kwargs: fake_response)
     monkeypatch.setattr(llm_judge._cache, "CACHE_ROOT", tmp_path)
 
     verdict = llm_judge.judge_theorem_pair(

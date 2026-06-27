@@ -8,6 +8,10 @@ veredicto:
   - different        : enuncian resultados distintos
 
 `judge_proof_method` queda definido para Stage 5 (no llamado en v1).
+
+LLM backend: DeepSeek V4 Flash via OpenCode Go API (OpenAI-compatible).
+Modelo configurable mediante variable de entorno DEEPSEEK_MODEL o
+parámetro `model` en las funciones públicas.
 """
 
 from __future__ import annotations
@@ -16,24 +20,32 @@ import json
 import logging
 import os
 import re
-import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import requests
 from dotenv import load_dotenv
 
 from src.novelty import _cache
 
+# Cargar .env del proyecto y del sistema Hermes (para OPENCODE_GO_API_KEY).
 load_dotenv()
+_hermes_env = Path(os.environ.get("LOCALAPPDATA", "")) / "hermes" / ".env"
+if _hermes_env.exists():
+    load_dotenv(_hermes_env, override=True)
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "sonnet"
+DEFAULT_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 THEOREM_VERDICTS = {"equivalent", "generalization", "specialization", "different"}
 METHOD_VERDICTS = {"same_method", "different_method", "unknown"}
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+OPENCODE_GO_API_KEY = os.getenv("OPENCODE_GO_API_KEY", "")
+OPENCODE_GO_BASE_URL = os.getenv(
+    "OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1"
+).rstrip("/")
 
 
 @dataclass
@@ -93,62 +105,89 @@ JSON:"""
 
 
 # ---------------------------------------------------------------------------
-# Claude Code local
+# DeepSeek V4 Flash via OpenCode Go (OpenAI-compatible API)
 # ---------------------------------------------------------------------------
 
-def _claude_code_env() -> Dict[str, str]:
-    """Entorno para Claude Code local, sin API keys directas de Anthropic."""
-    env = os.environ.copy()
-    env.pop("ANTHROPIC_API_KEY", None)
-    env.pop("CLAUDE_API_KEY", None)
-    return env
+def _call_deepseek(
+    prompt: str,
+    model: str = DEFAULT_MODEL,
+    max_tokens: int = 2048,
+    timeout: int = 120,
+    temperature: float = 0.0,
+) -> str:
+    """Llama a DeepSeek V4 Flash via la API OpenAI-compatible de OpenCode Go.
 
+    DeepSeek V4 es un modelo con razonamiento interno (reasoning_content).
+    Usamos max_tokens=2048 para dar espacio al razonamiento + respuesta JSON.
+    Si content vuelve vacío (todos los tokens se fueron en razonamiento),
+    se reintenta con el doble de max_tokens, una sola vez.
+    """
+    if not OPENCODE_GO_API_KEY:
+        raise RuntimeError(
+            "OPENCODE_GO_API_KEY no está configurada. "
+            "Configurala en ~/AppData/Local/hermes/.env"
+        )
 
-def _claude_code_binary() -> str:
-    configured = os.getenv("CLAUDE_CODE_BINARY", "").strip()
-    if configured:
-        return configured
-    return shutil.which("claude") or "claude"
+    url = f"{OPENCODE_GO_BASE_URL}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENCODE_GO_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
 
+    for attempt in range(2):
+        try:
+            r = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        except requests.exceptions.Timeout:
+            raise RuntimeError(f"DeepSeek API timeout after {timeout}s")
+        except requests.exceptions.ConnectionError as e:
+            raise RuntimeError(f"DeepSeek API connection error: {e}")
 
-def _call_claude(prompt: str, model: str, max_tokens: int = 400) -> str:
-    """Llama a Claude Code local via subprocess; no usa Anthropic API key."""
-    cmd = [
-        _claude_code_binary(),
-        "-p",
-        "--output-format",
-        "json",
-        "--model",
-        model,
-    ]
-    print(f"[V] Invoking Claude Code binary: {' '.join(cmd)}")
-    result = subprocess.run(
-        cmd,
-        input=prompt,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        timeout=180,
-        env=_claude_code_env(),
-        cwd=str(_REPO_ROOT),
-    )
-    if result.returncode != 0:
-        stderr = (result.stderr or "").strip()
-        stdout = (result.stdout or "").strip()
-        detail = stderr or stdout or f"returncode={result.returncode}"
-        raise RuntimeError(f"Claude Code failed: {detail}")
+        if r.status_code != 200:
+            detail = r.text[:300]
+            raise RuntimeError(
+                f"DeepSeek API returned {r.status_code}: {detail}"
+            )
 
-    output = (result.stdout or "").strip()
-    if not output:
-        return ""
-    try:
-        parsed = json.loads(output)
-        if isinstance(parsed, dict):
-            return str(parsed.get("result") or parsed.get("content") or "").strip()
-    except json.JSONDecodeError:
-        pass
-    return output
+        try:
+            body = r.json()
+        except ValueError:
+            raise RuntimeError(f"DeepSeek API returned non-JSON: {r.text[:200]}")
+
+        choices = body.get("choices", [])
+        if not choices:
+            raise RuntimeError("DeepSeek API returned no choices")
+
+        message = choices[0].get("message", {})
+        content = (message.get("content") or "").strip()
+
+        if content:
+            return content
+
+        # Content vacío: los tokens se fueron en razonamiento interno.
+        # Reintentar con el doble de tokens (solo el primer intento).
+        if attempt == 0:
+            reasoning_len = len(message.get("reasoning_content") or "")
+            logger.info(
+                "DeepSeek content empty (%d reasoning chars), "
+                "retrying with max_tokens=%d",
+                reasoning_len,
+                max_tokens * 2,
+            )
+            payload["max_tokens"] = max_tokens * 2
+        else:
+            reasoning_len = len(message.get("reasoning_content") or "")
+            raise RuntimeError(
+                f"DeepSeek returned empty content after retry "
+                f"({reasoning_len} reasoning chars). Increase max_tokens."
+            )
+
+    raise RuntimeError("DeepSeek unexpected: no content after retries")
 
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -158,7 +197,7 @@ def _parse_json_blob(text: str) -> Optional[Dict[str, Any]]:
     if not text:
         return None
     text = text.strip()
-    # Eliminar fences de codigo si los hay.
+    # Eliminar fences de código si los hay.
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
     try:
@@ -174,7 +213,7 @@ def _parse_json_blob(text: str) -> Optional[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# API publica
+# API pública
 # ---------------------------------------------------------------------------
 
 def _truncate(text: Optional[str], limit: int = 4000) -> str:
@@ -201,9 +240,9 @@ def judge_theorem_pair(
 
     def _do() -> Dict[str, Any]:
         try:
-            text = _call_claude(prompt, model=model)
+            text = _call_deepseek(prompt, model=model)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Anthropic call failed: %s", exc)
+            logger.warning("DeepSeek call failed: %s", exc)
             return {
                 "verdict": "different",
                 "confidence": 0.0,
@@ -256,9 +295,9 @@ def judge_proof_method(
 
     def _do() -> Dict[str, Any]:
         try:
-            text = _call_claude(prompt, model=model)
+            text = _call_deepseek(prompt, model=model)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Anthropic call failed: %s", exc)
+            logger.warning("DeepSeek call failed: %s", exc)
             return {"verdict": "unknown", "reasoning": f"LLM call failed: {exc}"}
         parsed = _parse_json_blob(text)
         if not parsed:
@@ -277,4 +316,6 @@ def judge_proof_method(
         fetch_fn=_do,
         use_cache=use_cache,
     )
-    return MethodVerdict(verdict=payload["verdict"], reasoning=payload.get("reasoning", ""))
+    return MethodVerdict(
+        verdict=payload["verdict"], reasoning=payload.get("reasoning", "")
+    )
