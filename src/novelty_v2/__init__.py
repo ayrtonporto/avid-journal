@@ -20,6 +20,7 @@ Relación con src/novelty/ (v1):
     - _cache.cache_or_fetch()              → caching compartido
 """
 
+from src.novelty_v2.orchestrator import check_novelty
 from src.novelty_v2.types import (
     NoveltyVerdict,
     Verdict,
@@ -29,6 +30,7 @@ from src.novelty_v2.types import (
 )
 
 __all__ = [
+    "check_novelty",
     "NoveltyVerdict",
     "Verdict",
     "D1Result",

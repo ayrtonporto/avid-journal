@@ -24,10 +24,11 @@ Relación con src/novelty/ (congelado):
   - llm_judge.judge_theorem_pair → C_I etapa B (verificación fina)
 
 NOTA TÉCNICA sobre check_novelty_verdict_simple:
-  Esta función es un orchestrador mínimo de D2→D1 creado como adelanto del Día 6.
-  Será refactorizado y movido a novelty_v2/orchestrator.py en el Día 8 junto
-  con el árbol de decisión completo (incluyendo D3). No eliminar el código aquí
-  hasta que orchestrator.py esté completo.
+  Esta función fue un orchestrador mínimo D2→D1 creado como adelanto del Día 6.
+  El orchestrator canónico ahora está en src/novelty_v2/orchestrator.py
+  (función check_novelty), que incluye el paso D3 en el árbol de decisión.
+  Esta función se mantiene por compatibilidad hacia atrás pero se recomienda
+  migrar a check_novelty().
 """
 
 from __future__ import annotations
