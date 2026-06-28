@@ -28,13 +28,15 @@ from typing import Dict, List, Optional, Tuple
 from ..types import D2Result
 
 # Orden de ejecución: tácticas baratas y específicas primero, aesop al final.
+# NOTA (2026-06-28): exact? se movió a D1 como fuente secundaria de C_F.
+# La táctica busca teoremas existentes en el entorno, lo cual es una verificación
+# de existencia previa, no de trivialidad. Ver paper/decisions.md.
 T_AUTO_ORDER: List[str] = [
     "decide",
     "norm_num",
     "simp",
     "omega",
     "tauto",
-    "exact?",
     "aesop",
 ]
 
@@ -49,9 +51,14 @@ DEFAULT_BUDGETS: Dict[str, int] = {
     "simp": 10,
     "omega": 10,
     "tauto": 10,
-    "exact?": 10,
     "aesop": 30,
 }
+
+
+# Predicados que norm_num "demuestra" por atajo hardcodeado, no por
+# trivialidad genuina. Saltamos norm_num cuando el enunciado los contiene
+# para evitar falsos positivos (L10 — paper/decisions.md).
+_NORM_NUM_BLACKLIST = ["Irrational"]
 
 
 def _heartbeats(budget_seconds: int) -> int:
@@ -154,9 +161,15 @@ def check_triviality(
     lean_project_dir = Path(lean_project_dir)
     budgets = {**DEFAULT_BUDGETS, **(budgets or {})}
 
+    # Saltar norm_num si el enunciado contiene predicados con atajos
+    # hardcodeados (e.g. Irrational — L10).
+    tactics_order = list(T_AUTO_ORDER)
+    if any(pred in lean_statement for pred in _NORM_NUM_BLACKLIST):
+        tactics_order = [t for t in tactics_order if t != "norm_num"]
+
     all_attempts: List[Tuple[str, bool, float, Optional[str]]] = []
 
-    for tactic in T_AUTO_ORDER:
+    for tactic in tactics_order:
         budget = budgets.get(tactic, 10)
         success, elapsed, out = _run_tactic(
             lean_statement, tactic, lean_project_dir, budget, lean_imports

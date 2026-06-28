@@ -1,0 +1,3 @@
+theorem_id,title,category,veredicto,stage_detenido,d2_trivial,d2_tactica,d2_tiempo_s,d1_existe_en_C_F,d1_match_C_F,d1_C_F_similarity,d1_existe_en_C_I,d1_match_C_I_title,d1_llm_judge_verdict,d1_traduccion_incierta,d3_activa,revision_humana,razonamiento,elapsed_s,error
+T01,La raíz cuadrada de 2 es irracional.,,NO_NOVEDOSO_trivial,2,True,norm_num,21.5,False,,0,False,,,False,False,False,D2: táctica 'norm_num' cerró el enunciado en 21.5s. No requiere idea matemática.,57.7,
+T02,Existen infinitos números primos.,,NO_NOVEDOSO_trivial,2,True,exact?,36.2,False,,0,False,,,False,False,False,D2: táctica 'exact?' cerró el enunciado en 36.2s. No requiere idea matemática.,163.7,

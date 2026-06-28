@@ -44,7 +44,7 @@ from src.novelty_v2.dimensions.d1_existence import (
     _run_ci_stage_b,
     CI_SIMILARITY_THRESHOLD_A,
 )
-from src.novelty_v2.dimensions.d2_triviality import check_triviality
+from src.novelty_v2.dimensions.d2_triviality import check_triviality, _run_tactic, LEAN_STARTUP_OVERHEAD_S
 from src.novelty_v2.dimensions.d3_premises import check_premise_distance
 from src.novelty_v2.types import (
     D1Result,
@@ -170,6 +170,50 @@ def check_novelty(
             ),
             stage_detenido=1,
         )
+
+    # ── Fallback C_F: exact? (si Leandex no encontró match) ─────────────
+    # exact? busca en el entorno Lean cargado. Si encuentra un teorema
+    # existente, lo tratamos como match en C_F. Esto captura teoremas que
+    # Leandex podría no encontrar por diferencia de idioma o formato.
+    if lean_project_dir and lean_statement:
+        try:
+            success, elapsed, output = _run_tactic(
+                lean_statement,
+                "exact?",
+                lean_project_dir,
+                budget_seconds=15,
+                lean_imports=lean_imports,
+            )
+            if success and output:
+                # Extraer el nombre del lema que exact? sugirió
+                import re
+                exact_match = re.search(r"Try this:\s*([^\s]+)", output)
+                if not exact_match:
+                    exact_match = re.search(r"exact\s+([^\s]+)", output)
+                lean_name = exact_match.group(1) if exact_match else "exact?_match"
+                d1.existe_en_C_F = True
+                d1.match_C_F = {
+                    "lean_name": lean_name,
+                    "statement": f"exact? closed in {elapsed:.1f}s",
+                    "similarity": 0.95,  # exact match, slightly below 1.0 to distinguish from Leandex
+                    "url": "",
+                }
+                # Emitir MATCH_ENCONTRADO_PENDIENTE_D3 igual que si Leandex lo hubiera encontrado
+                return NoveltyVerdict(
+                    veredicto=Verdict.MATCH_ENCONTRADO_PENDIENTE_D3,
+                    d1=d1,
+                    d2=d2,
+                    d3=d3,
+                    revision_humana=False,
+                    razonamiento=(
+                        f"D1 C_F (exact?): '{lean_name}' cerró el enunciado "
+                        f"en {elapsed:.1f}s. Enunciado conocido en Mathlib (vía exact?). "
+                        f"Novedad de prueba pendiente de D3."
+                    ),
+                    stage_detenido=1,
+                )
+        except Exception as exc:
+            logger.debug("exact? fallback failed: %s", exc)
 
     # ── Paso 3: D1 C_I (solo si C_F no dio match) ───────────────────────────
     ci_candidates = _run_ci_stage_a(block, use_cache, ci_top_k, ci_threshold)

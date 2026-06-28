@@ -37,7 +37,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.novelty.arxiv_search import PaperCandidate, search_semantic_scholar
+from src.novelty.arxiv_search import PaperCandidate, search_semantic_scholar, search_arxiv
 from src.novelty.llm_judge import judge_theorem_pair
 from src.novelty.mathlib_checker import check_in_mathlib
 from src.novelty_v2.dimensions.d2_triviality import check_triviality
@@ -74,7 +74,7 @@ def _cosine_sim(a: str, b: str) -> float:
 
 
 # ---------------------------------------------------------------------------
-# C_F — Corpus formal (Mathlib vía Leandex)
+# C_F — Corpus formal (Mathlib vía Leandex + exact?)
 # ---------------------------------------------------------------------------
 
 def _check_cf(block: Dict[str, Any], use_cache: bool) -> D1Result:
@@ -108,31 +108,60 @@ def _run_ci_stage_a(
     top_k: int,
     similarity_threshold: float,
 ) -> List[tuple[PaperCandidate, float]]:
-    """Etapa A: búsqueda Semantic Scholar + filtro de similitud MiniLM.
+    """Etapa A: búsqueda arXiv + Semantic Scholar + filtro de similitud MiniLM.
 
-    Devuelve lista de (candidato, sim) ordenada por similitud desc,
-    limitada a top_k candidatos que superan similarity_threshold.
+    Ejecuta ambas fuentes en paralelo (o secuencial si una falla),
+    deduplica por arxiv_id, y devuelve los top_k candidatos que superan
+    similarity_threshold ordenados por similitud desc.
+
+    arXiv es la fuente primaria (mejor cobertura para matemática).
+    Semantic Scholar es secundaria (más rápida pero menor recall en math).
     """
     query = _block_text(block)
     if not query:
         return []
 
+    all_candidates: List[PaperCandidate] = []
+
+    # ── arXiv (fuente primaria) ──────────────────────────────────────────
+    try:
+        arxiv_candidates = search_arxiv(
+            query, top_k=20, reference_text=query, use_cache=use_cache
+        )
+        all_candidates.extend(arxiv_candidates)
+        logger.info("C_I arXiv: %d candidates for query '%s'", len(arxiv_candidates), query[:80])
+    except Exception as exc:
+        logger.warning("arXiv search failed: %s", exc)
+
+    # ── Semantic Scholar (fuente secundaria) ─────────────────────────────
     try:
         ss_candidates = search_semantic_scholar(query, top_k=20, use_cache=use_cache)
+        all_candidates.extend(ss_candidates)
     except Exception as exc:
         logger.warning("Semantic Scholar search failed: %s", exc)
+
+    if not all_candidates:
         return []
 
+    # ── Score + filter + dedup ───────────────────────────────────────────
     block_text = _block_text(block)
-    scored: List[tuple[PaperCandidate, float]] = []
-    for cand in ss_candidates:
+    scored: Dict[str, tuple[PaperCandidate, float]] = {}  # keyed by arxiv_id
+
+    for cand in all_candidates:
+        aid = (cand.arxiv_id or cand.paper_id or "").strip().lower()
+        if not aid:
+            continue
         cand_text = f"{cand.title} {cand.abstract}"
         sim = _cosine_sim(block_text, cand_text)
-        if sim >= similarity_threshold:
-            scored.append((cand, sim))
+        if sim < similarity_threshold:
+            continue
+        # Conservar el mejor score por arxiv_id
+        if aid not in scored or sim > scored[aid][1]:
+            scored[aid] = (cand, sim)
 
-    scored.sort(key=lambda x: -x[1])
-    return scored[:top_k]
+    # Ordenar y limitar a top_k
+    result = sorted(scored.values(), key=lambda x: -x[1])
+    return result[:top_k]
 
 
 def _run_ci_stage_b(
