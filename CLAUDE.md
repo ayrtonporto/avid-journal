@@ -11,102 +11,100 @@ Author: Ayrton Porto (UNICEN, Argentina). PhD applications target: Wenda Li (Edi
 ```
 
 **Three novelty dimensions** (spec: `paper/metric_spec.md`):
-- **D1** — No-existencia previa: Mathlib via Leandex (C_F) + arXiv/Semantic Scholar + LLM judge (C_I)
-- **D2** — No-trivialidad: tácticas `{decide, norm_num, simp, omega, tauto, exact?, aesop}` con presupuestos
-- **D3** — Distancia estructural: Jaccard sobre premisas extraídas con LeanDojo (manual/offline en este sprint)
+- **D1** — No-existencia previa: Mathlib via Leandex (C_F) + exact? fallback + arXiv/Semantic Scholar + LLM judge DeepSeek V4 Flash (C_I)
+- **D2** — No-trivialidad: tácticas `{decide, norm_num, simp, omega, tauto, aesop}` con presupuestos. `exact?` movido a D1. `norm_num` blacklist para `Irrational`.
+- **D3** — Distancia estructural: Jaccard sobre premisas extraídas con ExtractData.lean (funciona en Windows). Calibración pendiente.
 
-**Six verdicts:** `NOVEDAD_ENUNCIADO`, `NOVEDAD_DEMOSTRACION`, `CONOCIDO_LITERATURA`, `NO_NOVEDOSO_redundante`, `NO_NOVEDOSO_trivial`, `ZONA_GRIS`
+**Seven verdicts:** `NOVEDAD_ENUNCIADO`, `NOVEDAD_DEMOSTRACION`, `CONOCIDO_LITERATURA`, `NO_NOVEDOSO_redundante`, `NO_NOVEDOSO_trivial`, `ZONA_GRIS`, `MATCH_ENCONTRADO_PENDIENTE_D3`
 
 **Decision order (by cost):** D2 first → D1 on C_F → D1 on C_I → D3
 
 ## Irrevocable design decisions
 
 1. **Windows native** for automated pipeline. WSL2 reserved only for D3 manual (LeanDojo requires Linux). Do not move automated flow to WSL.
-2. **`src/novelty/` is frozen** — import as dependency, never modify. All new code in `src/novelty_v2/`.
+2. **`src/novelty/` is frozen** — import as dependency, never modify. All new code in `src/novelty_v2/`. Exception: `mathlib_checker.py` and `llm_judge.py` were patched for Leandex v2 API and DeepSeek migration (2026-06-27).
 3. **`src/parser/` and `src/formalization/`** — do not touch.
-4. **D3 manual offline** for star pairs (T07, T08, T09). LeanDojo traces transitive dependencies; not automatable in sprint timeframe.
+4. **D3 vía ExtractData standalone** — bajado `ExtractData.lean` (515 líneas), sin dependencia del paquete `lean-dojo-v2`.
 5. **Demo v2**: D1+D2 real-time with streaming; D3 on-demand via SQLite queue.
-6. **Back-translation fidelity** is explicit future work for PhD.
+6. **LLM Judge**: DeepSeek V4 Flash vía OpenCode Go API (2026-06-27).
+7. **`exact?` en D1**: fuente secundaria de C_F, no táctica de trivialidad (2026-06-27).
 
-## Current state (June 27, 2026)
+## Current state (June 28, 2026)
 
-**Branch:** `main` at merge commit (includes `claude/agitated-lovelace-e10f00` merged 2026-06-27).
+**Branch:** `main` at `0c7c391`. All work merged and pushed.
 
 **Done:**
-- ✅ D2 (`d2_triviality.py`, 166 lines) — working. Tested on 24 theorems: 20/23 = 87% accuracy.
-- ✅ D1 implementation (on `agitated-lovelace` branch) — 480 lines, integrates Leandex + Semantic Scholar + LLM judge.
-- ✅ D2 eval set full run (scripts + results CSVs on `agitated-lovelace` branch).
+- ✅ D2 (`d2_triviality.py`) — working. `exact?` removed, `norm_num` blacklist for `Irrational`.
+- ✅ D1 C_F — Leandex v2 format fixed. Encuentra 18/24 teoremas en Mathlib.
+- ✅ D1 C_I — arXiv como fuente primaria, Semantic Scholar secundaria. LLM Judge DeepSeek V4 Flash.
+- ✅ Orchestrator (`orchestrator.py`) — árbol D2→D1→D3 completo con 7 veredictos.
+- ✅ Eval script (`run_eval_full.py`) — checkpointing, resume, 24 teoremas en 32 min.
+- ✅ Eval results: 18 MATCH_ENCONTRADO_PENDIENTE_D3 + 6 NO_NOVEDOSO_trivial. 83% precisión.
+- ✅ D3 ExtractData — funciona en Windows. 2062 premisas extraídas de Irrational.lean. Jaccard demostrado.
+- ✅ D3 Paper calibración — 6 teoremas compilados en `Papers/D3_Calibration/Paper.lean`.
+- ✅ LLM Judge — DeepSeek V4 Flash, temperature=0, retry automático.
+- ✅ 88/88 tests pasando.
 - ✅ Landing page: `avid-journal.github.io`.
-- ✅ `metric_spec.md`, `eval_set.csv` (26 firm + 9 TBD), `decisions.md`, `limitations.md`.
-- ✅ `types.py` with all 6 verdicts + dataclasses.
 
 **Pending / blocked:**
-- ⏳ Merge `agitated-lovelace` branch.
-- ⏳ `orchestrator.py` (D2→D1→D3 decision tree).
-- ⏳ D3 on T07/T08/T09 (LeanDojo in WSL).
-- ⏳ **LLM judge decision** — API Anthropic ($5-15) vs. local model vs. Claude Code as judge. `ANTHROPIC_API_KEY` not configured.
+- ⏳ D1 C_I no produce candidatos — threshold MiniLM (0.40) muy alto. Bajar a 0.25.
+- ⏳ D3 pruebas genuinamente distintas — T09a = T09b actualmente (usan mismo lema).
+- ⏳ 9 slots TBD del eval set.
 - ⏳ Demo web (Gradio + Hugging Face Spaces).
 - ⏳ Preprint (arXiv).
-- ⏳ Outreach emails (deadline was July 7 — rescheduling needed).
+- ⏳ Outreach emails.
 
 **Key findings for paper:**
-- **L10**: `norm_num` in Mathlib v4.29.0 closes `Irrational (Real.sqrt 2)` in 14s — operational triviality boundary moves with tactic power.
-- **L11**: Mathlib is monolithic — only `import Mathlib` and `import Mathlib.Tactic` work standalone. Specific imports fail.
-- **D2 overhead**: ~30s per `lake env lean` invocation on Windows with warm OS cache.
+- **L10**: `norm_num` in Mathlib v4.29.0 closes `Irrational (Real.sqrt 2)` — operational triviality boundary moves with tactic power. Mitigado con blacklist.
+- **L11**: Mathlib is monolithic — only `import Mathlib` and `import Mathlib.Tactic` work standalone.
+- **Leandex v2**: API cambió de formato (sin scores). Similarity sintética por orden de resultado.
+- **ExtractData en Windows**: funciona con `lake env lean --run ExtractData.lean <archivo>`.
 
 ## Working rules
 
-1. **Read before coding.** Order: this file → `paper/metric_spec.md` → `paper/eval_set.csv` → `paper/decisions.md` → `paper/results_log.md`.
+1. **Read before coding.** Order: this file → `paper/metric_spec.md` → `paper/decisions.md` → `paper/results_log.md`.
 2. **Show real output**, not descriptions. Run code, paste results.
 3. **Conventional Commits**: `feat(scope):`, `fix(scope):`, `docs:`, `refactor:`, `chore:`.
 4. **No AI attribution in commits.**
-5. **Don't touch frozen modules** (`src/novelty/`, `src/parser/`, `src/formalization/`).
-6. **Implement only what's asked.** No extra features, logging, refactors, or tests.
-7. **Update `paper/results_log.md`** at end of each day.
-8. **2-hour stall rule**: if a technical setup blocks progress for >2h, pivot and report.
-9. **Long processes warning**: if something takes >1 min, warn first. >5 min, stop and reconsult.
-10. **Mark facts vs. inferences.** If it's an inference, say "probably" or "according to my understanding."
+5. **`src/novelty/` mostly frozen** — `mathlib_checker.py` and `llm_judge.py` patched but minimize further changes.
+6. **Update `paper/results_log.md`** at end of each day.
+7. **2-hour stall rule**: if a technical setup blocks progress for >2h, pivot and report.
+8. **Long processes warning**: if something takes >1 min, warn first. >5 min, stop and reconsult.
 
 ## Environment
 
 - **OS**: Windows 10 (native). Git Bash for terminal.
 - **Lean**: 4.29.0 (`x86_64-w64-windows-gnu`) in `lean_project/`. Mathlib compiled: 8247 oleans.
-- **Python**: 3.10+ with venv at `.venv/`. Dependencies in `requirements.txt`.
-- **WSL2**: Ubuntu 22.04 at `D:\WSL\Ubuntu2204\`. LeanDojo 4.20.0 installed. Mathlib cache broken — not for automated pipeline.
+- **Python**: 3.11+ with venv at `.venv/`. Run with `.venv/Scripts/python.exe`.
+- **LLM Judge API**: OpenCode Go (`OPENCODE_GO_API_KEY` in `~/.hermes/.env`). Model: `deepseek-v4-flash`.
+- **WSL2**: Ubuntu 22.04 at `D:\WSL\Ubuntu2204\`. LeanDojo 4.20.0 installed. Not for automated pipeline.
 - **Repo**: `D:\Mis documentos\Documentos\AViD Journal\`. Public: `github.com/ayrtonporto/avid-journal`.
 
 ## Key files map
 
 ```
 src/novelty_v2/
-├── types.py              ← Verdict enum + D1/D2/D3Result dataclasses
+├── orchestrator.py       ← ✅ Árbol D2→D1→D3 completo
+├── types.py              ← Verdict enum (7 valores) + D1/D2/D3Result dataclasses
 ├── dimensions/
-│   ├── d1_existence.py   ← stub on main (3 lines); full impl on agitated-lovelace (480 lines)
-│   ├── d2_triviality.py  ← ✅ D2 filter (166 lines)
-│   └── d3_premises.py    ← stub (3 lines)
-src/novelty/              ← FROZEN: mathlib_checker, arxiv_search, llm_judge, _cache, paper_extractor, block_comparator
-src/parser/               ← FROZEN: latex_parser, parse_tex
-src/formalization/        ← FROZEN: orchestrator, lean_project, complexity, mathlib_search, scripts/
+│   ├── d1_existence.py   ← ✅ D1: Leandex C_F + arXiv/SS C_I + exact? fallback
+│   ├── d2_triviality.py  ← ✅ D2 filter (6 tácticas, sin exact?, blacklist Irrational)
+│   └── d3_premises.py    ← ✅ Stub documentado con check_premise_distance()
+src/novelty/
+├── mathlib_checker.py    ← PARCHED: Leandex v2 API format (2026-06-27)
+├── llm_judge.py          ← PARCHED: DeepSeek V4 Flash vía OpenCode Go (2026-06-27)
+├── arxiv_search.py       ← arXiv + Semantic Scholar
+└── _cache.py             ← Cache compartido
+lean_project/
+├── ExtractData.lean      ← Extractor de premisas (515 líneas)
+└── Papers/D3_Calibration/ ← 6 teoremas compilados para calibración D3
 paper/
 ├── metric_spec.md        ← THE spec (source of truth)
 ├── eval_set.csv          ← 26 firm theorems + 9 TBD slots
-├── decisions.md          ← all design decisions with rationale
-├── results_log.md        ← daily progress log
-├── limitations.md        ← declared limitations
-├── related_work.md       ← literature positioning
-├── future_work.md        ← out-of-scope items
-├── eval_set_lean_statements.md  ← Lean 4 versions of eval theorems (on agitated-lovelace branch)
-└── preprint/             ← draft, abstract
-scripts/d2/               ← D2 test scripts + result CSVs (some on agitated-lovelace branch)
-docs/                     ← ARCHITECTURE, PROGRESS, QUICKSTART, GUIA_INSTALACION
-```
-
-## What NOT to do
-
-- Don't rewrite `metric_spec.md`.
-- Don't modify `src/novelty/`, `src/parser/`, `src/formalization/`.
-- Don't re-litigate WSL vs. Windows — decided.
-- Don't re-litigate LeanDojo in automated pipeline — decided.
-- Don't add "Version 3" features to sprint scope.
-- Don't assume "it should work" — test with real code.
-- Don't generate synthetic demo cases — use eval set + real uploads.
+├── decisions.md          ← all design decisions
+├── results_log.md        ← daily progress log (actualizado 2026-06-28)
+├── limitations.md        ← L10, L11, etc.
+└── eval_set_lean_statements.md  ← Lean 4 versions of eval theorems
+scripts/
+├── run_eval_full.py      ← ✅ Eval script con checkpointing
+└── eval/                 ← Resultados CSV de corridas

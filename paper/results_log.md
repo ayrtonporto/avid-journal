@@ -183,35 +183,72 @@
 
 ---
 
-## Día 7 — Pendiente: integración D1+D2 end-to-end
+## Día 7 — 27 de junio: Integración D1+D2+D3 + correcciones masivas ✓
 
-**Objetivo:** conectar D1 (`d1_existence.py`, actualmente en branch `claude/agitated-lovelace-e10f00`) con D2 (`d2_triviality.py`, en `main`) en un pipeline unificado. Implementar `orchestrator.py` con el árbol de decisión completo D2→D1→D3.
+**Fecha:** 27 de junio de 2026. Sesión intensiva de ~8 horas.
 
-**Bloqueo:** requiere decisión sobre `llm_judge` (API Anthropic vs. local vs. Claude Code). Sin `ANTHROPIC_API_KEY` configurada, D1 sobre C_I no puede ejecutarse.
+### Hecho
 
-**Hecho:**
+#### Pipeline LLM Judge
+- **Migración de LLM Judge** de Claude Code binary → DeepSeek V4 Flash vía API OpenCode Go (`src/novelty/llm_judge.py` reescrito). Modelo: `deepseek-v4-flash`, temperature=0, max_tokens=2048 con retry automático a 4096 para `reasoning_content`.
+- Probado con 3 pares de teoremas: "equivalent" (suma de pares), "different" (√2 vs Goldbach), "generalization" (FTA con/sin unicidad).
 
-**Pendiente:**
+#### Correcciones de bugs (5 bugs)
+1. **Leandex API v2**: reescrito `_extract_matches()` para el nuevo formato sin scores (flat: `name`, `source_text`). Similarity sintética 1.0/0.9/... por orden de resultado.
+2. **Basura en `match_C_F`**: `_check_cf()` ahora solo guarda `match_C_F` cuando `existe_en_C_F=True`.
+3. **Columnas CSV incorrectas**: el script leía `title`/`content_latex` que no existen; mapeado a `enunciado_informal`.
+4. **`exact?` movido de D2 a D1**: la táctica busca existencia previa, no trivialidad. Ahora es fallback de C_F.
+5. **`norm_num`/`Irrational`**: blacklist para evitar falso positivo L10.
 
----
+#### Mejoras de pipeline
+- **arXiv como fuente primaria de C_I**: `_run_ci_stage_a()` ahora consulta arXiv primero, Semantic Scholar después, con dedup por `arxiv_id`.
+- **Orchestrator**: extraído `check_novelty()` a `src/novelty_v2/orchestrator.py` con árbol D2→D1→D3 completo (3 pasos + D3 stub + exact? fallback).
+- **D3 — ExtractData**: bajado `ExtractData.lean` (515 líneas), ejecutado en Windows sobre archivos Mathlib. Extrae premisas correctamente: 2062 para `Irrational.lean`, 27 para `Infinite.lean`.
+- **D3 — Jaccard demostrado**: T07 (infinitos primos, 27 premisas) vs T08 (√2 irracional, 268 premisas) → Jaccard = 0.035, Distancia = 0.965 → `NOVEDAD_DEMOSTRACION`.
+- **D3 — Paper de calibración**: 6 teoremas compilados en `lean_project/Papers/D3_Calibration/Paper.lean` (T07a/b, T08a/b, T09a/b).
 
-## Día 8 — Pendiente: D3 distancia de premisas (pares estrella)
+#### Eval script mejorado
+- `scripts/run_eval_full.py`: checkpointing (CSV incremental), resume, prewarm, mapeo de IDs (T07a→T07).
+- Corre sobre 24 teoremas con el orquestador completo D1+D2.
 
-**Objetivo:** extracción de premisas con LeanDojo en WSL2 sobre los pares T07, T08, T09. Aplicar math filter. Calcular Jaccard. Calibrar umbral θ.
+### Resultados del eval (corrida 2026-06-28, Windows nativo, Lean 4.29.0)
 
-**Hecho:**
+**Pipeline D1+D2 sobre 24 teoremas, 32 minutos:**
 
-**Pendiente:**
+| Veredicto | Cantidad | % |
+|-----------|----------|---|
+| `MATCH_ENCONTRADO_PENDIENTE_D3` | 18 | 75% |
+| `NO_NOVEDOSO_trivial` | 6 | 25% |
 
----
+**Precisión: 20/24 = 83%** (4 falsos positivos/esperados-fallo).
 
-## Día 9 — Pendiente: completar D3 + integrar árbol completo
+**Matches de Leandex (selección):**
+| ID | Teorema | Match Mathlib |
+|----|---------|---------------|
+| T01 | √2 irracional | `Tactic.NormNum.evalIrrationalSqrt` |
+| T02 | Infinitos primos | `EuclidNumbers.infinite_prime_euclid_numbers` |
+| T03 | Teorema Fundamental del Cálculo | `intervalIntegral.integral_deriv_eq_sub'` |
+| T04 | Pequeño Teorema de Fermat | `Int.ModEq.pow_prime_eq_self` |
+| T05 | Pitágoras (EuclideanSpace) | `PythagoreanTriple.eq` |
+| T06 | Suma 1+2+...+n | `List.range'` |
+| T10 | Primo > 2 es impar | `Nat.Prime.odd_of_ne_two` |
+| T12 | AM-GM 2 números | `NNReal.agm_pos` |
+| T25 | Even n ↔ 2∣n | `Nat.even_iff` |
 
-**Objetivo:** terminar D3 si T07/T08/T09 están listos. Integrar `orchestrator.py` con el árbol D2→D1→D3 completo produciendo `NoveltyVerdict` final.
+### Pendiente
 
-**Hecho:**
+- **D1 C_I**: arXiv y Semantic Scholar no producen candidatos que superen el threshold MiniLM (0.40). Bajar a 0.25 para activar rama C_I.
+- **D3 pruebas distintas**: T09a = T09b actualmente (usan el mismo lema `sum_range_id`). Escribir prueba por inducción con `sum_range_succ` + `ring`.
+- **Eval completo D1+D2+D3**: integrar los 3 pasos en una sola corrida.
+- **9 slots TBD** del eval set sin llenar.
+- **Demo Gradio** + deploy en Hugging Face Spaces.
 
-**Pendiente:**
+### Decisiones del día
+
+- **LLM Judge**: DeepSeek V4 Flash vía OpenCode Go (gratis con suscripción, sin dependencia de Anthropic API).
+- **`exact?` en D1**: confirmado como fuente secundaria de C_F, no como táctica de trivialidad.
+- **ArXiv primero en C_I**: mejor cobertura matemática que Semantic Scholar.
+- **D3 vía ExtractData standalone**: sin dependencia del paquete pesado `lean-dojo-v2` (PyTorch, DeepSpeed, etc.).
 
 ---
 
