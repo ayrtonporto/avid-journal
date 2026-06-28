@@ -159,8 +159,12 @@ def run_single(
         dict con resultado completo para guardar en CSV.
     """
     tid = row["theorem_id"]
-    title = row.get("title", "")
-    stmt_latex = row.get("statement_latex", row.get("content_latex", ""))
+    title = row.get("title") or row.get("enunciado_informal", "")[:80]
+    stmt_latex = (
+        row.get("statement_latex")
+        or row.get("content_latex")
+        or row.get("enunciado_informal", "")
+    )
 
     lean_stmt = lean_stmt_info.get("lean_statement", "")
     lean_imports = lean_stmt_info.get("lean_imports", "import Mathlib")
