@@ -87,7 +87,7 @@ def _check_cf(block: Dict[str, Any], use_cache: bool) -> D1Result:
         return result
 
     result.existe_en_C_F = mathlib_res.found
-    if mathlib_res.matches:
+    if mathlib_res.found and mathlib_res.matches:
         best = mathlib_res.matches[0]
         result.match_C_F = {
             "lean_name": best.lean_name,

@@ -347,6 +347,11 @@ def main():
         # Buscar enunciado Lean
         stmt_info = lean_stmts.get(tid, {})
         if not stmt_info:
+            # Fallback: strip 'a'/'b' suffix for D3 pair items (T07a → T07)
+            if len(tid) > 1 and tid[-1] in ('a', 'b'):
+                base_tid = tid[:-1]
+                stmt_info = lean_stmts.get(base_tid, {})
+        if not stmt_info:
             # Intentar cargar de la fila CSV directamente
             lean_stmt = row.get("lean_statement", "")
             lean_imports = row.get("lean_imports", "import Mathlib")

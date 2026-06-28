@@ -93,7 +93,23 @@ def _mathlib_url(lean_name: str) -> str:
 
 
 def _extract_matches(events: List[Dict[str, Any]]) -> List[MathlibMatch]:
-    """Recorre los eventos SSE y devuelve los matches del mejor evento util."""
+    """Recorre los eventos SSE y devuelve los matches del mejor evento útil.
+
+    Leandex v2 (post-2025) devuelve un formato plano sin puntajes de similitud:
+      data.search_results[i] = {
+        "name": str,           # lean_name (e.g. "irrational_sqrt_two")
+        "module": str,         # módulo Mathlib
+        "source_text": str,    # declaración Lean completa
+        "docstring": str,      # docstring en Mathlib
+        "source_link": str,    # URL al source en GitHub
+        "dependencies": [...], # dependencias
+        "informalization": str # descripción informal generada
+      }
+
+    Como Leandex no asigna puntajes, usamos el orden de resultados como proxy
+    de relevancia: el primer resultado es el mejor match (similarity = 1.0),
+    los siguientes decrecen (0.9, 0.8, ...).
+    """
     best_results: Optional[List[Dict[str, Any]]] = None
 
     for event in events:
@@ -108,32 +124,37 @@ def _extract_matches(events: List[Dict[str, Any]]) -> List[MathlibMatch]:
         return []
 
     matches: List[MathlibMatch] = []
-    for entry in best_results:
-        decl = entry.get("primary_declaration") or entry.get("declaration") or entry
-        if not isinstance(decl, dict):
-            continue
+    for i, entry in enumerate(best_results):
+        # Leandex v2: flat structure with "name", "source_text"
         lean_name = (
-            decl.get("name")
-            or decl.get("lean_name")
-            or decl.get("full_name")
+            entry.get("name")
+            or entry.get("lean_name")
+            or entry.get("full_name")
             or ""
         )
         statement = (
-            decl.get("statement")
-            or decl.get("type")
-            or decl.get("signature")
+            entry.get("source_text")
+            or entry.get("statement")
+            or entry.get("type")
+            or entry.get("signature")
             or ""
         )
+
+        # Intentar extraer similarity de cualquier campo que pudiera tenerlo
+        # (compatibilidad hacia atrás con Leandex v1)
         similarity = (
             entry.get("similarity")
             or entry.get("score")
-            or decl.get("similarity")
-            or 0.0
+            or entry.get("relevance")
         )
-        try:
-            similarity = float(similarity)
-        except (TypeError, ValueError):
-            similarity = 0.0
+        if similarity is not None:
+            try:
+                similarity = float(similarity)
+            except (TypeError, ValueError):
+                similarity = 0.0
+        else:
+            # Leandex v2 no da puntajes → orden como proxy (1.0, 0.9, 0.8, ...)
+            similarity = max(0.0, 1.0 - i * 0.1)
 
         matches.append(
             MathlibMatch(
@@ -144,7 +165,6 @@ def _extract_matches(events: List[Dict[str, Any]]) -> List[MathlibMatch]:
             )
         )
 
-    matches.sort(key=lambda m: m.similarity, reverse=True)
     return matches
 
 
