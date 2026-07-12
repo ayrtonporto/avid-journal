@@ -1,2 +1,6 @@
 pair_id,type,distance,intersection_size,union_size,flags
 T08_E1_E2,genuinely_different,0.7222222222222222,5,18,
+T09_induction_vs_gauss,genuinely_different,1.0,0,6,
+T07_euclid_vs_factorial,same_disguised,0.5,1,2,
+control_self_T08a,control_self,0.0,9,9,
+control_unrelated_T07xT08,control_unrelated,1.0,0,10,

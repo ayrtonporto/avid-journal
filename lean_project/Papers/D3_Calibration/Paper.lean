@@ -162,12 +162,35 @@ theorem t08b_valuation : Irrational (Real.sqrt 2) := by
 ----------------------------------------------------------------------
 
 /-- T09a — Proof by induction on n.
-Uses: Finset.sum_range_succ, induction, ring -/
+Uses: Finset.sum_range_succ, induction, parity lemma (2∣k(k+1)).
+Deliberately avoids sum_range_id to produce a distinct premise set from T09b.
+-/
 theorem t09a_induction (n : ℕ) : (∑ i ∈ range (n+1), i) = n*(n+1)/2 := by
-  have h := Finset.sum_range_id (n+1)
-  -- sum_range_id gives (n+1)*n/2; we need n*(n+1)/2
-  -- Multiplication commutes: (n+1)*n/2 = n*(n+1)/2
-  simpa [mul_comm, add_comm] using h
+  induction n with
+  | zero => simp
+  | succ k ih =>
+    rw [Finset.sum_range_succ, ih]
+    -- Goal: k*(k+1)/2 + (k+1) = (k+1)*(k+2)/2
+    -- Expand RHS: (k+1)*(k+2) = k*(k+1) + 2*(k+1)
+    have h_expand : (k+1)*(k+2) = k*(k+1) + 2*(k+1) := by ring
+    rw [h_expand]
+    -- Goal: k*(k+1)/2 + (k+1) = (k*(k+1) + 2*(k+1))/2
+    -- Since k*(k+1) is even, write k*(k+1) = 2*q
+    have h_dvd : 2 ∣ k*(k+1) := by
+      rcases Nat.even_or_odd k with ⟨m, hm⟩ | ⟨m, hm⟩
+      · have h2k : 2 ∣ k := by rw [hm]; exact ⟨m, by ring⟩
+        simpa [mul_comm] using h2k.mul_right (k+1)
+      · have h2k1 : 2 ∣ (k+1) := by rw [hm]; exact ⟨m+1, by ring⟩
+        exact h2k1.mul_left k
+    rcases h_dvd with ⟨q, hq⟩
+    -- hq: k*(k+1) = 2*q, so k*(k+1)/2 = q
+    have hq_div : k*(k+1)/2 = q := by
+      rw [hq, Nat.mul_div_cancel_left q (by norm_num : 0 < 2)]
+    rw [hq_div, hq]
+    -- Goal: q + (k+1) = (2*q + 2*(k+1))/2
+    -- RHS = 2*(q + (k+1))/2 = q + (k+1)
+    rw [show (2 : ℕ)*q + 2*(k+1) = 2*(q + (k+1)) by ring]
+    rw [Nat.mul_div_cancel_left (q + (k+1)) (by norm_num : 0 < 2)]
 
 /-- T09b — Gauss pairing trick, Mathlib canonical.
 Uses: Finset.sum_range_id, sum_range_id_mul_two, sum_range_reflect -/

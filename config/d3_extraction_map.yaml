@@ -34,12 +34,12 @@ pairs:
 
   - theorem_id: "T09a"
     lean_file: "Papers/D3_Calibration/Paper.lean"
-    theorem_lines: [166, 170]
-    statement_lines: [166, 166]
+    theorem_lines: [168, 193]
+    statement_lines: [168, 168]
 
   - theorem_id: "T09b"
     lean_file: "Papers/D3_Calibration/Paper.lean"
-    theorem_lines: [174, 179]
-    statement_lines: [174, 174]
+    theorem_lines: [197, 202]
+    statement_lines: [197, 197]
 
   # ── TODO: Add more pairs as .lean files become available ─────────────
