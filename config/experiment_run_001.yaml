@@ -11,9 +11,7 @@ papers:
 
     $\mathbb{Z}_n \subset 2R_2$ if and only if $n$ satisfies the condition
 
-    that when $p^2 \mid n$, then $p \equiv 1 \pmod{4}$ for every odd prime $p$,
-
-    and $n \not\equiv 0 \pmod{16}$.
+    that when $p^2 \mid n$, then $p \equiv 1 \pmod{4}$.
 
     '
   known_duplicator: Hardy & Littlewood, Some Problems of 'Partitio Numerorum' (VIII)
@@ -24,17 +22,17 @@ papers:
 - arxiv_id: 1207.0631v1
   role: retracted
   paired_with: null
-  target_theorem: '\label{keylemma}
+  target_theorem: '\label{maintheo}
 
-    Assume $n \geq 2$.
-
-    Let $A \in \Mat_n(\K)$ be a non-scalar matrix, and let $a \in \K$.
-
-    Then there exists a matrix $B \in \Mat_n(\K)$ that is similar to $A$
-
-    and whose diagonal equals $(a, \tr(A)-a, 0, \dots, 0)$.
+    Let $A$ be a non-scalar matrix of $\Mat_n(\K)$, and $c_1,\dots,c_n$ be scalars.
+    Then the following conditions are equivalent:
+    \begin{enumerate}[(i)]
+    \item $c_1+\cdots+c_n=\tr A$;
+    \item $A$ is similar to a matrix with diagonal entries $c_1,\dots,c_n$.
+    \end{enumerate}
 
     '
+  # decisión 2026-07-12: objetivo = maintheo (el "resultado" del comentario de retiro; conexión Fillmore)
   known_duplicator: Result already published with similar proof (Fillmore, 1969?)
   confirmed: true
   withdrawal_comment: withdrawn since the result has already been published with a
@@ -51,6 +49,7 @@ papers:
     then $m$ is a non-congruent number.
 
     '
+  # decisión 2026-07-12: extensiones a 2m y conjunto S excluidas del objetivo
   known_duplicator: Monsky (well-known result on congruent numbers)
   confirmed: true
   withdrawal_comment: This paper has been withdrawn by the author because it is a
@@ -59,11 +58,8 @@ papers:
   role: retracted
   paired_with: null
   target_theorem: 'Let $R$ be a set of rectangles such that the largest independent
-    set
-
-    is of size $m$, then the rectangles can be sliced by at most
-
-    $O(m \log m)$ lines.
+    set is of size $m$, then the rectangles can be sliced by
+    $f(m) \leq c\cdot(2m+1)^2$ axis-parallel lines.
 
     '
   known_duplicator: Gyárfás & Lehel (1970) — d-separated interval piercing
@@ -78,11 +74,11 @@ papers:
 
     The eigenvalues $\lambda_i\neq 1$ of a finite, irreducible Markov chain satisfy
 
-    $$d(n) \le \max_{i\ge 2} |\lambda_i|$$
-
-    where $d(n)$ is the total variation distance.
+    $$d(n) \geq \frac 12\,|\lambda_i|^n.$$
 
     '
+  # decisión 2026-07-12: parte de tiempo continuo d(t) excluida del objetivo.
+  # Nota: la cota vale para CADA \lambda_i \neq 1.
   known_duplicator: desconocido — posiblemente ya conocido en literatura de mixing
     times (LPW?)
   confirmed: true
