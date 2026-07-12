@@ -46,6 +46,10 @@ class Verdict(str, Enum):
     Veredicto provisional: enunciado conocido, novedad de prueba por determinar.
     Cuando D3 corra, se reemplaza por NOVEDAD_DEMOSTRACION o NO_NOVEDOSO_redundante."""
 
+    INCONCLUSIVE = "INCONCLUSIVE"
+    """D3 se ejecutó pero no pudo calcular distancia (ej. conjuntos de premisas
+    vacíos después de filtros). No hay evidencia suficiente para decidir."""
+
 
 @dataclass
 class D1Result:
@@ -97,13 +101,39 @@ class D3Result:
     """D3 solo se activa si D1 encontró match de tipo (existe_en_C_F=True)."""
 
     premisas_candidato: List[str] = field(default_factory=list)
-    """Premisas de la prueba existente en C_F (extraídas con LeanDojo)."""
+    """Premisas de la prueba existente en C_F (extraídas con LeanDojo).
+    DEPRECATED: prefer premisas_a_after_filters for new code."""
 
     premisas_nueva: List[str] = field(default_factory=list)
-    """Premisas de la prueba candidata (extraídas con LeanDojo)."""
+    """Premisas de la prueba candidata (extraídas con LeanDojo).
+    DEPRECATED: prefer premisas_b_after_filters for new code."""
 
     jaccard: Optional[float] = None
     """Distancia de Jaccard: 1 - |P1 ∩ P2| / |P1 ∪ P2|. None si no se pudo calcular."""
+
+    # ── New fields (compute_d3) ──────────────────────────────────────────
+
+    intersection_size: int = 0
+    """Tamaño de la intersección de premisas (después de filtros)."""
+
+    union_size: int = 0
+    """Tamaño de la unión de premisas (después de filtros)."""
+
+    premises_a_after_filters: List[str] = field(default_factory=list)
+    """Premisas de la prueba A DESPUÉS de filtros (identificadores canónicos)."""
+
+    premises_b_after_filters: List[str] = field(default_factory=list)
+    """Premisas de la prueba B DESPUÉS de filtros (identificadores canónicos)."""
+
+    flags: List[str] = field(default_factory=list)
+    """Flags explicativos: 'empty_after_filters', 'empty_a_after_filters',
+    'empty_b_after_filters', etc."""
+
+    d3_source: str = ""
+    """Origen de los datos D3: 'formal_match' (Mathlib) o
+    'informal_autoformalized' (prueba de arXiv formalizada)."""
+
+    # ── Legacy fields (maintained for orchestrator compatibility) ────────
 
     umbral_theta: float = 0.5
     """Umbral de decisión. Valor inicial 0.5; calibrar con pares T07/T08/T09."""
@@ -133,8 +163,7 @@ class NoveltyVerdict:
     """
     En qué paso del árbol se tomó la decisión final:
       2 → D2 (trivialidad)
-      1f → D1 sobre C_F
-      1i → D1 sobre C_I
+      1 → D1 (C_F o C_I)
       3 → D3 (distancia de premisas)
     """
 
@@ -166,7 +195,13 @@ class NoveltyVerdict:
                 "jaccard": self.d3.jaccard,
                 "umbral_theta": self.d3.umbral_theta,
                 "pruebas_distantes": self.d3.pruebas_distantes,
+                "intersection_size": self.d3.intersection_size,
+                "union_size": self.d3.union_size,
+                "flags": self.d3.flags,
+                "d3_source": self.d3.d3_source,
                 "n_premisas_candidato": len(self.d3.premisas_candidato),
                 "n_premisas_nueva": len(self.d3.premisas_nueva),
+                "n_premisas_a_after_filters": len(self.d3.premises_a_after_filters),
+                "n_premisas_b_after_filters": len(self.d3.premises_b_after_filters),
             },
         }

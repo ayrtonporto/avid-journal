@@ -1,0 +1,984 @@
+description: Control papers matched to retracted candidates by category and year
+matching_criteria: Same primary arXiv category, year ±1, NOT withdrawn, LaTeX source
+  available with ≥1 theorem environment
+total_retracted_with_controls: 26
+total_retracted_without_controls: 0
+total_controls_checked: 382
+total_controls_viable: 332
+backoff_events: 0
+elapsed_seconds: 181
+elapsed_minutes: 3.0
+pairs:
+- retracted_arxiv_id: 0711.2941v2
+  retracted_title: Holomorphic fillability and cohomology
+  retracted_category: math.CV
+  retracted_year: 2007
+  controls:
+  - arxiv_id: 0808.3225v1
+    title: Entire curves, Integral sets and Principal bundles
+    primary_category: math.NT
+    year: '2008'
+    authors:
+    - Joerg Winkelmann
+    viability:
+      arxiv_id_v1: 0808.3225v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 26
+      proof_envs: 17
+      tarball_size_kb: 15.0
+      error: null
+  - arxiv_id: 0808.3259v4
+    title: Positivity of relative canonical bundles for families of canonically polarized
+      manifolds
+    primary_category: math.CV
+    year: '2008'
+    authors:
+    - Georg Schumacher
+    viability:
+      arxiv_id_v1: 0808.3259v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 11
+      proof_envs: 7
+      tarball_size_kb: 9.3
+      error: null
+- retracted_arxiv_id: 0909.0395v3
+  retracted_title: Abelian categories arising from a maximal n-orthogonal subcategory
+  retracted_category: math.CT
+  retracted_year: 2009
+  controls:
+  - arxiv_id: 0808.1820v2
+    title: Sheaves of ordered spaces and interval theories
+    primary_category: math.AT
+    year: '2008'
+    authors:
+    - Krzysztof Worytkiewicz
+    viability:
+      arxiv_id_v1: 0808.1820v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 59
+      proof_envs: 23
+      tarball_size_kb: 17.8
+      error: null
+  - arxiv_id: 0810.5174v3
+    title: Derived Smooth Manifolds
+    primary_category: math.AT
+    year: '2008'
+    authors:
+    - David I. Spivak
+    viability:
+      arxiv_id_v1: 0810.5174v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 13
+      theorem_envs: 14
+      proof_envs: 12
+      tarball_size_kb: 50.5
+      error: null
+- retracted_arxiv_id: 0711.1149v2
+  retracted_title: Stein or Milnor fillability and cohomology
+  retracted_category: math.CV
+  retracted_year: 2007
+  controls:
+  - arxiv_id: 0808.2672v1
+    title: 'Conformal dimension: Cantor sets and moduli'
+    primary_category: math.CV
+    year: '2008'
+    authors:
+    - Hrant Hakobyan
+    viability:
+      arxiv_id_v1: 0808.2672v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 32
+      proof_envs: 14
+      tarball_size_kb: 15.5
+      error: null
+  - arxiv_id: 0808.0762v1
+    title: On the Convergence of Optimal Measures
+    primary_category: math.CV
+    year: '2008'
+    authors:
+    - T. Bloom
+    - L. Bos
+    - N. Levenberg
+    - S. Waldron
+    viability:
+      arxiv_id_v1: 0808.0762v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 11
+      proof_envs: 0
+      tarball_size_kb: 12.8
+      error: null
+- retracted_arxiv_id: math/0403201v3
+  retracted_title: Twisted cyclic cohomology of the quantum SU(2)
+  retracted_category: math.QA
+  retracted_year: 2004
+  controls:
+  - arxiv_id: math/0307046v1
+    title: Integrals in Hopf algebras over rings
+    primary_category: math.RA
+    year: '2003'
+    authors:
+    - Christian Lomp
+    viability:
+      arxiv_id_v1: math/0307046v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 30
+      proof_envs: 28
+      tarball_size_kb: 20.9
+      error: null
+  - arxiv_id: math/0306219v2
+    title: Multiple elliptic hypergeometric series --An approach from the Cauchy determinant--
+    primary_category: math.CA
+    year: '2003'
+    authors:
+    - Yasushi Kajihara
+    - Masatoshi Noumi
+    viability:
+      arxiv_id_v1: math/0306219v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 11
+      proof_envs: 0
+      tarball_size_kb: 15.6
+      error: null
+- retracted_arxiv_id: 1407.0626v2
+  retracted_title: A list analog of Vizing's Theorem for simple graphs with triangles
+    but no other odd cycles
+  retracted_category: math.CO
+  retracted_year: 2014
+  controls:
+  - arxiv_id: 1305.3977v1
+    title: Invariant Gaussian processes and independent sets on regular graphs of
+      large girth
+    primary_category: math.CO
+    year: '2013'
+    authors:
+    - Endre Csóka
+    - Balázs Gerencsér
+    - Viktor Harangi
+    - Bálint Virág
+    viability:
+      arxiv_id_v1: 1305.3977v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 4
+      theorem_envs: 9
+      proof_envs: 5
+      tarball_size_kb: 21.9
+      error: null
+  - arxiv_id: 1306.0093v1
+    title: On a conjecture for the signless Laplacian eigenvalues
+    primary_category: math.CO
+    year: '2013'
+    authors:
+    - Lihua You
+    - Jieshan Yang
+    viability:
+      arxiv_id_v1: 1306.0093v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 25
+      proof_envs: 17
+      tarball_size_kb: 12.9
+      error: null
+- retracted_arxiv_id: 1502.05028v2
+  retracted_title: Rational curves on smooth cubic hypersurfaces over finite fields
+  retracted_category: math.AG
+  retracted_year: 2015
+  controls:
+  - arxiv_id: 1402.0460v2
+    title: 'Triangulations of monotone families I: Two-dimensional families'
+    primary_category: math.AG
+    year: '2014'
+    authors:
+    - Saugata Basu
+    - Andrei Gabrielov
+    - Nicolai Vorobjov
+    viability:
+      arxiv_id_v1: 1402.0460v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 109
+      proof_envs: 48
+      tarball_size_kb: 56.4
+      error: null
+  - arxiv_id: 1401.7775v1
+    title: Homological Descent for Motivic Homology Theories
+    primary_category: math.KT
+    year: '2014'
+    authors:
+    - Thomas Geisser
+    viability:
+      arxiv_id_v1: 1401.7775v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 17
+      proof_envs: 0
+      tarball_size_kb: 14.0
+      error: null
+- retracted_arxiv_id: 1011.3176v2
+  retracted_title: Rotation sets of invariant separating continua of annular homeomorphisms
+  retracted_category: math.DS
+  retracted_year: 2010
+  controls:
+  - arxiv_id: 0904.2489v1
+    title: Entropies of compact strictly convex projective manifolds
+    primary_category: math.DS
+    year: '2009'
+    authors:
+    - Mickaël Crampon
+    viability:
+      arxiv_id_v1: 0904.2489v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 29
+      proof_envs: 16
+      tarball_size_kb: 30.0
+      error: null
+  - arxiv_id: 0904.2561v1
+    title: C^k-Robust transitivity for surfaces with boundary
+    primary_category: math.DS
+    year: '2009'
+    authors:
+    - Aubin Arroyo
+    - Enrique R. Pujals
+    viability:
+      arxiv_id_v1: 0904.2561v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 9
+      proof_envs: 9
+      tarball_size_kb: 38.5
+      error: null
+- retracted_arxiv_id: 1010.2295v3
+  retracted_title: Generalising Bogomolov's Inequality to Unstable Sheaves
+  retracted_category: math.AG
+  retracted_year: 2010
+  controls:
+  - arxiv_id: 0904.2445v1
+    title: Positive sheaves of differentials coming from coarse moduli spaces
+    primary_category: math.AG
+    year: '2009'
+    authors:
+    - Kelly Jabbusch
+    - Stefan Kebekus
+    viability:
+      arxiv_id_v1: 0904.2445v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 10
+      proof_envs: 4
+      tarball_size_kb: 13.8
+      error: null
+  - arxiv_id: 0904.1499v3
+    title: The Abel-Jacobi isomorphism on one cycles on the moduli space of vector
+      bundles with trivial determinant on a curve
+    primary_category: math.AG
+    year: '2009'
+    authors:
+    - JN Iyer
+    viability:
+      arxiv_id_v1: 0904.1499v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 22
+      proof_envs: 20
+      tarball_size_kb: 14.9
+      error: null
+- retracted_arxiv_id: 1207.0631v3
+  retracted_title: On the diagonal of the matrices in a similarity class
+  retracted_category: math.RA
+  retracted_year: 2012
+  controls:
+  - arxiv_id: 1101.3431v2
+    title: Tropical linear-fractional programming and parametric mean payoff games
+    primary_category: math.MG
+    year: '2011'
+    authors:
+    - Stephane Gaubert
+    - Ricardo D. Katz
+    - Sergei Sergeev
+    viability:
+      arxiv_id_v1: 1101.3431v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 4
+      theorem_envs: 35
+      proof_envs: 14
+      tarball_size_kb: 138.2
+      error: null
+  - arxiv_id: 1101.3736v3
+    title: On tropical dualities in cluster algebras
+    primary_category: math.RA
+    year: '2011'
+    authors:
+    - Tomoki Nakanishi
+    - Andrei Zelevinsky
+    viability:
+      arxiv_id_v1: 1101.3736v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 7
+      proof_envs: 5
+      tarball_size_kb: 10.3
+      error: null
+- retracted_arxiv_id: 1212.0196v2
+  retracted_title: On non-congruent numbers with 3 modulo 8 prime factors
+  retracted_category: math.NT
+  retracted_year: 2012
+  controls:
+  - arxiv_id: 1101.3720v1
+    title: Sparse binary cyclotomic polynomials
+    primary_category: math.NT
+    year: '2011'
+    authors:
+    - Bartlomiej Bzdega
+    viability:
+      arxiv_id_v1: 1101.3720v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 1
+      proof_envs: 0
+      tarball_size_kb: 2.9
+      error: null
+  - arxiv_id: 1101.4323v2
+    title: Computing endomorphism rings of elliptic curves under the GRH
+    primary_category: math.NT
+    year: '2011'
+    authors:
+    - Gaetan Bisson
+    viability:
+      arxiv_id_v1: 1101.4323v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 12
+      proof_envs: 4
+      tarball_size_kb: 57.3
+      error: null
+- retracted_arxiv_id: math-ph/0108016v4
+  retracted_title: A natural symplectic form for every field theory
+  retracted_category: math-ph
+  retracted_year: 2001
+  controls:
+  - arxiv_id: math-ph/0207026v2
+    title: Construction of Self-Adjoint Berezin-Toeplitz Operators on Kahler Manifolds
+      and a Probabilistic Representation of the Associated Semigroups
+    primary_category: math-ph
+    year: '2002'
+    authors:
+    - Bernhard G. Bodmann
+    viability:
+      arxiv_id_v1: math-ph/0207026v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 25
+      proof_envs: 26
+      tarball_size_kb: 36.2
+      error: null
+  - arxiv_id: math-ph/0207029v1
+    title: From tracial anomalies to anomalies in Quantum Field Theory
+    primary_category: math-ph
+    year: '2002'
+    authors:
+    - Alexander Cardona
+    - Catherine Ducourtioux
+    - Sylvie Paycha
+    viability:
+      arxiv_id_v1: math-ph/0207029v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 17
+      proof_envs: 0
+      tarball_size_kb: 37.0
+      error: null
+- retracted_arxiv_id: 1510.07802v3
+  retracted_title: On behavior of the Lannes-Zarati homomorphism
+  retracted_category: math.AT
+  retracted_year: 2015
+  controls:
+  - arxiv_id: 1401.7852v2
+    title: Controlled Algebra for Simplicial Rings and Algebraic K-theory
+    primary_category: math.KT
+    year: '2014'
+    authors:
+    - Mark Ullmann
+    viability:
+      arxiv_id_v1: 1401.7852v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 64
+      proof_envs: 43
+      tarball_size_kb: 68.3
+      error: null
+  - arxiv_id: 1403.2334v5
+    title: Homological stability for moduli spaces of high dimensional manifolds.
+      I
+    primary_category: math.AT
+    year: '2014'
+    authors:
+    - Soren Galatius
+    - Oscar Randal-Williams
+    viability:
+      arxiv_id_v1: 1403.2334v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 9
+      theorem_envs: 12
+      proof_envs: 10
+      tarball_size_kb: 53.2
+      error: null
+- retracted_arxiv_id: 1501.07698v3
+  retracted_title: On the mod p Lannes-Zarati homomorphism
+  retracted_category: math.AT
+  retracted_year: 2015
+  controls:
+  - arxiv_id: 1403.3501v3
+    title: Normal closure and injective normalizer of a group homomorphism
+    primary_category: math.GR
+    year: '2014'
+    authors:
+    - Emmanuel D. Farjoun
+    - Yoav Segev
+    viability:
+      arxiv_id_v1: 1403.3501v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 41
+      proof_envs: 24
+      tarball_size_kb: 27.7
+      error: null
+  - arxiv_id: 1401.0491v3
+    title: Fixed points of $p$-toral groups acting on partition complexes
+    primary_category: math.AT
+    year: '2014'
+    authors:
+    - Julia E. Bergner
+    - Ruth Joachimi
+    - Kathryn Lesh
+    - Vesna Stojanoska
+    - Kirsten Wickelgren
+    viability:
+      arxiv_id_v1: 1401.0491v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 20
+      proof_envs: 15
+      tarball_size_kb: 12.9
+      error: null
+- retracted_arxiv_id: 1308.0311v2
+  retracted_title: On the partition of R^n by hyperplanes
+  retracted_category: cs.DM
+  retracted_year: 2013
+  controls:
+  - arxiv_id: 1201.4618v1
+    title: Perfect Reconstruction of Oncogenetic Trees
+    primary_category: q-bio.QM
+    year: '2012'
+    authors:
+    - Charalampos E. Tsourakakis
+    viability:
+      arxiv_id_v1: 1201.4618v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 1
+      proof_envs: 1
+      tarball_size_kb: 239.2
+      error: null
+  - arxiv_id: 1201.5340v1
+    title: Rainbow Induced Subgraphs in Replication Graphs
+    primary_category: cs.DM
+    year: '2012'
+    authors:
+    - Marek Szykuła
+    - Andrzej Kisielewicz
+    viability:
+      arxiv_id_v1: 1201.5340v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 12
+      proof_envs: 7
+      tarball_size_kb: 11.3
+      error: null
+- retracted_arxiv_id: 1002.2004v7
+  retracted_title: Generalized external cone condition for domains in Riemannian manifolds
+  retracted_category: math.AP
+  retracted_year: 2010
+  controls:
+  - arxiv_id: 0904.2471v1
+    title: 'Un modèle non-linéaire de prolifération cellulaire : extinction des cellules
+      et invariance'
+    primary_category: math.AP
+    year: '2009'
+    authors:
+    - Mostafa Adimy
+    - Fabien Crauste
+    viability:
+      arxiv_id_v1: 0904.2471v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 5
+      proof_envs: 0
+      tarball_size_kb: 15.9
+      error: null
+  - arxiv_id: 0904.2492v1
+    title: On the stability of a maturity structured model of cellular proliferation
+    primary_category: math.AP
+    year: '2009'
+    authors:
+    - Mostafa Adimy
+    - Fabien Crauste
+    - Laurent Pujo-Menjouet
+    viability:
+      arxiv_id_v1: 0904.2492v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 17
+      proof_envs: 11
+      tarball_size_kb: 18.9
+      error: null
+- retracted_arxiv_id: 0907.3263v2
+  retracted_title: Simon's conjecture for fibered knots
+  retracted_category: math.GT
+  retracted_year: 2009
+  controls:
+  - arxiv_id: 0808.0064v1
+    title: On tabulating virtual strings
+    primary_category: math.GT
+    year: '2008'
+    authors:
+    - Andrew Gibson
+    viability:
+      arxiv_id_v1: 0808.0064v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 2
+      proof_envs: 2
+      tarball_size_kb: 24.8
+      error: null
+  - arxiv_id: 0808.1327v1
+    title: 'Addendum to: "Knots, sutures and excision"'
+    primary_category: math.GT
+    year: '2008'
+    authors:
+    - Yi Ni
+    viability:
+      arxiv_id_v1: 0808.1327v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 5
+      proof_envs: 4
+      tarball_size_kb: 3.0
+      error: null
+- retracted_arxiv_id: 1302.3933v2
+  retracted_title: The Weak Finitistic Dimension of a Path Algebra is Finite
+  retracted_category: math.KT
+  retracted_year: 2013
+  controls:
+  - arxiv_id: 1201.4026v2
+    title: The cohomological reduction method for computing n-dimensional cocyclic
+      matrices
+    primary_category: math.AT
+    year: '2012'
+    authors:
+    - Víctor Álvarez
+    - José-Andrés Armario
+    - María-Dolores Frau
+    - Pedro Real
+    viability:
+      arxiv_id_v1: 1201.4026v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 2
+      proof_envs: 0
+      tarball_size_kb: 41.1
+      error: null
+  - arxiv_id: 1203.5508v2
+    title: Algebraic cobordism theory attached to algebraic equivalence
+    primary_category: math.AG
+    year: '2012'
+    authors:
+    - Amalendu Krishna
+    - Jinhyun Park
+    viability:
+      arxiv_id_v1: 1203.5508v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 75
+      proof_envs: 29
+      tarball_size_kb: 34.6
+      error: null
+- retracted_arxiv_id: 1609.02090v2
+  retracted_title: A variant of Waring's Problem for the ring of integers modulo n
+  retracted_category: math.NT
+  retracted_year: 2016
+  controls:
+  - arxiv_id: 1501.01654v1
+    title: A Characterization of almost universal ternary inhomogeneous quadratic
+      polynomials with conductor 2
+    primary_category: math.NT
+    year: '2015'
+    authors:
+    - Anna Haensch
+    viability:
+      arxiv_id_v1: 1501.01654v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 13
+      proof_envs: 9
+      tarball_size_kb: 14.8
+      error: null
+  - arxiv_id: 1501.01998v1
+    title: An orthogonality relation for a thin family of $GL(3)$ Maass forms
+    primary_category: math.NT
+    year: '2015'
+    authors:
+    - João Guerreiro
+    viability:
+      arxiv_id_v1: 1501.01998v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 9
+      proof_envs: 1
+      tarball_size_kb: 12.4
+      error: null
+- retracted_arxiv_id: 2605.05526v2
+  retracted_title: The vertex Folkman number F_v(3,3;5) equals 8
+  retracted_category: math.CO
+  retracted_year: 2026
+  controls:
+  - arxiv_id: 2501.12205v1
+    title: The random graph process is globally synchronizing
+    primary_category: math.CO
+    year: '2025'
+    authors:
+    - Vishesh Jain
+    - Clayton Mizgerd
+    - Mehtaab Sawhney
+    viability:
+      arxiv_id_v1: 2501.12205v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 21
+      proof_envs: 11
+      tarball_size_kb: 22.8
+      error: null
+  - arxiv_id: 2502.01604v2
+    title: The Polytope of Probability Functions on a Finite Poset
+    primary_category: math.CO
+    year: '2025'
+    authors:
+    - Jan Snellman
+    viability:
+      arxiv_id_v1: 2502.01604v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 31
+      proof_envs: 17
+      tarball_size_kb: 98.7
+      error: null
+- retracted_arxiv_id: math/0508043v4
+  retracted_title: An analogue of Young's lattice for compositions
+  retracted_category: math.CO
+  retracted_year: 2005
+  controls:
+  - arxiv_id: math/0402452v2
+    title: Perfect Matchings and the Octahedron Recurrence
+    primary_category: math.CO
+    year: '2004'
+    authors:
+    - David E Speyer
+    viability:
+      arxiv_id_v1: math/0402452v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 19
+      proof_envs: 21
+      tarball_size_kb: 59.2
+      error: null
+  - arxiv_id: math/0403094v1
+    title: A note on blockers in posets
+    primary_category: math.CO
+    year: '2004'
+    authors:
+    - Anders Björner
+    - Axel Hultman
+    viability:
+      arxiv_id_v1: math/0403094v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 16
+      proof_envs: 9
+      tarball_size_kb: 12.4
+      error: null
+- retracted_arxiv_id: 1004.3381v4
+  retracted_title: Polynomial Bounds on the Slicing Number
+  retracted_category: cs.CG
+  retracted_year: 2010
+  controls:
+  - arxiv_id: 0904.1783v3
+    title: Exact Join Detection for Convex Polyhedra and Other Numerical Abstractions
+    primary_category: cs.CG
+    year: '2009'
+    authors:
+    - Roberto Bagnara
+    - Patricia M. Hill
+    - Enea Zaffanella
+    viability:
+      arxiv_id_v1: 0904.1783v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 5
+      theorem_envs: 20
+      proof_envs: 9
+      tarball_size_kb: 143.6
+      error: null
+  - arxiv_id: 0903.4696v1
+    title: Multidimensional Online Robot Motion
+    primary_category: cs.CG
+    year: '2009'
+    authors:
+    - Joshua Brown Kramer
+    - Lucas Sabalka
+    viability:
+      arxiv_id_v1: 0903.4696v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 25
+      proof_envs: 8
+      tarball_size_kb: 62.4
+      error: null
+- retracted_arxiv_id: math/0604362v4
+  retracted_title: 'Eigenvalues of non-reversible Markov chains: their connection
+    to mixing times'
+  retracted_category: math.PR
+  retracted_year: 2006
+  controls:
+  - arxiv_id: math/0504586v2
+    title: Quantitative noise sensitivity and exceptional times for percolation
+    primary_category: math.PR
+    year: '2005'
+    authors:
+    - Oded Schramm
+    - Jeffrey E. Steif
+    viability:
+      arxiv_id_v1: math/0504586v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 39
+      proof_envs: 0
+      tarball_size_kb: 52.2
+      error: null
+  - arxiv_id: math/0504551v3
+    title: Stochastic 2-microlocal analysis
+    primary_category: math.PR
+    year: '2005'
+    authors:
+    - Erick Herbin
+    - Jacques Lévy-Véhel
+    viability:
+      arxiv_id_v1: math/0504551v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 39
+      proof_envs: 0
+      tarball_size_kb: 26.2
+      error: null
+- retracted_arxiv_id: 1307.2069v5
+  retracted_title: On the curvature of level sets of harmonic functions
+  retracted_category: math.CA
+  retracted_year: 2013
+  controls:
+  - arxiv_id: 1201.3855v1
+    title: Calderón commutators and the Cauchy integral on Lipschitz curves revisited
+      III. Polydisc extensions
+    primary_category: math.CA
+    year: '2012'
+    authors:
+    - Camil Muscalu
+    viability:
+      arxiv_id_v1: 1201.3855v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 9
+      proof_envs: 2
+      tarball_size_kb: 21.2
+      error: null
+  - arxiv_id: 1201.3891v2
+    title: Asymptotics of Harish-Chandra expansions, bounded hypergeometric functions
+      associated with root systems, and applications
+    primary_category: math.RT
+    year: '2012'
+    authors:
+    - E. K. Narayanan
+    - A. Pasquale
+    - S. Pusti
+    viability:
+      arxiv_id_v1: 1201.3891v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 29
+      proof_envs: 21
+      tarball_size_kb: 31.6
+      error: null
+- retracted_arxiv_id: 1311.0211v2
+  retracted_title: Hunter & Mole
+  retracted_category: math.CO
+  retracted_year: 2013
+  controls:
+  - arxiv_id: 1201.3842v2
+    title: New Bounds on van der Waerden-type Numbers for Generalized 3-term Arithmetic
+      Progressions
+    primary_category: math.CO
+    year: '2012'
+    authors:
+    - Patrick Allen
+    - Bruce M. Landman
+    - Holly Meeks
+    viability:
+      arxiv_id_v1: 1201.3842v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 4
+      proof_envs: 0
+      tarball_size_kb: 7.4
+      error: null
+  - arxiv_id: 1201.3953v1
+    title: Hypercube percolation
+    primary_category: math.PR
+    year: '2012'
+    authors:
+    - Remco van der Hofstad
+    - Asaf Nachmias
+    viability:
+      arxiv_id_v1: 1201.3953v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 92
+      proof_envs: 53
+      tarball_size_kb: 314.0
+      error: null
+- retracted_arxiv_id: 1608.00364v2
+  retracted_title: Normality of general elephants on 3-fold terminal flips
+  retracted_category: math.AG
+  retracted_year: 2016
+  controls:
+  - arxiv_id: 1501.01768v3
+    title: Cycle connectivity and pseudoconcavity of flag domains
+    primary_category: math.AG
+    year: '2015'
+    authors:
+    - Tatsuki Hayama
+    viability:
+      arxiv_id_v1: 1501.01768v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 16
+      proof_envs: 8
+      tarball_size_kb: 1774.0
+      error: null
+  - arxiv_id: 1501.01419v3
+    title: Łojasiewicz-type inequalities with explicit exponents for the largest eigenvalue
+      function of real symmetric polynomial matrices
+    primary_category: math.AG
+    year: '2015'
+    authors:
+    - Si Tiep Dinh
+    - Tien Son Pham
+    viability:
+      arxiv_id_v1: 1501.01419v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 31
+      proof_envs: 13
+      tarball_size_kb: 20.9
+      error: null
+- retracted_arxiv_id: 1203.2173v2
+  retracted_title: Global rough solutions for the Zakharov system in two spatial dimensions
+  retracted_category: math.AP
+  retracted_year: 2012
+  controls:
+  - arxiv_id: 1101.4070v1
+    title: Smooth Attractors for the Brinkman-Forchheimer equations with fast growing
+      nonlinearities
+    primary_category: math.AP
+    year: '2011'
+    authors:
+    - Varga K. Kalantarov
+    - Sergey Zelik
+    viability:
+      arxiv_id_v1: 1101.4070v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 32
+      proof_envs: 12
+      tarball_size_kb: 21.2
+      error: null
+  - arxiv_id: 1101.4381v1
+    title: Traveling waves for a boundary reaction-diffusion equation
+    primary_category: math.AP
+    year: '2011'
+    authors:
+    - L. Caffarelli
+    - A. Mellet
+    - Y. Sire
+    viability:
+      arxiv_id_v1: 1101.4381v1
+      source_available: true
+      main_tex_found: true
+      num_tex_files: 1
+      theorem_envs: 20
+      proof_envs: 14
+      tarball_size_kb: 15.9
+      error: null

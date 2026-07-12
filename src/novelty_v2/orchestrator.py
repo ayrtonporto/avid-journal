@@ -1,7 +1,7 @@
 """Orquestador de la métrica de novedad v2.
 
 Ejecuta el árbol de decisión D2 → D1 → D3 siguiendo la spec
-(paper/metric_spec.md §6) y devuelve NoveltyVerdict con los 7 veredictos.
+(paper/metric_spec.md §6) y devuelve NoveltyVerdict con los 8 veredictos.
 
 Árbol completo:
   1. D2 (trivialidad):
@@ -11,14 +11,15 @@ Ejecuta el árbol de decisión D2 → D1 → D3 siguiendo la spec
        - D3 no disponible → MATCH_ENCONTRADO_PENDIENTE_D3
        - D3 disponible ∧ jaccard > θ → NOVEDAD_DEMOSTRACION
        - D3 disponible ∧ jaccard ≤ θ → NO_NOVEDOSO_redundante
+       - D3 disponible ∧ jaccard is None → INCONCLUSIVE (conjuntos vacíos)
   3. D1 C_I (Semantic Scholar + LLM judge), solo si C_F no dio match:
      - equivalent → CONOCIDO_LITERATURA
      - generalization / specialization → ZONA_GRIS
      - different / vacío → NOVEDAD_ENUNCIADO
 
-D3 (distancia de premisas) está en desarrollo. Actualmente es un stub que
-devuelve D3Result con activa=False. La implementación requiere LeanDojo
-en WSL2 y se ejecuta manualmente (ver §D3 más abajo).
+D3 (distancia de premisas) integrado vía compute_d3 desde 2026-07-03.
+Cuando d3_premises_a y d3_premises_b se proveen, D3 corre en vivo.
+Cuando no, se emite MATCH_ENCONTRADO_PENDIENTE_D3 (análisis offline).
 
 Uso:
   from src.novelty_v2.orchestrator import check_novelty
@@ -35,17 +36,16 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.novelty_v2.dimensions.d1_existence import (
-    check_d1,
     _check_cf,
     _run_ci_stage_a,
     _run_ci_stage_b,
     CI_SIMILARITY_THRESHOLD_A,
 )
 from src.novelty_v2.dimensions.d2_triviality import check_triviality, _run_tactic, LEAN_STARTUP_OVERHEAD_S
-from src.novelty_v2.dimensions.d3_premises import check_premise_distance
+from src.novelty_v2.dimensions.d3_premises import compute_d3
 from src.novelty_v2.types import (
     D1Result,
     D2Result,
@@ -66,6 +66,10 @@ def check_novelty(
     ci_top_k: int = 3,
     ci_threshold: float = CI_SIMILARITY_THRESHOLD_A,
     d3_star_pairs: Optional[Dict[str, str]] = None,
+    d3_premises_a: Optional[List[dict]] = None,
+    d3_premises_b: Optional[List[dict]] = None,
+    d3_statement_lines_a: Optional[Tuple[int, int]] = None,
+    d3_statement_lines_b: Optional[Tuple[int, int]] = None,
 ) -> NoveltyVerdict:
     """Evalúa la novedad de un teorema usando el árbol D2 → D1 → D3.
 
@@ -81,6 +85,11 @@ def check_novelty(
             Formato: {"lean_name_nuevo": "lean_name_existente", ...}
             Si se provee, D3 se ejecuta sobre estos pares en vez de
             sobre el match de C_F. Útil para evaluación offline.
+        d3_premises_a: lista de dicts PremiseTrace para la prueba candidata.
+            Si se provee junto con d3_premises_b, D3 corre en vivo.
+        d3_premises_b: lista de dicts PremiseTrace para la prueba existente.
+        d3_statement_lines_a: (start, end) del enunciado de A (para Filtro 2).
+        d3_statement_lines_b: (start, end) del enunciado de B (para Filtro 2).
 
     Returns:
         NoveltyVerdict con veredicto, razonamiento y resultados de las 3 dimensiones.
@@ -119,8 +128,30 @@ def check_novelty(
         d3 = _run_d3_if_possible(
             lean_statement=lean_statement,
             lean_name_existente=lean_name_existente,
+            lean_project_dir=lean_project_dir,
             d3_star_pairs=d3_star_pairs,
+            d3_premises_a=d3_premises_a,
+            d3_premises_b=d3_premises_b,
+            d3_statement_lines_a=d3_statement_lines_a,
+            d3_statement_lines_b=d3_statement_lines_b,
         )
+
+        # Case: D3 ran but sets were empty → INCONCLUSIVE
+        if d3.activa and d3.jaccard is None:
+            flags_str = ", ".join(d3.flags) if d3.flags else "none"
+            return NoveltyVerdict(
+                veredicto=Verdict.INCONCLUSIVE,
+                d1=d1,
+                d2=d2,
+                d3=d3,
+                revision_humana=False,
+                razonamiento=(
+                    f"D1 C_F: match en Mathlib — '{lean_name_existente}'. "
+                    f"D3: no se pudo calcular distancia (flags: {flags_str}). "
+                    f"Premise sets vacíos después de filtros — evidencia insuficiente."
+                ),
+                stage_detenido=3,
+            )
 
         if d3.pruebas_distantes is True:
             return NoveltyVerdict(
@@ -131,7 +162,8 @@ def check_novelty(
                 revision_humana=False,
                 razonamiento=(
                     f"D1 C_F: match en Mathlib — '{lean_name_existente}'. "
-                    f"D3: distancia Jaccard = {d3.jaccard:.2f} > "
+                    f"D3: distancia Jaccard = {d3.jaccard:.4f}, "
+                    f"inter={d3.intersection_size}, union={d3.union_size} > "
                     f"umbral θ = {d3.umbral_theta} → pruebas estructuralmente "
                     f"distantes. Mismo enunciado, prueba nueva."
                 ),
@@ -147,7 +179,8 @@ def check_novelty(
                 revision_humana=False,
                 razonamiento=(
                     f"D1 C_F: match en Mathlib — '{lean_name_existente}'. "
-                    f"D3: distancia Jaccard = {d3.jaccard:.2f} ≤ "
+                    f"D3: distancia Jaccard = {d3.jaccard:.4f}, "
+                    f"inter={d3.intersection_size}, union={d3.union_size} ≤ "
                     f"umbral θ = {d3.umbral_theta} → misma prueba. "
                     f"Enunciado y demostración conocidos."
                 ),
@@ -155,7 +188,7 @@ def check_novelty(
             )
 
         # D3 no disponible → veredicto provisional
-        sim = (d1.match_C_F or {}).get("similarity", 0.0)
+        sim = (d1.match_C_F or {}).get("similarity") or 0.0
         return NoveltyVerdict(
             veredicto=Verdict.MATCH_ENCONTRADO_PENDIENTE_D3,
             d1=d1,
@@ -281,33 +314,88 @@ def check_novelty(
 def _run_d3_if_possible(
     lean_statement: str,
     lean_name_existente: str,
+    lean_project_dir: Optional[str | Path] = None,
     d3_star_pairs: Optional[Dict[str, str]] = None,
+    d3_premises_a: Optional[List[dict]] = None,
+    d3_premises_b: Optional[List[dict]] = None,
+    d3_statement_lines_a: Optional[Tuple[int, int]] = None,
+    d3_statement_lines_b: Optional[Tuple[int, int]] = None,
 ) -> D3Result:
-    """Intenta ejecutar D3. Actualmente es un stub.
+    """Ejecuta D3 si hay premisas disponibles. Si no, devuelve activa=False.
 
-    D3 requiere:
-      - LeanDojo 4.20.0+ instalado en WSL2
-      - Mathlib cache funcional en WSL2
-      - Extracción manual de premisas de la prueba existente en C_F
-      - Calibración de umbral θ con pares T07/T08/T09
-
-    Si d3_star_pairs contiene un mapeo del par actual, se usa ese
-    resultado precomputado.
+    Cuando d3_premises_a y d3_premises_b se proveen, llama a compute_d3.
+    Si solo d3_premises_a está presente, intenta auto-localizar el lado B
+    (Mathlib) usando locate_mathlib_source con lean_name_existente.
     """
+    # ── Both sides available → run D3 ──────────────────────────────────
+    if d3_premises_a is not None and d3_premises_b is not None:
+        logger.info(
+            "D3: ejecutando compute_d3 con %d y %d premisas",
+            len(d3_premises_a), len(d3_premises_b),
+        )
+        return compute_d3(
+            premises_a=d3_premises_a,
+            premises_b=d3_premises_b,
+            statement_lines_a=d3_statement_lines_a,
+            statement_lines_b=d3_statement_lines_b,
+        )
+
+    # ── Side A only → try auto-locate Side B ──────────────────────────
+    if d3_premises_a is not None and lean_project_dir is not None:
+        logger.info(
+            "D3: auto-locating Side B for '%s'", lean_name_existente,
+        )
+        try:
+            from src.novelty_v2.premise_autolocation import (
+                locate_mathlib_source,
+            )
+            from src.novelty_v2.premise_extraction import (
+                extract_premises_for_theorem,
+            )
+
+            proj = Path(lean_project_dir)
+            mathlib_root = proj / ".lake" / "packages" / "mathlib"
+
+            loc_b = locate_mathlib_source(lean_name_existente, mathlib_root)
+            if loc_b is not None:
+                file_b, start_b, end_b = loc_b
+                prems_b = extract_premises_for_theorem(
+                    file_b, proj,
+                    theorem_line_start=start_b,
+                    theorem_line_end=end_b,
+                )
+                if prems_b is not None:
+                    logger.info(
+                        "D3: Side B auto-located: %s → %d premises",
+                        lean_name_existente, len(prems_b),
+                    )
+                    return compute_d3(
+                        premises_a=d3_premises_a,
+                        premises_b=prems_b,
+                        statement_lines_a=d3_statement_lines_a,
+                        statement_lines_b=(start_b, start_b),
+                    )
+                else:
+                    logger.warning(
+                        "D3: Side B located but extraction failed for '%s'",
+                        lean_name_existente,
+                    )
+            else:
+                logger.info(
+                    "D3: Side B not found in Mathlib for '%s'",
+                    lean_name_existente,
+                )
+        except Exception as exc:
+            logger.warning(
+                "D3: Side B auto-location error for '%s': %s",
+                lean_name_existente, exc,
+            )
+
+    # Fallback: sin premisas → D3 no disponible
     logger.info(
-        "D3 stub: match en C_F='%s'. D3 requiere LeanDojo en WSL2 "
-        "(no automatizado aún).",
+        "D3: sin premisas para '%s'. D3 requiere análisis offline.",
         lean_name_existente,
     )
-
-    # Si hay pares precomputados (evaluación offline), usarlos
-    if d3_star_pairs and lean_name_existente in d3_star_pairs:
-        logger.info(
-            "D3: usando par precomputado para '%s'", lean_name_existente
-        )
-        # TODO: cargar resultados desde archivo de calibración
-        # Por ahora devolvemos D3Result con activa=False como stub
-
     return D3Result(activa=False)
 
 

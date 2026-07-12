@@ -1,88 +1,307 @@
 """D3 — Distancia estructural de pruebas.
 
-Compara las premisas de la prueba candidata con las de la prueba
-existente en Mathlib usando distancia de Jaccard.
+Compara las premisas de dos pruebas Lean usando distancia de Jaccard.
+Única implementación canónica; todo el cómputo de Jaccard pasa por aquí.
 
-IMPLEMENTACIÓN PENDIENTE:
-  Requiere LeanDojo 4.20.0+ en WSL2 para extraer premisas de archivos .lean.
-  La calibración del umbral θ se hará con pares T07/T08/T09 del eval set.
-
-  Mientras tanto, check_premise_distance() devuelve D3Result(activa=False).
-
-  Estado actual:
-    - WSL2 en D:/WSL/Ubuntu2204/ (usuario ayrton)
-    - Mathlib cache corrupta → requiere rebuild
-    - Solo se ejecutará manualmente (no automatizado en el pipeline)
+Pipeline interno (orden fijo e inamovible):
+  1. Extraer premisas (recibe listas de dicts PremiseTrace).
+  2. Deduplicar por identidad canónica (defPath, defPos).
+  3. FILTRO 1: eliminar premisas de infraestructura (namespace blacklist).
+  4. FILTRO 2: eliminar premisas del enunciado (por rango de líneas).
+  5. Calcular Jaccard sobre lo que queda.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+import yaml
 
 from src.novelty_v2.types import D3Result
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Canonical identity
+# ---------------------------------------------------------------------------
 
-def check_premise_distance(
-    lean_name_nuevo: str,
-    lean_name_existente: str,
-    lean_project_dir: Optional[str] = None,
-    umbral_theta: float = 0.5,
-) -> D3Result:
-    """Compara las premisas de dos pruebas Lean usando distancia de Jaccard.
+def _canonical_id(premise: dict) -> str:
+    """Identidad canónica de una premisa: (defPath, defPos).
 
-    STUB — no implementado aún. Requiere LeanDojo en WSL2.
+    Dos premisas con el mismo defPath y defPos son el mismo objeto lógico,
+    aunque aparezcan en posiciones distintas del archivo.
+    """
+    def_path = premise.get("defPath", "")
+    def_pos = premise.get("defPos") or {}
+    line = def_pos.get("line", 0)
+    col = def_pos.get("column", 0)
+    return f"{def_path}:{line}:{col}"
+
+
+def _deduplicate(premises: List[dict]) -> List[dict]:
+    """Deduplica premisas por identidad canónica (defPath, defPos).
+
+    Mantiene la primera ocurrencia de cada premisa.
+    """
+    seen: Set[str] = set()
+    result: List[dict] = []
+    for p in premises:
+        cid = _canonical_id(p)
+        if cid not in seen:
+            seen.add(cid)
+            result.append(p)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Filter 1 — Namespace blacklist
+# ---------------------------------------------------------------------------
+
+def _load_blacklist(config_path: Optional[str] = None) -> List[str]:
+    """Carga la lista negra de prefijos de namespace desde archivo YAML.
+
+    Si no se provee ruta, busca en config/d3_filter_blacklist.yaml
+    relativo a la raíz del repo.
+    """
+    if config_path is None:
+        # Default: config/ relative to repo root
+        repo_root = Path(__file__).resolve().parents[3]
+        config_path = str(repo_root / "config" / "d3_filter_blacklist.yaml")
+
+    path = Path(config_path)
+    if not path.exists():
+        logger.warning("D3 filter config not found at %s; using hardcoded defaults", path)
+        return ["Init.", "Lean."]
+
+    with open(path, "r", encoding="utf-8") as fh:
+        config = yaml.safe_load(fh)
+
+    prefixes = config.get("blacklist_prefixes", [])
+    if not prefixes:
+        logger.warning("D3 filter config at %s has empty blacklist_prefixes", path)
+        return ["Init.", "Lean."]
+
+    return prefixes
+
+
+def _filter1_blacklist(
+    premises: List[dict],
+    blacklist_prefixes: List[str],
+) -> List[dict]:
+    """Elimina premisas cuyo modName empieza con alguno de los prefijos.
+
+    Matching por prefijo EXACTO: "Init." matchea "Init.Prelude" pero NO "InitPrelude".
+    """
+    result = []
+    for p in premises:
+        mod = p.get("modName", "")
+        if any(mod.startswith(prefix) for prefix in blacklist_prefixes):
+            continue
+        result.append(p)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Filter 2 — Statement premises
+# ---------------------------------------------------------------------------
+
+def _filter2_statement(
+    premises: List[dict],
+    statement_line_range: Optional[Tuple[int, int]] = None,
+) -> List[dict]:
+    """Elimina premisas cuyo pos.line cae dentro del rango del enunciado.
 
     Args:
-        lean_name_nuevo: nombre completo Lean de la declaración nueva.
-        lean_name_existente: nombre completo Lean de la declaración en Mathlib.
-        lean_project_dir: ruta al proyecto Lean con Mathlib compilado.
-        umbral_theta: umbral para decidir si las pruebas son distantes.
+        premises: lista de premisas (cada una con campo 'pos' opcional).
+        statement_line_range: (start_line, end_line) inclusivo del enunciado.
+            Si es None, no se filtra nada.
 
     Returns:
-        D3Result con activa=False (stub).
+        Premisas que NO están en el enunciado (i.e., las de la prueba).
     """
-    logger.warning(
-        "D3.check_premise_distance es un stub — no implementado. "
-        "Requiere LeanDojo en WSL2 para extraer premisas. "
-        "Comparación solicitada: '%s' vs '%s'",
-        lean_name_nuevo,
-        lean_name_existente,
+    if statement_line_range is None:
+        return premises
+
+    start, end = statement_line_range
+    result = []
+    for p in premises:
+        pos = p.get("pos")
+        if pos is not None and start <= pos.get("line", 0) <= end:
+            continue  # En el enunciado → eliminar
+        result.append(p)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Jaccard computation
+# ---------------------------------------------------------------------------
+
+def _compute_jaccard_distance(
+    premises_a: List[dict],
+    premises_b: List[dict],
+) -> Tuple[Optional[float], int, int, Set[str], Set[str], List[str]]:
+    """Calcula la distancia de Jaccard entre dos conjuntos de premisas.
+
+    Args:
+        premises_a: premisas de la prueba A (ya deduplicadas y filtradas).
+        premises_b: premisas de la prueba B (ya deduplicadas y filtradas).
+
+    Returns:
+        Tuple de (distancia, intersection_size, union_size, set_a_ids, set_b_ids, flags).
+        distancia es None si ambos conjuntos están vacíos (no se divide por cero).
+    """
+    ids_a = {_canonical_id(p) for p in premises_a}
+    ids_b = {_canonical_id(p) for p in premises_b}
+
+    intersection = ids_a & ids_b
+    union = ids_a | ids_b
+
+    intersection_size = len(intersection)
+    union_size = len(union)
+
+    flags: List[str] = []
+
+    # Spec: "si uno o ambos conjuntos quedan VACÍOS después de los filtros,
+    # la función NO divide por cero. Devuelve distancia None y un flag explicativo."
+    if union_size == 0:
+        # Ambos vacíos → división por cero
+        flags.append("empty_after_filters")
+        return None, 0, 0, ids_a, ids_b, flags
+
+    if len(ids_a) == 0:
+        flags.append("empty_a_after_filters")
+        return None, 0, union_size, ids_a, ids_b, flags
+
+    if len(ids_b) == 0:
+        flags.append("empty_b_after_filters")
+        return None, intersection_size, union_size, ids_a, ids_b, flags
+
+    jaccard_similarity = intersection_size / union_size
+    distancia = 1.0 - jaccard_similarity
+    return distancia, intersection_size, union_size, ids_a, ids_b, flags
+
+
+# ---------------------------------------------------------------------------
+# Public API — compute_d3
+# ---------------------------------------------------------------------------
+
+def compute_d3(
+    premises_a: List[dict],
+    premises_b: List[dict],
+    *,
+    statement_lines_a: Optional[Tuple[int, int]] = None,
+    statement_lines_b: Optional[Tuple[int, int]] = None,
+    blacklist_config_path: Optional[str] = None,
+) -> D3Result:
+    """ÚNICO punto de cómputo de distancia de Jaccard en el repo.
+
+    Orden fijo e inamovible:
+      1. Deduplicar por identidad canónica (defPath, defPos).
+      2. FILTRO 1: eliminar infraestructura (namespace blacklist).
+      3. FILTRO 2: eliminar premisas del enunciado.
+      4. Calcular Jaccard sobre lo que queda.
+
+    Args:
+        premises_a: lista de dicts PremiseTrace para la prueba A.
+        premises_b: lista de dicts PremiseTrace para la prueba B.
+        statement_lines_a: (start, end) del enunciado de A. None = sin filtro.
+        statement_lines_b: (start, end) del enunciado de B. None = sin filtro.
+        blacklist_config_path: ruta al YAML de filtro 1. None = default.
+
+    Returns:
+        D3Result con distancia, intersection_size, union_size, premises after
+        filters, y flags. Si uno o ambos conjuntos quedan vacíos después de
+        filtros, distancia es None y hay un flag explicativo (nunca excepción).
+    """
+    # ── Paso 1: Deduplicación ──────────────────────────────────────────
+    dedup_a = _deduplicate(premises_a)
+    dedup_b = _deduplicate(premises_b)
+
+    # ── Paso 2: Filtro 1 — blacklist de infraestructura ─────────────────
+    blacklist = _load_blacklist(blacklist_config_path)
+    after_f1_a = _filter1_blacklist(dedup_a, blacklist)
+    after_f1_b = _filter1_blacklist(dedup_b, blacklist)
+
+    # ── Paso 3: Filtro 2 — premisas del enunciado ──────────────────────
+    after_f2_a = _filter2_statement(after_f1_a, statement_lines_a)
+    after_f2_b = _filter2_statement(after_f1_b, statement_lines_b)
+
+    # ── Paso 4: Jaccard ─────────────────────────────────────────────────
+    distancia, inter_size, union_size, ids_a, ids_b, flags = _compute_jaccard_distance(
+        after_f2_a, after_f2_b
     )
 
     return D3Result(
-        activa=False,
-        premisas_candidato=[],
-        premisas_nueva=[],
-        jaccard=None,
-        umbral_theta=umbral_theta,
-        pruebas_distantes=None,
+        activa=True,
+        jaccard=distancia,
+        intersection_size=inter_size,
+        union_size=union_size,
+        premises_a_after_filters=sorted(ids_a),
+        premises_b_after_filters=sorted(ids_b),
+        flags=flags,
+        pruebas_distantes=(
+            None if distancia is None else distancia > 0.5
+        ),
     )
 
 
 # ---------------------------------------------------------------------------
-# Placeholder para la implementación real (futuro)
+# Extraction helper — read premises from ExtractData JSON output
 # ---------------------------------------------------------------------------
 
-def _extract_premises_lean(
-    lean_name: str,
-    lean_project_dir: str,
-) -> List[str]:
-    """Extrae las premisas de una declaración Lean usando LeanDojo.
+def load_premises_from_ast(
+    ast_json_path: str | Path,
+    theorem_line_start: int,
+    theorem_line_end: int,
+) -> List[dict]:
+    """Carga las premisas de un teorema específico desde un archivo ast.json.
 
-    IMPLEMENTACIÓN FUTURA — requiere WSL2 con LeanDojo 4.20.0+:
-      1. Activar entorno WSL2: wsl -d Ubuntu2204
-      2. cd al lean_project/
-      3. Ejecutar script de extracción via LeanDojo
-      4. Devolver lista de nombres completos de premisas
+    Args:
+        ast_json_path: ruta al archivo ast.json producido por ExtractData.
+        theorem_line_start: primera línea del teorema (inclusivo).
+        theorem_line_end: última línea del teorema (inclusivo).
 
     Returns:
-        Lista de strings con nombres completos de premisas (e.g.
-        ['Nat.add_comm', 'Nat.succ_eq_add_one', ...])
+        Lista de dicts PremiseTrace cuyas posiciones caen dentro del rango.
     """
-    raise NotImplementedError(
-        "Extracción de premisas con LeanDojo no implementada. "
-        "Requiere WSL2 con LeanDojo 4.20.0+."
-    )
+    path = Path(ast_json_path)
+    if not path.exists():
+        raise FileNotFoundError(f"AST JSON not found: {path}")
+
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+
+    all_premises = data.get("premises", [])
+    result = []
+    for p in all_premises:
+        pos = p.get("pos")
+        if pos is not None:
+            line = pos.get("line", 0)
+            if theorem_line_start <= line <= theorem_line_end:
+                result.append(p)
+
+    return result
+
+
+def load_tactic_spans_from_ast(
+    ast_json_path: str | Path,
+) -> List[dict]:
+    """Carga los spans de tácticas desde un archivo ast.json.
+
+    Returns:
+        Lista de dicts TacticTrace con pos/endPos en byteIdx.
+    """
+    path = Path(ast_json_path)
+    if not path.exists():
+        raise FileNotFoundError(f"AST JSON not found: {path}")
+
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+
+    return data.get("tactics", [])
+
+
+

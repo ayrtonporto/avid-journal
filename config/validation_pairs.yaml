@@ -1,0 +1,61 @@
+# D3 Validation Pairs
+# ====================
+# Cada entrada define un par de pruebas a comparar con compute_d3.
+#
+# Tipos de pares:
+#   genuinely_different  — mismo teorema, estrategias de prueba distintas (debería dar ≈ 0.5–1.0)
+#   same_disguised       — misma estrategia con cambios cosméticos (debería dar ≈ 0.0–0.2)
+#   control_self         — la misma prueba comparada consigo misma (debería dar ≈ 0.0)
+#   control_unrelated    — teoremas sin relación (debería dar ≈ 1.0)
+#
+# Campos:
+#   pair_id              — identificador único del par (ej. "T08_E1_E2")
+#   type                 — uno de los tipos arriba
+#   proof_a / proof_b    — cada prueba se identifica por:
+#     ast_json           — ruta al archivo ast.json (relativa a repo root)
+#     theorem_lines      — [start, end] líneas del teorema en el archivo fuente
+#     statement_lines    — [start, end] líneas SOLO del enunciado (para Filtro 2)
+
+pairs:
+  # ── T08: √2 irrational (E1: parity-proof, E2: valuation-proof) ──────
+  - pair_id: "T08_E1_E2"
+    type: "genuinely_different"
+    proof_a:
+      ast_json: "lean_project/.lake/build/ir/Papers/D3_Calibration/Paper.ast.json"
+      theorem_lines: [42, 91]
+      statement_lines: [42, 42]
+    proof_b:
+      ast_json: "lean_project/.lake/build/ir/Papers/D3_Calibration/Paper.ast.json"
+      theorem_lines: [100, 158]
+      statement_lines: [100, 100]
+
+  # ── TODO: Agregar más pares ─────────────────────────────────────────
+  # Ejemplo de same_disguised:
+  # - pair_id: "T08a_self_cosmetic"
+  #   type: "same_disguised"
+  #   proof_a: ...
+  #   proof_b: ...  (misma prueba con cambios de nombres/estilo)
+  #
+  # Ejemplo de control_self:
+  # - pair_id: "T08a_self"
+  #   type: "control_self"
+  #   proof_a: ...
+  #   proof_b: ...  (misma referencia, debe dar 0.0)
+  #
+  # Ejemplo de control_unrelated:
+  # - pair_id: "T07_vs_T09"
+  #   type: "control_unrelated"
+  #   proof_a: ...  (T07: infinite primes)
+  #   proof_b: ...  (T09: sum 1+2+...+n)
+  #
+  # Ejemplo de genuinely_different adicional:
+  # - pair_id: "T07_E1_E2"
+  #   type: "genuinely_different"
+  #   proof_a: ...  (T07a: Euclid-style)
+  #   proof_b: ...  (T07b: factorial proof — cuando esté implementada)
+  #
+  # Ejemplo de same_disguised:
+  # - pair_id: "T09a_T09b"
+  #   type: "same_disguised"
+  #   proof_a: ...  (T09a: induction)
+  #   proof_b: ...  (T09b: gauss pairing — actualmente usa mismo lema)

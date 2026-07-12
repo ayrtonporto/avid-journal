@@ -1,0 +1,87 @@
+source: arXiv API — math.* withdrawn papers filtered for result-duplication
+source_paper: Rao et al. 2024 (arXiv:2412.03775) — WithdrarXiv dataset (gated; accessed
+  via direct arXiv API)
+method: Direct arXiv API query + refined pattern matching on withdrawal comments
+total_fetched_from_api: 2600
+total_candidates: 33
+viable_candidates: 26
+candidates:
+- arxiv_id: 0711.2941v2
+  title: Holomorphic fillability and cohomology
+  primary_category: math.CV
+  year: '2007'
+  withdrawal_comment: I have withdrawn the paper, after having incorporated it into
+    the paper arXiv:0712.3484. In the meantime I have discovered that the main theorem
+    proved in the paper had already been proved by Bungart.
+  matched_pattern: had already been proved by
+  prior_work_reference: Bungart
+  authors:
+  - Patrick Popescu-Pampu
+  viability:
+    arxiv_id_v1: 0711.2941v1
+    source_available: true
+    main_tex_found: true
+    num_tex_files: 1
+    main_tex_size_kb: 15.5
+    theorem_envs_found: 4
+    proof_envs_found: 0
+    tarball_size_kb: 5.5
+    error: null
+    is_viable: true
+- arxiv_id: 0909.0395v3
+  title: Abelian categories arising from a maximal n-orthogonal subcategory
+  primary_category: math.CT
+  year: '2009'
+  withdrawal_comment: This paper has been withdrawn by the author, since the result
+    was already known.
+  matched_pattern: result was already known
+  prior_work_reference: Not cited
+  authors:
+  - Hiroyuki Nakaoka
+  viability:
+    arxiv_id_v1: 0909.0395v1
+    source_available: true
+    main_tex_found: true
+    num_tex_files: 1
+    main_tex_size_kb: 26.2
+    theorem_envs_found: 2
+    proof_envs_found: 14
+    tarball_size_kb: 6.5
+    error: null
+    is_viable: true
+by_category:
+  math.CO: 5
+  math.AG: 4
+  math.NT: 3
+  math.AP: 3
+  math.CV: 2
+  math.CA: 2
+  math.AT: 2
+  math.GT: 2
+  math.PR: 2
+  math.CT: 1
+  math.QA: 1
+  math.DS: 1
+  math.RA: 1
+  math-ph: 1
+  cs.DM: 1
+  math.KT: 1
+  cs.CG: 1
+viable_by_category:
+  math.CO: 4
+  math.AG: 3
+  math.CV: 2
+  math.NT: 2
+  math.AT: 2
+  math.AP: 2
+  math.CT: 1
+  math.QA: 1
+  math.DS: 1
+  math.RA: 1
+  math-ph: 1
+  cs.DM: 1
+  math.GT: 1
+  math.KT: 1
+  cs.CG: 1
+  math.PR: 1
+  math.CA: 1

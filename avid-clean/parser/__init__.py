@@ -1,0 +1,3 @@
+"""
+AViD Journal — LaTeX Parser.
+"""

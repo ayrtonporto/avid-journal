@@ -1,0 +1,23 @@
+# Informal matches for D3 batch formalization
+# ============================================
+# Each entry: arXiv ID + matched statement (from TheoremSearch).
+# The batch script downloads the paper, extracts the proof, and
+# attempts formalization (up to 3 attempts, 20 min timeout each).
+#
+# Add more entries below as matches become available.
+
+matches:
+  # ── PoC Paper 1: Easy case ──────────────────────────────────────────
+  - arxiv_id: "1303.0730"
+    statement: "There are infinitely many prime numbers in N"
+    source: "theoremsearch"
+
+  # ── PoC Paper 2: Medium case ────────────────────────────────────────
+  - arxiv_id: "1607.03618"
+    statement: "Cauchy-Schwarz inequality in inner product spaces"
+    source: "theoremsearch"
+
+  # ── TODO: Add more matches ──────────────────────────────────────────
+  # - arxiv_id: "2310.13722"
+  #   statement: "..."
+  #   source: "theoremsearch"

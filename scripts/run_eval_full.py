@@ -146,6 +146,7 @@ def run_single(
     lean_stmt_info: Dict[str, str],
     lean_project_dir: Optional[Path],
     use_cache: bool = True,
+    extraction_map: Optional[Dict[str, dict]] = None,
 ) -> Dict[str, Any]:
     """Ejecuta check_novelty() sobre un teorema del eval set.
 
@@ -154,6 +155,8 @@ def run_single(
         lean_stmt_info: {"lean_statement": str, "lean_imports": str}
         lean_project_dir: ruta al lean_project/
         use_cache: usar cache de src/novelty/
+        extraction_map: {theorem_id: {lean_file, theorem_lines, statement_lines}}
+            para extracción automática de premisas vía AUTOEXTRACT_ENABLED.
 
     Returns:
         dict con resultado completo para guardar en CSV.
@@ -173,6 +176,22 @@ def run_single(
         logger.warning("%s: sin enunciado Lean — skipping", tid)
         return {"theorem_id": tid, "error": "no lean statement"}
 
+    # ── D3 auto-extraction (AUTOEXTRACT_ENABLED) ────────────────────────
+    d3_premises_a = None
+    d3_premises_b = None
+    d3_stmt_lines_a = None
+    d3_stmt_lines_b = None
+
+    if extraction_map and lean_project_dir:
+        d3_extracted = _try_autoextract_d3(
+            tid, extraction_map, lean_project_dir,
+        )
+        if d3_extracted:
+            d3_premises_a = d3_extracted.get("premises_a")
+            d3_premises_b = d3_extracted.get("premises_b")
+            d3_stmt_lines_a = d3_extracted.get("stmt_lines_a")
+            d3_stmt_lines_b = d3_extracted.get("stmt_lines_b")
+
     logger.info("%s: running check_novelty...", tid)
     t0 = time.monotonic()
 
@@ -183,6 +202,10 @@ def run_single(
             lean_project_dir=lean_project_dir,
             lean_imports=lean_imports,
             use_cache=use_cache,
+            d3_premises_a=d3_premises_a,
+            d3_premises_b=d3_premises_b,
+            d3_statement_lines_a=d3_stmt_lines_a,
+            d3_statement_lines_b=d3_stmt_lines_b,
         )
     except Exception as exc:
         elapsed = time.monotonic() - t0
@@ -222,12 +245,126 @@ def run_single(
         "d1_llm_judge_verdict": result.d1.llm_judge_verdict or "",
         "d1_traduccion_incierta": result.d1.traduccion_incierta,
         "d3_activa": result.d3.activa,
+        "d3_jaccard": round(result.d3.jaccard, 4) if result.d3.jaccard is not None else "",
+        "d3_intersection_size": result.d3.intersection_size,
+        "d3_union_size": result.d3.union_size,
+        "d3_flags": ",".join(result.d3.flags) if result.d3.flags else "",
+        "d3_source": result.d3.d3_source,
         "revision_humana": result.revision_humana,
         "razonamiento": result.razonamiento[:300],
         "elapsed_s": round(elapsed, 1),
         "error": "",
     }
 
+
+# ---------------------------------------------------------------------------
+# D3 Auto-extraction (AUTOEXTRACT_ENABLED toggle)
+# ---------------------------------------------------------------------------
+
+def _load_extraction_map(repo_root: Path) -> Optional[Dict[str, dict]]:
+    """Load config/d3_extraction_map.yaml if it exists."""
+    import yaml
+    map_path = repo_root / "config" / "d3_extraction_map.yaml"
+    if not map_path.exists():
+        logger.info("D3 extraction map not found at %s", map_path)
+        return None
+    with open(map_path, "r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    pairs = data.get("pairs", [])
+    result = {}
+    for entry in pairs:
+        tid = entry["theorem_id"]
+        result[tid] = {
+            "lean_file": entry["lean_file"],
+            "theorem_lines": tuple(entry["theorem_lines"]),
+            "statement_lines": tuple(entry["statement_lines"]),
+        }
+    logger.info("Loaded D3 extraction map: %d entries", len(result))
+    return result
+
+
+def _try_autoextract_d3(
+    tid: str,
+    extraction_map: Dict[str, dict],
+    lean_project_dir: Path,
+    row: Optional[Dict[str, str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Try to auto-extract premises for D3 comparison.
+
+    Priority for Side A (candidate):
+      1. Auto-locate via PAPER_INDEX.md / directory scan
+      2. Extraction map (manual override)
+      3. None → D3 stays pending
+
+    Side B (Mathlib match) is resolved later inside _run_d3_if_possible
+    in the orchestrator, once D1 provides the match name.
+
+    Returns:
+        Dict with premises_a, premises_b, stmt_lines_a, stmt_lines_b,
+        or None if extraction is not possible for this theorem.
+    """
+    autoextract_enabled = os.getenv("AUTOEXTRACT_ENABLED", "").strip().lower() in (
+        "1", "true", "yes",
+    )
+    if not autoextract_enabled:
+        return None
+
+    from src.novelty_v2.premise_autolocation import locate_candidate_source
+    from src.novelty_v2.premise_extraction import extract_premises_for_theorem
+
+    prems_a = None
+    s_lines_a = None
+
+    # ── Side A: auto-locate candidate ─────────────────────────────────
+    # Try auto-location first
+    loc = locate_candidate_source(tid, lean_project_dir)
+    if loc is None:
+        # Try extraction map as fallback
+        entry_a = extraction_map.get(tid) if extraction_map else None
+        if entry_a:
+            lean_file = lean_project_dir / entry_a["lean_file"]
+            if lean_file.exists():
+                loc = (lean_file, entry_a["theorem_lines"][0], entry_a["theorem_lines"][1])
+                s_lines_a = entry_a.get("statement_lines")
+
+    if loc is not None:
+        file_path, start_line, end_line = loc
+        if s_lines_a is None:
+            s_lines_a = (start_line, start_line)  # default: first line is statement
+        logger.info(
+            "D3 autoextract Side A: %s → %s:%d-%d",
+            tid, file_path.name, start_line, end_line,
+        )
+        prems_a = extract_premises_for_theorem(
+            file_path, lean_project_dir,
+            theorem_line_start=start_line,
+            theorem_line_end=end_line,
+        )
+        if prems_a is None:
+            logger.warning("D3 autoextract: failed to extract premises for %s", tid)
+    else:
+        logger.debug("D3 autoextract: no Side A location for %s", tid)
+
+    if prems_a is None:
+        return None
+
+    # Side B is resolved later (needs D1 match name)
+    logger.info(
+        "D3 autoextract: %s → %d premises (Side B pending D1 match)",
+        tid, len(prems_a),
+    )
+
+    return {
+        "premises_a": prems_a,
+        "premises_b": None,  # resolved by orchestrator
+        "stmt_lines_a": s_lines_a,
+        "stmt_lines_b": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# CSV output
+# ---------------------------------------------------------------------------
 
 def write_csv_row(
     csv_path: Path,
@@ -285,6 +422,13 @@ def main():
     lean_project_dir = Path(args.lean_project) if args.lean_project else None
     use_cache = not args.no_cache
 
+    # Load D3 extraction map (for AUTOEXTRACT_ENABLED)
+    extraction_map = None
+    if lean_project_dir:
+        extraction_map = _load_extraction_map(_REPO_ROOT)
+        if extraction_map:
+            logger.info("D3 auto-extraction map loaded (%d entries)", len(extraction_map))
+
     # Cargar eval set y enunciados Lean
     rows = load_eval_set()
     lean_stmts = load_lean_statements()
@@ -332,7 +476,7 @@ def main():
         "d1_existe_en_C_F", "d1_match_C_F", "d1_C_F_similarity",
         "d1_existe_en_C_I", "d1_match_C_I_title", "d1_llm_judge_verdict",
         "d1_traduccion_incierta",
-        "d3_activa",
+        "d3_activa", "d3_jaccard", "d3_intersection_size", "d3_union_size", "d3_flags", "d3_source",
         "revision_humana", "razonamiento",
         "elapsed_s", "error",
     ]
@@ -371,7 +515,8 @@ def main():
         logger.info("─" * 50)
         logger.info("[%d/%d] %s", i + 1, total, tid)
 
-        result = run_single(row, stmt_info, lean_project_dir, use_cache)
+        result = run_single(row, stmt_info, lean_project_dir, use_cache,
+                           extraction_map=extraction_map)
         write_csv_row(output_csv, fieldnames, result, write_header=write_header)
         write_header = False
 

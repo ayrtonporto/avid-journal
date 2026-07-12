@@ -1,0 +1,45 @@
+# D3 Extraction Map
+# =================
+# Maps theorem IDs from eval_set.csv to .lean files for premise extraction.
+# When AUTOEXTRACT_ENABLED=1, run_eval_full.py extracts premises from these
+# files and passes them to check_novelty for live D3 computation.
+#
+# Each entry:
+#   theorem_id: ID from eval_set.csv (e.g., "T08a")
+#   lean_file: path to .lean file relative to lean_project/
+#   theorem_lines: [start, end] line range of the theorem in that file
+#   statement_lines: [start, end] line range of JUST the statement (for Filter 2)
+
+pairs:
+  # ── D3 Calibration pairs (Papers/D3_Calibration/Paper.lean) ──────────
+  - theorem_id: "T08a"
+    lean_file: "Papers/D3_Calibration/Paper.lean"
+    theorem_lines: [42, 91]
+    statement_lines: [42, 42]
+
+  - theorem_id: "T08b"
+    lean_file: "Papers/D3_Calibration/Paper.lean"
+    theorem_lines: [100, 158]
+    statement_lines: [100, 100]
+
+  - theorem_id: "T07a"
+    lean_file: "Papers/D3_Calibration/Paper.lean"
+    theorem_lines: [25, 26]
+    statement_lines: [25, 25]
+
+  - theorem_id: "T07b"
+    lean_file: "Papers/D3_Calibration/Paper.lean"
+    theorem_lines: [28, 30]
+    statement_lines: [28, 28]
+
+  - theorem_id: "T09a"
+    lean_file: "Papers/D3_Calibration/Paper.lean"
+    theorem_lines: [166, 170]
+    statement_lines: [166, 166]
+
+  - theorem_id: "T09b"
+    lean_file: "Papers/D3_Calibration/Paper.lean"
+    theorem_lines: [174, 179]
+    statement_lines: [174, 174]
+
+  # ── TODO: Add more pairs as .lean files become available ─────────────

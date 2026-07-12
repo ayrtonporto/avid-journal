@@ -1,0 +1,16 @@
+# D3 Filter 1 — Namespace blacklist
+# ====================================
+# Premises whose modName starts with any of these prefixes are filtered out
+# before computing Jaccard distance.
+#
+# Rationale: Init.* and Lean.* modules contain core type constructors,
+# typeclass instances, and tactic internals that the Lean elaborator
+# resolves automatically — they are not mathematical content.
+#
+# All synthesized instances (e.g. Lean.Meta.Simp.Config from Init.MetaTypes)
+# are caught by the "Init." prefix via their modName, even though their
+# fullName starts with "Lean.".
+
+blacklist_prefixes:
+  - "Init."
+  - "Lean."

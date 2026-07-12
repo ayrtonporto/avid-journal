@@ -2,7 +2,7 @@
 
 Verifica si el teorema candidato ya existe en:
   C_F (corpus formal):   Mathlib, vía Leandex (búsqueda semántica sobre declaraciones Lean).
-  C_I (corpus informal): arXiv/Semantic Scholar, con filtro grueso MiniLM + juez LLM fino.
+  C_I (corpus informal): arXiv/Semantic Scholar/TheoremSearch, con filtro grueso MiniLM + juez LLM fino.
 
 Spec: paper/metric_spec.md §4.1
 Decisiones de diseño: paper/decisions.md
@@ -34,12 +34,14 @@ NOTA TÉCNICA sobre check_novelty_verdict_simple:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.novelty.arxiv_search import PaperCandidate, search_semantic_scholar, search_arxiv
 from src.novelty.llm_judge import judge_theorem_pair
 from src.novelty.mathlib_checker import check_in_mathlib
+from src.novelty.theoremsearch import search_theoremsearch
 from src.novelty_v2.dimensions.d2_triviality import check_triviality
 from src.novelty_v2.types import D1Result, D2Result, D3Result, NoveltyVerdict, Verdict
 
@@ -108,14 +110,15 @@ def _run_ci_stage_a(
     top_k: int,
     similarity_threshold: float,
 ) -> List[tuple[PaperCandidate, float]]:
-    """Etapa A: búsqueda arXiv + Semantic Scholar + filtro de similitud MiniLM.
+    """Etapa A: búsqueda arXiv + Semantic Scholar + TheoremSearch + filtro de similitud MiniLM.
 
-    Ejecuta ambas fuentes en paralelo (o secuencial si una falla),
+    Ejecuta las fuentes en secuencia (cada una con su propio manejo de errores),
     deduplica por arxiv_id, y devuelve los top_k candidatos que superan
     similarity_threshold ordenados por similitud desc.
 
     arXiv es la fuente primaria (mejor cobertura para matemática).
     Semantic Scholar es secundaria (más rápida pero menor recall en math).
+    TheoremSearch es terciaria (theorem-level, activada con THEOREMSEARCH_ENABLED).
     """
     query = _block_text(block)
     if not query:
@@ -139,6 +142,19 @@ def _run_ci_stage_a(
         all_candidates.extend(ss_candidates)
     except Exception as exc:
         logger.warning("Semantic Scholar search failed: %s", exc)
+
+    # ── TheoremSearch (fuente terciaria, theorem-level, opcional) ───────
+    if os.getenv("THEOREMSEARCH_ENABLED", "").strip().lower() in ("1", "true", "yes"):
+        try:
+            ts_candidates = search_theoremsearch(query, top_k=20, use_cache=use_cache)
+            all_candidates.extend(ts_candidates)
+            logger.info(
+                "C_I TheoremSearch: %d candidates for query '%s'",
+                len(ts_candidates),
+                query[:80],
+            )
+        except Exception as exc:
+            logger.warning("TheoremSearch search failed: %s", exc)
 
     if not all_candidates:
         return []

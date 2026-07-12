@@ -1,0 +1,107 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+========================================================================
+  T01 — sqrt(2) irrational
+  Query: the square root of 2 is irrational
+========================================================================
+
+  ── Semantic Scholar (top 5) ──
+[V] Using API key: s2k-9H...
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 2995.47it/s]
+  1. [0.109] "Bursts, Beats, and Beyond": Uncovering the landscape from…
+     arXiv: 2412.06644  |  source: semantic_scholar
+     A comprehensive study on persistent and thermonuclear burst emission of 4U 1728-34, commonly known as 'Slow Burster' is performed using seven archival observations of AstroSat spanning from…
+  2. [0.072] Two Motivated Concrete Proofs (much better than the usual…
+     arXiv: 1410.2304  |  source: semantic_scholar
+     This short "education note" was inspired by Zvi Artstein's masterpiece Mathematics and the Real World, the Remarkable Role of Evolution in the Making of Mathematics (p. 53, and p. 400)
+  3. [-0.064] Square root singularity in the viscosity of neutral…
+     arXiv: cond-mat/9701125  |  source: semantic_scholar
+     The asymptotic frequency, ω, dependence of the dynamic viscosity of neutral hard-sphere colloidal suspensions is shown to be of the formη0A(ϕ)(ωτp)-1/2, whereA(ϕ) has been determined as a function of…
+  ⏱  49.94s  |  3 resultados totales
+
+  ── TheoremSearch (top 5) ──
+  1. [0.721] Sets Functions Relations: Arithmetization
+     arXiv: (no arXiv ID)  |  source: theoremsearch
+     The square root of two is not a rational number. It cannot be expressed as a ratio of two integers. $\sqrt{2}$ is not rational, i.e., $\sqrt{2} \notin \Rat$
+  2. [0.704] Transcendental Series of Reciprocals of Fibonacci and Lucas…
+     arXiv: 2009.02446  |  source: theoremsearch
+     The square root of two is not a rational number. It cannot be expressed as a ratio of two integers. This holds true regardless of the integers chosen. $s$ is irrational.
+  3. [0.694] Cyclic algebras, Schur indices, norms, and Galois modules
+     arXiv: 0410536  |  source: theoremsearch
+     For any integer n greater than or equal to two, the nth root of two is not a rational number. Suppose that $n \geq 2$. Then $\root \of {2} \not\in F$.
+  4. [0.688] Intuitionism: an inspiration?
+     arXiv: 2102.01561  |  source: theoremsearch
+     The square root of two cannot be expressed as a ratio of two positive integers. This means it is not a rational number. Therefore, the square root of two is irrational. There are no positive integers…
+  5. [0.672] ProofWiki
+     arXiv: (no arXiv ID)  |  source: theoremsearch
+     The cube root of two is an irrational number. It cannot be expressed as a ratio of two integers. This result follows from the rational root theorem. $$\sqrt [3] 2$ is irrational.
+  ⏱  5.39s  |  5 resultados totales
+
+========================================================================
+  T02 — Cauchy-Schwarz
+  Query: Cauchy-Schwarz inequality in inner product spaces
+========================================================================
+
+  ── Semantic Scholar (top 5) ──
+[V] Using API key: s2k-9H...
+  1. [0.859] Some Results About Reverses of Cauchy-Schwarz Inequality in…
+     arXiv: math/0310406  |  source: semantic_scholar
+     Some new reverses of the Cauchy-Schwarz inequality in inner product spaces are presented in this paper.The results obtained here complement the recent work of the references.
+  ⏱  3.28s  |  1 resultados totales
+
+  ── TheoremSearch (top 5) ──
+  1. [0.802] The Lax-Milgram Theorem. A detailed proof to be formalized…
+     arXiv: 1607.03618  |  source: theoremsearch
+     The Cauchy-Schwarz inequality states that for any two vectors in an inner product space, the absolute value of their inner product is at most the product of their norms. This inequality holds for all…
+  2. [0.770] Rigidity of angles in Inner product Spaces
+     arXiv: 2310.13722  |  source: theoremsearch
+     The Cauchy-Schwarz inequality holds in any inner product space. It states that the absolute value of the inner product of two vectors is at most the product of their norms. Equality occurs if and…
+  3. [0.759] Notes on $C^{*}$-algebras
+     arXiv: 2505.17456  |  source: theoremsearch
+     The inner product of two vectors is bounded by the product of their norms. This inequality holds for any vectors in the space. It is known as the Cauchy-Schwarz inequality. The result is fundamental…
+  4. [0.751] Split common fixed point problems and its variant forms
+     arXiv: 1704.04645  |  source: theoremsearch
+     The Cauchy-Schwarz inequality holds in any inner product space. It states that the squared absolute value of the inner product of two vectors is at most the product of their inner products with…
+  5. [0.746] The Lax-Milgram Theorem. A detailed proof to be formalized…
+     arXiv: 1607.03618  |  source: theoremsearch
+     The Cauchy-Schwarz inequality states that for any two vectors in a real inner product space, the square of their inner product is at most the product of their inner products with themselves. This…
+  ⏱  3.95s  |  5 resultados totales
+
+========================================================================
+  T03 — Heine-Cantor
+  Query: every continuous function on a compact set is uniformly continuous
+========================================================================
+
+  ── Semantic Scholar (top 5) ──
+[V] Using API key: s2k-9H...
+  1. [0.242] All convex bodies are in the subdifferential of some…
+     arXiv: 2405.09206  |  source: semantic_scholar
+     We construct a differentiable locally Lipschitz function f$f$ in RN$\mathbb {R}^{N}$ with the property that for every convex body K⊂RN$K\subset \mathbb {R}^N$ there exists x¯∈RN$\bar{x} \in \mathbb…
+  ⏱  1.91s  |  1 resultados totales
+
+  ── TheoremSearch (top 5) ──
+  1. [0.817] Nonstandard Analysis - A Simplified Approach
+     arXiv: 0310351  |  source: theoremsearch
+     A continuous function on a compact domain is uniformly continuous. Let $f \colon D \to {\tt I \kern-.2em{R}}$ be continuous on compact $D$. Then $f$ is uniformly continuous.
+  2. [0.801] Definable versions of theorems by Kirszbraun and Helly
+     arXiv: 0906.1168  |  source: theoremsearch
+     A continuous function on a closed and bounded set is uniformly continuous. Suppose $S$ is closed and bounded, and $f$ is continuous. Then $f$ is uniformly continuous.
+  3. [0.790] Learning Probabilities: Towards a Logic of Statistical…
+     arXiv: 1907.09472  |  source: theoremsearch
+     A continuous function from a compact metric space to another metric space is uniformly continuous. Let $M, N$ be two metric spaces and $f: M \to N$ be continuous. If $M$ is compact then $f$ is…
+  4. [0.790] ProofWiki
+     arXiv: (no arXiv ID)  |  source: theoremsearch
+     A continuous function from a compact metric space to another metric space is uniformly continuous. Let $M_1 = \struct {A_1, d_1}$ and $M_2 = \struct {A_2, d_2}$ be metric spaces. Let $M_1$ be…
+  5. [0.789] Cycle decompositions: from graphs to continua
+     arXiv: 1003.5115  |  source: theoremsearch
+     A continuous function from a compact metric space to any metric space is uniformly continuous. Let $M$ be a compact metric space, and let $f: M \to N$ be a continuous function, where $N$ is a metric…
+  ⏱  4.17s  |  5 resultados totales
+
+========================================================================
+  RESUMEN
+========================================================================
+  Fuente            | Resultados | Tiempo total
+  ------------------+------------+-------------
+  Semantic Scholar  |          5 | 55.12s
+  TheoremSearch     |         15 | 13.52s
+========================================================================
