@@ -1,8 +1,8 @@
 # PROJECT STATE — AViD Journal
 
 **Generado:** 2026-07-12 (regenerable — refleja el estado actual del repo en cada ejecución)
-**Branch:** `main` (HEAD: `f29de4e`, 2026-07-03)
-**Working tree:** 7 modified, 43 untracked (sin commits posteriores a `f29de4e`)
+**Branch:** `main` (HEAD: `9ad7254`, 2026-07-12 — rescue snapshot pre-cleanup)
+**Working tree:** limpio (post-commit de rescate + cambios de limpieza sin commitear)
 
 ---
 
@@ -57,9 +57,9 @@
 ### Orchestrator — Árbol D2→D1→D3
 - **Archivo:** `src/novelty_v2/orchestrator.py` (473 líneas)
 - **Qué hace:** `check_novelty(block, lean_statement, ...)` → árbol completo con 8 veredictos. Orden: D2 → D1 C_F (+ D3 si hay premisas) → exact? fallback → D1 C_I.
-- **Estado:** Con fixes recientes. Auto-location de Side B integrada. Dead code: `check_premise_distance` importado pero nunca llamado (la función real es `compute_d3`). `check_novelty_verdict_simple` en d1_existence.py duplicada (marcada para migrar).
+- **Estado:** Estable. Auto-location de Side B integrada. `compute_d3` es la única función canónica de distancia. `check_novelty()` en orchestrator.py es el único punto de entrada al árbol de decisión.
 - **8 veredictos:** `NOVEDAD_ENUNCIADO`, `NOVEDAD_DEMOSTRACION`, `CONOCIDO_LITERATURA`, `NO_NOVEDOSO_redundante`, `NO_NOVEDOSO_trivial`, `ZONA_GRIS`, `MATCH_ENCONTRADO_PENDIENTE_D3`, `INCONCLUSIVE`.
-- **Archivo de tipos:** `src/novelty_v2/types.py` (207 líneas).
+- **Archivo de tipos:** `src/novelty_v2/types.py` (197 líneas).
 
 ### Dataset y experimentos
 - **Eval set base:** `paper/eval_set.csv` — 26 teoremas firmes (T01–T26) + 9 slots TBD (TBD_27–TBD_35). Categorías: clásicos en mathlib, pares con distinta prueba, enunciados cercanos, triviales, generados por IA, casos de falla.
@@ -156,9 +156,7 @@
 | 10 | Implementar isDefEq (D1 nivel 1) para equivalencia definicional | No prioritario para v1 | `metric_spec.md` §4.1, `decisions.md` §pendientes |
 | 11 | Medir y mejorar tasa de autoformalización de pruebas ajenas (D3 informal) | Depende de avances en autoformalización | `docs/scout_d3_informal.md` |
 | 12 | Guardar código Lean generado en Run 001 (actualmente se pierde) | Fix en pipeline de formalización | `docs/run_001_review.md` Paper 1 §B |
-| 13 | Módulo de paráfrasis LaTeX→lenguaje natural (mejora queries) | Nada | `docs/TECH_DEBT.md` |
-| 14 | Migrar `check_novelty_verdict_simple` → `check_novelty` (código duplicado) | Nada | `d1_existence.py:27-31` |
-| 15 | Eliminar dead code: `check_premise_distance` en d3_premises.py | Nada | `docs/scout_d3_integration.md` |
+| 13 | Módulo de paráfrasis LaTeX→lenguaje natural (mejora queries) | Nada (diferido post Run 001-b) | `docs/TECH_DEBT.md`, `decisions.md` §Out of scope |
 
 ---
 
@@ -202,41 +200,32 @@ Reglas que un chat nuevo debe conocer para no proponer lo ya descartado:
 12. **Caché organizado por endpoint.** `cache/novelty/<namespace>/` con invalidación manual por namespace. No usar caché unificado ni SQLite.
     - Doc: `decisions.md` §2026-06-09
 
-13. **Umbral D3 θ = 0.5.** Valor inicial. Calibración contra T07/T08/T09 pendiente (bloqueada por colapso T09).
-    - Doc: `types.py:139`, `decisions.md` §pendientes
+13. **Umbral D3 θ = 0.5.** Placeholder declarado. Las distancias se reportan crudas (valor de Jaccard sin threshold binario). Calibración contra T07/T08/T09 bloqueada por colapso T09. Wontfix v1.
+    - Doc: `types.py:138`, `decisions.md` §Out of scope v1
+
+14. **T14 / aesop budget insuficiente.** `aesop` necesita ~215s pero el budget es 30s. Falso negativo conocido. Wontfix v1: la trivialidad es relativa al presupuesto.
+    - Doc: `decisions.md` §Out of scope v1, `limitations.md` L5
+
+15. **Demo HF Spaces en alcance**, secuenciada después de Run 001-b + controles.
+    - Doc: `decisions.md` §Out of scope v1
 
 ---
 
 ## 6. CONTRADICCIONES Y ZONAS GRISES
 
-1. **`check_premise_distance` es dead code.**
-   - Importado en `orchestrator.py:47` pero nunca llamado. La función canónica real es `compute_d3`. Ambas existen en `d3_premises.py`.
-   - Doc: `docs/scout_d3_integration.md`
+Las contradicciones 1–6 listadas en la versión anterior de este documento fueron resueltas en la sesión de limpieza del 2026-07-12 (commit posterior a `9ad7254`). Resumen:
 
-2. **D3Result: campos deprecated y nuevos conviven.**
-   - `premisas_candidato` / `premisas_nueva` marcados DEPRECATED. `premises_a_after_filters` / `premises_b_after_filters` son los activos. No hay migración completa — ambos sets se pueblan en algunos code paths.
-   - Doc: `types.py:104-126`
+1. ~~`check_premise_distance` dead code~~ → Ya no existía en el código fuente; docs corregidos (CLAUDE.md, PROJECT_STATE.md).
+2. ~~Campos deprecated en D3Result~~ → `premisas_candidato`/`premisas_nueva` eliminados de `types.py`.
+3. ~~Orquestador duplicado~~ → `check_novelty_verdict_simple` y su `__main__` eliminados de `d1_existence.py`.
+4. ~~`src/novelty/` congelado vs parcheado~~ → CLAUDE.md regla 2 reescrita: "no se modifica al paso; solo mediante fix-packs explícitos".
+5. ~~Columnas eval_set.csv no documentadas~~ → `docs/eval_set_schema.md` creado.
+6. ~~T23 expectativa vs resultado~~ → `eval_set.csv` actualizado con nota del resultado observado.
 
-3. **Orquestador duplicado.**
-   - `check_novelty_verdict_simple` en `d1_existence.py` (líneas 27-31) está marcado como "mantenido por compatibilidad hacia atrás" pero recomienda migrar a `check_novelty()` en `orchestrator.py`. Dos funciones que hacen casi lo mismo con diferencias sutiles (D3 no incluido en la vieja).
-   - Doc: `d1_existence.py:27-31`
+### Zonas grises remanentes
 
-4. **`src/novelty/` congelado vs parcheado.**
-   - CLAUDE.md regla 2: "`src/novelty/` is frozen — import as dependency, never modify." Excepción documentada: `mathlib_checker.py` y `llm_judge.py` fueron parcheados (2026-06-27). Pero el working tree actual tiene `mathlib_checker.py` modified (102 líneas cambiadas). La regla y la realidad divergen.
-   - Doc: `CLAUDE.md` regla 2 vs `git diff --stat HEAD` (7 archivos modified incluyendo `mathlib_checker.py`)
+7. **Umbral D3 θ = 0.5: ¿espec fija o calibrable?** La spec dice "empezar con 0.5 y calibrar". `types.py` hardcodea 0.5. La calibración nunca ocurrió (bloqueada por colapso T09). Decisión tomada 2026-07-12: placeholder declarado, distancias se reportan crudas. Wontfix v1.
+   - Doc: `metric_spec.md`, `types.py`, `decisions.md` §Out of scope
 
-5. **Columnas del eval_set.csv vs lo que espera run_eval_full.py.**
-   - El CSV histórico tenía columnas `title`/`content_latex` que no existen. Se corrigió mapeando a `enunciado_informal`. La estructura exacta que el script espera no está documentada explícitamente — el script la infiere del CSV.
-   - Doc: `eval_set.csv` header vs `run_eval_full.py` mapeo interno.
-
-6. **T23: expectativa del eval_set.csv vs resultado real.**
-   - `eval_set.csv` línea 27 espera "FALLO_ESPERADO de D2 (aesop podría cerrarlo)". En la run 2026-06-28, T23 dio `MATCH_ENCONTRADO_PENDIENTE_D3` (Leandex encontró `SimpleGraph.IsTree` → D1 activó, D2 no corrió porque el enunciado Lean usado fue distinto). La expectativa del CSV y el resultado real divergen según qué `lean_statement` se use.
-   - Doc: `eval_set.csv:27` vs `eval_full_20260628_143702.csv:22`
-
-7. **Umbral D3 θ = 0.5: ¿espec fija o calibrable?**
-   - `metric_spec.md` §4.3 y `decisions.md` §pendientes dicen "empezar con 0.5 y calibrar contra T07/T08/T09". `types.py:139` hardcodea 0.5. La calibración nunca ocurrió (bloqueada por colapso T09). No está claro si 0.5 es el valor operativo aceptado o un placeholder.
-   - Doc: `metric_spec.md`, `types.py`, `decisions.md`
-
-8. **D2 — T14: budget insuficiente para `aesop`.**
-   - `aesop` necesita ~215s para cerrar "suma de 4 pares es par". Budget = 30s (+45s overhead = 75s timeout). Resultado: FN (trivial real pero D2 dice no trivial). No está resuelto ni documentado como "wontfix" — es un bug conocido sin decisión de cierre.
-   - Doc: `results_log.md` §Día 5
+8. **D2 — T14: budget insuficiente para `aesop`.** FN conocido sin resolver. Decisión tomada 2026-07-12: wontfix v1, se reporta como hallazgo.
+   - Doc: `results_log.md` §Día 5, `decisions.md` §Out of scope

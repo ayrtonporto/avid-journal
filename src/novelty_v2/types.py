@@ -100,14 +100,6 @@ class D3Result:
     activa: bool = False
     """D3 solo se activa si D1 encontró match de tipo (existe_en_C_F=True)."""
 
-    premisas_candidato: List[str] = field(default_factory=list)
-    """Premisas de la prueba existente en C_F (extraídas con LeanDojo).
-    DEPRECATED: prefer premisas_a_after_filters for new code."""
-
-    premisas_nueva: List[str] = field(default_factory=list)
-    """Premisas de la prueba candidata (extraídas con LeanDojo).
-    DEPRECATED: prefer premisas_b_after_filters for new code."""
-
     jaccard: Optional[float] = None
     """Distancia de Jaccard: 1 - |P1 ∩ P2| / |P1 ∪ P2|. None si no se pudo calcular."""
 
@@ -199,8 +191,6 @@ class NoveltyVerdict:
                 "union_size": self.d3.union_size,
                 "flags": self.d3.flags,
                 "d3_source": self.d3.d3_source,
-                "n_premisas_candidato": len(self.d3.premisas_candidato),
-                "n_premisas_nueva": len(self.d3.premisas_nueva),
                 "n_premisas_a_after_filters": len(self.d3.premises_a_after_filters),
                 "n_premisas_b_after_filters": len(self.d3.premises_b_after_filters),
             },

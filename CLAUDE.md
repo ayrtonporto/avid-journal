@@ -22,7 +22,7 @@ Author: Ayrton Porto (UNICEN, Argentina). PhD applications target: Wenda Li (Edi
 ## Irrevocable design decisions
 
 1. **Windows native** for automated pipeline. WSL2 reserved only for D3 manual (LeanDojo requires Linux). Do not move automated flow to WSL.
-2. **`src/novelty/` is frozen** — import as dependency, never modify. All new code in `src/novelty_v2/`. Exception: `mathlib_checker.py` and `llm_judge.py` were patched for Leandex v2 API and DeepSeek migration (2026-06-27).
+2. **`src/novelty/` no se modifica al paso** — solo mediante fix-packs explícitos aprobados por el usuario y documentados en `paper/decisions.md`. Todo código nuevo va en `src/novelty_v2/`. Últimos fix-packs autorizados: `mathlib_checker.py` (Leandex v2, 2026-06-27) y `llm_judge.py` (DeepSeek V4 Flash, 2026-06-27).
 3. **`src/parser/` and `src/formalization/`** — do not touch.
 4. **D3 vía ExtractData standalone** — bajado `ExtractData.lean` (515 líneas), sin dependencia del paquete `lean-dojo-v2`.
 5. **Demo v2**: D1+D2 real-time with streaming; D3 on-demand via SQLite queue.
@@ -89,7 +89,7 @@ src/novelty_v2/
 ├── dimensions/
 │   ├── d1_existence.py   ← ✅ D1: Leandex C_F + arXiv/SS C_I + exact? fallback
 │   ├── d2_triviality.py  ← ✅ D2 filter (6 tácticas, sin exact?, blacklist Irrational)
-│   └── d3_premises.py    ← ✅ Stub documentado con check_premise_distance()
+│   └── d3_premises.py    ← ✅ D3: compute_d3() canónica; Jaccard + filtros
 src/novelty/
 ├── mathlib_checker.py    ← PARCHED: Leandex v2 API format (2026-06-27)
 ├── llm_judge.py          ← PARCHED: DeepSeek V4 Flash vía OpenCode Go (2026-06-27)

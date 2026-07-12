@@ -251,3 +251,51 @@ Reglas adicionales:
 **Razonamiento:** la relatividad bien declarada es una fortaleza metodológica. Permite que el paper contribuya dos cosas: (1) el framework de novelty checking y (2) una instantánea del estado de la automatización matemática en Mathlib v4.29.0. Comparar con futuras versiones es investigación derivada válida.
 
 **Reversibilidad:** alta. Solo afecta narrativa del paper y sección de Methodology. El código no cambia.
+
+---
+
+## Decisiones de alcance (Out of scope v1)
+
+Las siguientes funcionalidades o mejoras están explícitamente fuera del alcance de v1. Se listan aquí para evitar que sesiones futuras las propongan como trabajo inmediato.
+
+### isDefEq (D1 nivel 1)
+
+**Qué es:** equivalencia definicional vía kernel de Lean, más allá de la igualdad sintáctica actual (D1 nivel 0).
+**Estado:** Diferido. No prioritario para v1. Los falsos negativos de la igualdad sintáctica están documentados como limitación L4.
+**Doc:** `paper/metric_spec.md` §4.1, `paper/limitations.md` L4.
+
+### Mejora de autoformalización de pruebas ajenas (D3 informal)
+
+**Qué es:** subir la tasa de éxito de formalización de pruebas extraídas de arXiv para habilitar D3 sobre C_I.
+**Estado:** Diferido. El PoC actual (`src/novelty_v2/informal_match.py`) tiene tasa ~0%. Requiere avances en el estado del arte de autoformalización.
+**Doc:** `docs/scout_d3_informal.md`.
+
+### 9 slots TBD del eval set
+
+**Qué es:** poblar TBD_27 a TBD_35 (3 clásicos no en mathlib, 3 conocidos en literatura, 3 teoremas muy nuevos).
+**Estado:** Diferido a después de Run 001-b. El eval set actual funciona con 24 teoremas.
+**Doc:** `paper/eval_set.csv` líneas 31-39.
+
+### Paráfrasis de queries (LaTeX → lenguaje natural)
+
+**Qué es:** módulo que convierte enunciados LaTeX a lenguaje natural vía LLM para mejorar queries a search engines (Semantic Scholar, arXiv).
+**Estado:** Diferida a después de Run 001-b para poder medir su efecto contra línea de base.
+**Doc:** `docs/TECH_DEBT.md`.
+
+### T14 / aesop budget insuficiente
+
+**Qué es:** `aesop` necesita ~215s para cerrar "suma de 4 pares es par" pero el budget es 30s (+45s overhead). Resultado: falso negativo.
+**Estado:** Wontfix v1. La trivialidad es relativa al presupuesto operacional; se reporta como hallazgo (L5/L10).
+**Doc:** `paper/limitations.md` L5, `paper/results_log.md` §Día 5.
+
+### Umbral D3 θ = 0.5
+
+**Qué es:** valor del umbral de Jaccard para decidir "pruebas distantes".
+**Estado:** Placeholder declarado. Las distancias se reportan crudas (valor de Jaccard sin threshold binario). La calibración contra T07/T08/T09 está bloqueada por el colapso de T09.
+**Doc:** `src/novelty_v2/types.py:138`, `paper/decisions.md` §pendientes.
+
+### Demo HF Spaces
+
+**Qué es:** demo web Gradio con upload .tex + pipeline D1+D2 + botón D3, deploy en Hugging Face Spaces.
+**Estado:** En alcance, secuenciada después de Run 001-b + controles.
+**Doc:** `paper/results_log.md` §Días 10-12.
