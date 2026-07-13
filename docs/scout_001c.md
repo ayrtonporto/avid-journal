@@ -1,59 +1,75 @@
-# Scout 001c — Reconstrucción del estado real
+# Scout 001c — Diagnóstico pre-Run 001-c (statement-only)
 
 **Generado:** 2026-07-12  
-**Propósito:** Determinar qué código está realmente en disco tras la Run 001-b fallida, antes de cualquier acción correctiva.
+**Propósito:** Resolver dos confusores antes de concluir sobre DeepSeek.
 
 ---
 
-## 1. Git status
+## Confusor 1: ¿El loop exige demostración real o acepta `sorry`?
 
-```
-On branch main (ahead 6)
-Changes not staged:
-  modified:   scripts/run_experiment_001.py
+### Evidencia
 
-Untracked:
-  docs/experiment_run_001b_report.md
-  results/experiment_run_001b.csv
-  results/formalizations/
+**Verification loop** (`avid-clean/formalization/scripts/verification_loop.py:73`):
+
+```python
+if not has_error and not has_sorry:
+    return FormalizationResult(success=True, ...)
 ```
 
-**Conclusión:** Los dos parches sobre `run_experiment_001.py` SÍ están en el working tree (modificado, no commiteado). El diff confirma ambos hunks:
-- **Hunk 1 (líneas 162-177):** fallback a `reasoning_content` cuando `content` está vacío.
-- **Hunk 2 (líneas 225-236):** extracción de bloques de código ```lean...``` del texto de reasoning.
+Condición de éxito: **`not has_error AND not has_sorry`**. Ambos deben ser falsos.
+
+**Lean checker** (`lean_checker.py:120`):
+
+```python
+has_sorry_warning = bool(_LEAN_SORRY_RE.search(combined))
+# Regex: r"declaration uses ['`\"]?sorry['`\"]?"
+```
+
+El checker detecta `sorry` como warning y lo reporta.
+
+### Conclusión
+
+El loop **RECHAZA `sorry`**. El modelo no puede usar `theorem foo := by sorry` — debe producir una demostración completa. Para el experimento de retirados, donde solo necesitamos el ENUNCIADO para pasarlo a D1/D2/D3, esto es contraproducente: fuerza al modelo a intentar probar teoremas arbitrarios desde cero.
+
+**Acción:** PARTE 1 — Modo `statement_only` que acepte `:= sorry`.
 
 ---
 
-## 2. Estado de los .lean en `results/formalizations/`
+## Confusor 2: Path mismatch entre orchestrator y run_experiment_001.py
 
-| Archivo | Bytes | Contenido real |
-|---------|-------|---------------|
-| `1609_02090v1.lean` | 5877 | ❌ Raw reasoning_content (chat del modelo, no código) |
-| `1207_0631v1.lean` | 399 | ✅ Código Lean válido (`import Mathlib`, `theorem ... := by\n  -- sorry`) |
-| `1212_0196v1.lean` | 129 | ⚠️ Fragmento mínimo (`def Congruent (n : ℕ) : Prop := ...`) |
-| `1004_3381v1.lean` | 7790 | ❌ Raw reasoning_content |
-| `math_0604362v1.lean` | 8074 | ❌ Raw reasoning_content |
+### Evidencia
 
-**Explicación:** El fix de extracción de código (`re.search(r"```(?:lean)?...")`) solo encontró bloques de código en los papers 2 y 3. Para los papers 1, 4 y 5, el `reasoning_content` no contenía un bloque markdown ```lean bien formado, y el fallback (strip de fences) dejó todo el reasoning como "código". El archivo resultante no compila (es lenguaje natural).
+El error del Paper 1 en Run 001-c:
+```
+Pipeline error: [Errno 2] No such file or directory:
+'lean_project\\Papers\\160902090v1\\Blocks\\SquaresZn.lean'
+```
+
+**Orchestrator** escribe en `manager.project_dir / "Blocks" / f"{lean_name}.lean"`  
+→ `lean_project/Papers/160902090v1/Blocks/SquaresZn.lean`
+
+**run_experiment_001.py** construye:
+```python
+project_dir = Path(paper_result["project_dir"])
+lean_name = block.get("lean_name", "")
+block_path = project_dir / "Blocks" / f"{lean_name}.lean"
+```
+
+### Hipótesis
+
+El bloque NO llega a `✅ verified` (llega como `⚠️ axiom`), por lo que `verified_blocks` está vacío. `run_experiment_001.py` cae al `else` y reporta error. El path físico existe pero el script no lo encuentra porque busca solo bloques `✅ verified`.
+
+La ruta EXACTA puede diferir si:
+- `lean_name` tiene un sufijo o prefijo añadido por el orchestrator
+- El `project_dir` usa un slug ligeramente distinto
+- El bloque fue procesado por `_handle_external` (axioma) en vez de `_run_block` (verificación)
+
+### Acción
+
+PARTE 2: aceptar también bloques `⚠️ axiom` como "éxito parcial" (tienen código Lean, solo que sin prueba). O unificar la lectura desde PAPER_INDEX.md.
 
 ---
 
-## 3. HALLAZGO RETROACTIVO: Run 001 original fue artefacto
+## Nota adicional
 
-**Defecto:** En la Run 001 original (2026-07-06), los 5 `.lean` eran de **0 bytes**. El script `_verify_lean` escribe el `lean_code` (vacío, porque la API devolvía `content: ""`) a disco, y luego ejecuta `lake env lean <file>`. **Lean 4 compila archivos vacíos con exit code 0.**
-
-**Consecuencia:** El reporte original de "5/5 formalizados" era falso. Los archivos vacíos no contienen ningún teorema. Los veredictos `MATCH_ENCONTRADO_PENDIENTE_D3` se basaron en código Lean inexistente.
-
-**Registrar como defecto instructivo para el paper:** La herramienta de verificación debe incluir una guardia anti-vacío (ver PARTE 1). Lean no falla ante archivos vacíos — es responsabilidad del pipeline detectar este caso.
-
----
-
-## 4. ¿Qué parches se aplicaron y cuáles no?
-
-| Parche | Estado | Efecto |
-|--------|--------|--------|
-| Fallback `reasoning_content` | ✅ Aplicado | Los 5 papers ahora tienen contenido en .lean (antes: 0 bytes) |
-| Extracción bloque ```lean | ✅ Aplicado (parcial) | Solo funciona si el modelo pone código en fences. Funcionó en 2/5. |
-| Guardia anti-vacío | ❌ NO aplicado | Un archivo con reasoning puro (sin declaraciones Lean) se considera "compilado" si Lean no da error de sintaxis |
-
-**Conclusión:** Los parches aliviaron el síntoma (archivos vacíos → archivos con contenido) pero no resolvieron la causa raíz: la formalización vía API casera no produce código Lean compilable. Se requiere migrar al pipeline real (PARTE 2).
+El modo `statement_only` propuesto en PARTE 1 implica modificar el prompt para que el modelo sepa que solo debe enunciar (no probar), y relajar el criterio de éxito: `has_error == False` (puede tener `has_sorry == True`).

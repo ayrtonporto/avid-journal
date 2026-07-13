@@ -126,39 +126,48 @@ See the original paper.
 """
 
 
-# ── Formalization (via AViD pipeline → Claude Code) ──────────────────
+# ── Formalization (via multi-model provider, statement-only mode) ──────
+
+STATEMENT_ONLY_PROMPT = """You are an expert in Lean 4 and Mathlib 4.
+Translate the following LaTeX theorem statement into Lean 4 code.
+
+CRITICAL RULES:
+- Output ONLY valid Lean 4 code between ```lean and ``` markers.
+- Use `import Mathlib` at the top.
+- State the theorem as a `theorem` with `:= by sorry` (you do NOT need to prove it).
+- Define any auxiliary definitions needed before the theorem.
+- Use proper Mathlib 4 names. If unsure, use `sorry`.
+- The code MUST compile (warnings for `sorry` are acceptable).
+
+LaTeX statement:
+{latex_statement}
+
+Lean 4 code:"""
 
 
 def formalize_statement(
     arxiv_id: str,
     theorem_latex: str,
     lean_project_dir: str = LEAN_PROJECT_DIR,
-    max_attempts: int = 1,
+    max_attempts: int = 3,
 ) -> dict:
-    """Formalize a LaTeX theorem into Lean 4 using the AViD formalization pipeline.
+    """Formalize a LaTeX theorem into Lean 4 (statement-only mode).
 
-    Writes a minimal .tex, invokes ``formalize_paper()`` from
-    ``src.formalization.orchestrator`` (Claude Code with compile→fix cycle),
-    extracts the resulting .lean code, and copies it to
-    ``results/formalizations/<arxiv_id>.lean``.
+    Uses the multi-model provider (via AVID_MODEL_PROVIDER env var) to
+    generate the theorem STATEMENT with ``:= by sorry``.  Compilation
+    warnings for ``sorry`` are ACCEPTED; only real errors cause retry.
 
-    Returns dict with:
-      - lean_statement: str or None
-      - lean_imports: str
-      - attempts: int
-      - errors: list of error messages
-      - success: bool
-      - lean_path: str
+    The generated .lean is saved to ``results/formalizations/<arxiv_id>.lean``.
     """
-    import shutil
-    import tempfile
+    import subprocess
 
-    # Ensure avid-clean is on sys.path for the multi-model formalization system
+    # Ensure avid-clean is on sys.path
     _AVID_CLEAN = _REPO_ROOT / "avid-clean"
     if str(_AVID_CLEAN) not in sys.path:
         sys.path.insert(0, str(_AVID_CLEAN))
 
-    from formalization.orchestrator import formalize_paper
+    from formalization.providers.config import resolve_provider
+    from formalization.scripts.lean_checker import check_lean_file
 
     result: dict = {
         "lean_statement": None,
@@ -167,6 +176,7 @@ def formalize_statement(
         "errors": [],
         "success": False,
         "lean_path": "",
+        "formalization_mode": "statement_only",
     }
 
     safe_id = re.sub(r"[^a-zA-Z0-9_]", "_", arxiv_id)
@@ -174,68 +184,95 @@ def formalize_statement(
     formal_dir.mkdir(parents=True, exist_ok=True)
     lean_file = formal_dir / f"{safe_id}.lean"
 
-    # ── Write minimal .tex ────────────────────────────────────────
-    tmpdir = Path(tempfile.mkdtemp(prefix="avid_exp_"))
     try:
-        tex_path = tmpdir / f"{safe_id}.tex"
-        tex_path.write_text(make_minimal_tex(arxiv_id, theorem_latex), encoding="utf-8")
-
-        logger.info("  Invoking AViD formalization pipeline for %s", arxiv_id)
-        result["attempts"] = 1
-
-        paper_result = formalize_paper(
-            tex_path=str(tex_path),
-            paper_title=arxiv_id,
-            base_dir=str(tmpdir / "lean_out"),
-            dry_run=False,
-            parent_project=lean_project_dir,
-            blocks_range="1",  # only the first (and only) block
-            resume=False,
-        )
-
-        # ── Extract verified block ────────────────────────────────
-        verified_blocks = [
-            b for b in paper_result.get("results", [])
-            if b.get("status") == "✅ verified"
-        ]
-
-        if verified_blocks:
-            block = verified_blocks[0]
-            project_dir = Path(paper_result["project_dir"])
-            lean_name = block.get("lean_name", "")
-            block_path = project_dir / "Blocks" / f"{lean_name}.lean"
-
-            if block_path.exists():
-                lean_code = block_path.read_text(encoding="utf-8")
-                # Copy to results/formalizations/
-                lean_file.write_text(lean_code, encoding="utf-8")
-                result["lean_statement"] = lean_code
-                result["lean_path"] = str(lean_file)
-                result["success"] = True
-                logger.info("  ✅ Formalization successful (%d bytes)", len(lean_code))
-            else:
-                result["errors"].append(f"Block .lean not found at {block_path}")
-                logger.warning("  Block file not found")
-        else:
-            # Collect errors from failed blocks
-            failed = [b for b in paper_result.get("results", []) if b.get("status") != "✅ verified"]
-            for b in failed:
-                err = b.get("error", str(b.get("status", "unknown")))
-                result["errors"].append(err)
-            statuses = [b.get("status", "?") for b in paper_result.get("results", [])]
-            logger.warning("  No verified blocks. Statuses: %s", statuses)
-
+        provider = resolve_provider()
     except Exception as exc:
-        result["errors"].append(f"Pipeline error: {exc}")
-        logger.error("  Pipeline exception: %s", exc)
-    finally:
-        # Clean up temp dir (keep results/formalizations/<id>.lean)
+        result["errors"].append(f"Provider resolution failed: {exc}")
+        return result
+
+    prompt = STATEMENT_ONLY_PROMPT.format(latex_statement=theorem_latex[:2000])
+
+    for attempt in range(1, max_attempts + 1):
+        logger.info("  Formalization attempt %d/%d for %s", attempt, max_attempts, arxiv_id)
+        result["attempts"] = attempt
+
         try:
-            shutil.rmtree(tmpdir)
-        except Exception:
-            pass
+            response = provider.generate([{"role": "user", "content": prompt}])
+        except Exception as exc:
+            result["errors"].append(f"API error (attempt {attempt}): {exc}")
+            logger.warning("  API error: %s", exc)
+            continue
+
+        # Extract Lean code from response
+        lean_code = _extract_code_from_response(response)
+        if not lean_code or not lean_code.strip():
+            result["errors"].append(f"Empty code extracted (attempt {attempt})")
+            logger.warning("  No Lean code in response")
+            prompt = (
+                f"{STATEMENT_ONLY_PROMPT.format(latex_statement=theorem_latex[:2000])}\n\n"
+                f"No Lean code was found in your previous response. "
+                f"Please output ONLY valid Lean 4 code between ```lean and ``` markers."
+            )
+            continue
+
+        # Anti-empty guard
+        if not _has_lean_declaration(lean_code):
+            result["errors"].append(f"No Lean declaration in code (attempt {attempt})")
+            logger.warning("  No declaration found")
+            prompt = (
+                f"{STATEMENT_ONLY_PROMPT.format(latex_statement=theorem_latex[:2000])}\n\n"
+                f"Your previous response did not contain a theorem/lemma/def. "
+                f"You MUST include at least one theorem declaration."
+            )
+            continue
+
+        # Write to file
+        lean_file.write_text(lean_code, encoding="utf-8")
+        result["lean_path"] = str(lean_file)
+
+        # Compile — sorry warnings are OK
+        has_error, has_sorry, stdout, stderr = check_lean_file(lean_file)
+
+        if not has_error:
+            # Success: compiles (with or without sorry)
+            result["lean_statement"] = lean_code
+            result["success"] = True
+            logger.info(
+                "  ✅ Formalization successful (%d bytes, sorry=%s)",
+                len(lean_code), has_sorry,
+            )
+            break
+        else:
+            # Real compilation error — feed back to model
+            error_text = (stdout + "\n" + stderr)[:1000]
+            result["errors"].append(
+                f"Compilation error (attempt {attempt}): {error_text[:200]}"
+            )
+            logger.warning("  ❌ Compilation failed: %s", error_text[:100])
+            prompt = (
+                f"{STATEMENT_ONLY_PROMPT.format(latex_statement=theorem_latex[:2000])}\n\n"
+                f"The previous code had compilation errors:\n```\n{error_text}\n```\n"
+                f"Please fix ALL errors and provide corrected Lean 4 code."
+            )
 
     return result
+
+
+def _extract_code_from_response(response: str) -> str:
+    """Extract Lean code blocks from a model response."""
+    # Try ```lean ... ``` first
+    match = re.search(r"```(?:lean4?|Lean)\s*\n(.*?)```", response, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    # Try any ``` ... ```
+    match = re.search(r"```\s*\n(.*?)```", response, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    # Fallback: return everything after first import
+    import_match = re.search(r"import\s+Mathlib.*", response, re.DOTALL)
+    if import_match:
+        return import_match.group(0).strip()
+    return response.strip()
 
 
 def _has_lean_declaration(code: str) -> bool:
@@ -324,6 +361,8 @@ def run_one_entry(entry: dict, output_csv: str) -> dict:
         "d3_source": "",
         "formalization_success": False,
         "formalization_path": "",
+        "formalization_model": "",
+        "formalization_mode": "",
         "formalization_errors": "",
         "error": "",
     }
@@ -335,6 +374,8 @@ def run_one_entry(entry: dict, output_csv: str) -> dict:
     formal = formalize_statement(arxiv_id, theorem_latex)
     row["formalization_success"] = formal["success"]
     row["formalization_path"] = formal.get("lean_path", "")
+    row["formalization_model"] = os.environ.get("AVID_MODEL_PROVIDER", "opencode")
+    row["formalization_mode"] = formal.get("formalization_mode", "")
     row["formalization_errors"] = " | ".join(formal["errors"][:3])
 
     if not formal["success"]:
@@ -424,7 +465,9 @@ def write_csv(rows: List[dict], path: str):
         "arxiv_id", "role", "paired_with", "known_duplicator",
         "veredicto", "d1_top5", "d1_match_cf", "d1_match_ci", "d1_llm_verdict",
         "d2_trivial", "d2_tactic", "d3_jaccard", "d3_source",
-        "formalization_success", "formalization_errors", "error",
+        "formalization_success", "formalization_path",
+        "formalization_model", "formalization_mode",
+        "formalization_errors", "error",
     ]
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
