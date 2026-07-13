@@ -136,8 +136,13 @@ CRITICAL RULES:
 - Use `import Mathlib` at the top.
 - State the theorem as a `theorem` with `:= by sorry` (you do NOT need to prove it).
 - Define any auxiliary definitions needed before the theorem.
-- Use proper Mathlib 4 names. If unsure, use `sorry`.
-- The code MUST compile (warnings for `sorry` are acceptable).
+- AUXILIARY DEFINITIONS MUST BE MATHEMATICALLY SUBSTANTIVE. Placeholder
+  definitions (e.g., `def Foo := True`, `def Bar := 0 = 0`, `:= sorry` on a
+  definition) count as FAILURE. Each definition must capture the actual
+  mathematical concept.
+- Use proper Mathlib 4 names. If unsure, use `sorry` only inside proofs, never
+  in definitions.
+- The code MUST compile (warnings for `sorry` in proofs are acceptable).
 
 LaTeX statement:
 {latex_statement}
@@ -286,6 +291,93 @@ def _extract_code_from_response(response: str) -> str:
     return response.strip()
 
 
+# ── Fidelity check (LLM judge) ─────────────────────────────────────────
+
+FIDELITY_PROMPT = """You are a mathematician comparing a LaTeX theorem statement
+with a Lean 4 formalization. Decide whether the Lean code FAITHFULLY translates
+the LaTeX statement.
+
+CRITICAL: Pay special attention to definitions. If the Lean code defines
+auxiliary concepts as trivial placeholders (e.g., `def Foo := True`,
+`def Bar := 0 = 0`, `:= by sorry` on a definition), the formalization is
+NOT faithful even if it compiles.
+
+Reply with a JSON object on a single line:
+  verdict    : "pass" or "fail"
+  reasoning  : short explanation (<= 2 sentences) of why it passed or failed
+
+LaTeX statement:
+{latex_statement}
+
+Lean 4 code:
+{lean_code}
+
+JSON:"""
+
+
+def check_fidelity(latex_statement: str, lean_code: str) -> dict:
+    """Check whether Lean code faithfully translates the LaTeX statement.
+
+    Uses the LLM judge (DeepSeek V4 Flash via OpenCode Go) to compare
+    the original LaTeX with the generated Lean code.
+
+    Returns dict with keys: verdict ("pass"/"fail"/"error"), reasoning.
+    """
+    import requests as _requests
+
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv()
+
+    _api_key = os.environ.get("OPENCODE_GO_API_KEY", "")
+    if not _api_key:
+        return {"verdict": "error", "reasoning": "OPENCODE_GO_API_KEY not set"}
+
+    _base_url = os.environ.get(
+        "OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1"
+    ).rstrip("/")
+
+    prompt = FIDELITY_PROMPT.format(
+        latex_statement=latex_statement[:1500],
+        lean_code=lean_code[:3000],
+    )
+
+    try:
+        resp = _requests.post(
+            f"{_base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "deepseek-v4-flash",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+                "max_tokens": 2048,
+            },
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        msg = data["choices"][0]["message"]
+        content = msg.get("content", "") or ""
+        if not content.strip():
+            reasoning = msg.get("reasoning_content", "") or ""
+            if reasoning.strip():
+                content = reasoning
+
+        # Parse JSON from response
+        match = re.search(r"\{[^}]+\}", content)
+        if match:
+            parsed = json.loads(match.group(0))
+            return {
+                "verdict": parsed.get("verdict", "error"),
+                "reasoning": parsed.get("reasoning", content[:200]),
+            }
+        return {"verdict": "fail", "reasoning": f"Unparseable: {content[:200]}"}
+    except Exception as exc:
+        return {"verdict": "error", "reasoning": str(exc)[:200]}
+
+
 def _has_lean_declaration(code: str) -> bool:
     """Check whether `code` contains at least one Lean declaration.
 
@@ -375,6 +467,7 @@ def run_one_entry(entry: dict, output_csv: str) -> dict:
         "formalization_model": "",
         "formalization_mode": "",
         "formalization_errors": "",
+        "fidelity_check": "",
         "error": "",
     }
 
@@ -396,6 +489,15 @@ def run_one_entry(entry: dict, output_csv: str) -> dict:
         return row
 
     lean_stmt = formal["lean_statement"]
+
+    # ── Fidelity check ────────────────────────────────────────────
+    fidelity = check_fidelity(theorem_latex, lean_stmt)
+    row["fidelity_check"] = json.dumps(fidelity)
+    if fidelity["verdict"] != "pass":
+        row["veredicto"] = "FIDELITY_FAILED"
+        row["error"] = f"Fidelity: {fidelity.get('reasoning', '?')[:200]}"
+        logger.warning("  Fidelity check failed: %s", fidelity.get("verdict"))
+        return row
 
     # ── Step 2: Query TheoremSearch for top-5 (informal) ────────────
     try:
@@ -478,7 +580,7 @@ def write_csv(rows: List[dict], path: str):
         "d2_trivial", "d2_tactic", "d3_jaccard", "d3_source",
         "formalization_success", "formalization_path",
         "formalization_model", "formalization_mode",
-        "formalization_errors", "error",
+        "formalization_errors", "fidelity_check", "error",
     ]
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
