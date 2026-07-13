@@ -236,11 +236,22 @@ def formalize_statement(
 
         # Compile — sorry warnings are OK. Run from lean_project_dir to find Mathlib.
         import subprocess as _sp
-        _proc = _sp.run(
-            ["lake", "env", "lean", str(lean_file)],
-            capture_output=True, text=True, timeout=120,
-            cwd=lean_project_dir,
-        )
+        try:
+            _proc = _sp.run(
+                ["lake", "env", "lean", str(lean_file)],
+                capture_output=True, text=True, timeout=300,
+                cwd=lean_project_dir,
+            )
+        except _sp.TimeoutExpired:
+            result["errors"].append(f"Compilation timed out (300s) (attempt {attempt})")
+            logger.warning("  ⏰ Compilation timed out")
+            prompt = (
+                f"{STATEMENT_ONLY_PROMPT.format(latex_statement=theorem_latex[:2000])}\n\n"
+                f"The previous code timed out during compilation (>300s). "
+                f"Please simplify the code: reduce imports, use `sorry` for proofs, "
+                f"avoid heavy typeclass searches."
+            )
+            continue
         _combined = (_proc.stdout or "") + "\n" + (_proc.stderr or "")
         has_error = _proc.returncode != 0 or bool(re.search(
             r"^[^\n]*?:\s*\d+:\s*\d+:\s*error\b", _combined, re.MULTILINE,
