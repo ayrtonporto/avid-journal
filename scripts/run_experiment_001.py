@@ -162,7 +162,17 @@ def _call_opencode(prompt: str, model: str = "deepseek-v4-pro", temperature: flo
                 continue
             resp.raise_for_status()
             data = resp.json()
-            content = data["choices"][0]["message"]["content"]
+            msg = data["choices"][0]["message"]
+            content = msg.get("content", "") or ""
+            # DeepSeek models sometimes return all output in reasoning_content
+            if not content.strip():
+                reasoning = msg.get("reasoning_content", "") or ""
+                if reasoning.strip():
+                    logger.info("Using reasoning_content as fallback (%d chars)", len(reasoning))
+                    content = reasoning
+            if not content.strip():
+                logger.warning("Empty response from API (attempt %d)", attempt + 1)
+                continue
             return content.strip()
         except (requests.ConnectionError, requests.Timeout) as exc:
             if attempt < len(backoff):
@@ -212,9 +222,16 @@ def formalize_statement(
             logger.warning("  API error: %s", exc)
             continue
 
-        # Extract the Lean statement (strip markdown fences)
-        lean_code = re.sub(r"^```(?:lean)?\s*\n?", "", lean_code.strip())
-        lean_code = re.sub(r"\n?```\s*$", "", lean_code)
+        # Extract the Lean statement (strip markdown fences, handle reasoning_content)
+        lean_code = lean_code.strip()
+        # Try to find a ```lean ... ``` code block (common in reasoning_content)
+        code_block_match = re.search(r"```(?:lean)?\s*\n(.*?)\n```", lean_code, re.DOTALL)
+        if code_block_match:
+            lean_code = code_block_match.group(1).strip()
+        else:
+            # Fallback: strip leading/trailing fences
+            lean_code = re.sub(r"^```(?:lean)?\s*\n?", "", lean_code)
+            lean_code = re.sub(r"\n?```\s*$", "", lean_code)
 
         # Try to compile
         compile_ok, compile_error = _verify_lean(lean_code, arxiv_id, lean_project_dir)
@@ -239,6 +256,26 @@ def formalize_statement(
     return result
 
 
+def _has_lean_declaration(code: str) -> bool:
+    """Check whether `code` contains at least one Lean declaration.
+
+    Strips single-line comments (``--``) and block comments (``/- ... -/``)
+    before searching for ``theorem``, ``lemma``, ``def``, ``example``,
+    ``inductive``, ``structure``, ``class``, or ``instance`` keyword.
+    """
+    # Strip block comments
+    no_block = re.sub(r"/-.*?-/\n?", "", code, flags=re.DOTALL)
+    # Strip single-line comments
+    no_comments = re.sub(r"--[^\n]*", "", no_block)
+    # Check for declarations (keyword followed by whitespace)
+    return bool(
+        re.search(
+            r"\b(?:theorem|lemma|def|example|inductive|structure|class|instance)\s+",
+            no_comments,
+        )
+    )
+
+
 def _verify_lean(lean_code: str, arxiv_id: str, lean_project_dir: str) -> tuple:
     """Verify Lean code compiles. Returns (ok: bool, error: str).
 
@@ -253,6 +290,12 @@ def _verify_lean(lean_code: str, arxiv_id: str, lean_project_dir: str) -> tuple:
 
     lean_file = formal_dir / f"{safe_id}.lean"
     lean_file.write_text(lean_code, encoding="utf-8")
+
+    # ── Anti-empty guard ──────────────────────────────────────────
+    if not lean_code.strip():
+        return False, "Empty Lean code (0 bytes after strip)"
+    if not _has_lean_declaration(lean_code):
+        return False, "No Lean declaration found (theorem/lemma/def/example/...)"
 
     try:
         proc = subprocess.run(
