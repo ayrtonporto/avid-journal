@@ -167,7 +167,6 @@ def formalize_statement(
         sys.path.insert(0, str(_AVID_CLEAN))
 
     from formalization.providers.config import resolve_provider
-    from formalization.scripts.lean_checker import check_lean_file
 
     result: dict = {
         "lean_statement": None,
@@ -230,8 +229,20 @@ def formalize_statement(
         lean_file.write_text(lean_code, encoding="utf-8")
         result["lean_path"] = str(lean_file)
 
-        # Compile — sorry warnings are OK
-        has_error, has_sorry, stdout, stderr = check_lean_file(lean_file)
+        # Compile — sorry warnings are OK. Run from lean_project_dir to find Mathlib.
+        import subprocess as _sp
+        _proc = _sp.run(
+            ["lake", "env", "lean", str(lean_file)],
+            capture_output=True, text=True, timeout=120,
+            cwd=lean_project_dir,
+        )
+        _combined = (_proc.stdout or "") + "\n" + (_proc.stderr or "")
+        has_error = _proc.returncode != 0 or bool(re.search(
+            r"^[^\n]*?:\s*\d+:\s*\d+:\s*error\b", _combined, re.MULTILINE,
+        ))
+        has_sorry = bool(re.search(
+            r"declaration uses ['`\"]?sorry['`\"]?", _combined, re.IGNORECASE,
+        ))
 
         if not has_error:
             # Success: compiles (with or without sorry)
@@ -244,7 +255,7 @@ def formalize_statement(
             break
         else:
             # Real compilation error — feed back to model
-            error_text = (stdout + "\n" + stderr)[:1000]
+            error_text = _combined[:1000]
             result["errors"].append(
                 f"Compilation error (attempt {attempt}): {error_text[:200]}"
             )
