@@ -102,7 +102,12 @@ def load_config(path: str, force: bool = False) -> List[dict]:
 # ── Minimal .tex wrapper ───────────────────────────────────────────────
 
 def make_minimal_tex(arxiv_id: str, theorem_latex: str) -> str:
-    """Wrap a theorem statement in a minimal compilable .tex file."""
+    """Wrap a theorem statement in a minimal compilable .tex file.
+
+    Includes a dummy ``\\begin{proof}...\\end{proof}`` so the AViD
+    complexity classifier treats the block as SIMPLE/MEDIUM/HARD
+    (launching Claude Code) instead of EXTERNAL (axiom-only).
+    """
     return rf"""\documentclass{{article}}
 \usepackage{{amsmath,amssymb,amsthm}}
 \newtheorem{{theorem}}{{Theorem}}
@@ -110,6 +115,9 @@ def make_minimal_tex(arxiv_id: str, theorem_latex: str) -> str:
 \begin{{theorem}}
 {theorem_latex}
 \end{{theorem}}
+\begin{{proof}}
+See the original paper.
+\end{{proof}}
 \end{{document}}
 """
 
