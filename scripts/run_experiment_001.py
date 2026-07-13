@@ -478,7 +478,10 @@ def run_one_entry(entry: dict, output_csv: str) -> dict:
     formal = formalize_statement(arxiv_id, theorem_latex)
     row["formalization_success"] = formal["success"]
     row["formalization_path"] = formal.get("lean_path", "")
-    row["formalization_model"] = os.environ.get("AVID_MODEL_PROVIDER", "opencode")
+    row["formalization_model"] = (
+        f"{os.environ.get('AVID_MODEL_PROVIDER', 'opencode')}/"
+        f"{os.environ.get('OPENCODE_GO_MODEL', 'deepseek-v4-pro')}"
+    )
     row["formalization_mode"] = formal.get("formalization_mode", "")
     row["formalization_errors"] = " | ".join(formal["errors"][:3])
 
@@ -693,7 +696,14 @@ def main():
                         help="Limit number of entries to process")
     parser.add_argument("--dry-run", action="store_true",
                         help="Load config, check gate, but don't run pipeline")
+    parser.add_argument("--model", default=None,
+                        help="Model name for the provider (sets OPENCODE_GO_MODEL)")
     args = parser.parse_args()
+
+    # Set model if provided
+    if args.model:
+        os.environ["OPENCODE_GO_MODEL"] = args.model
+        logger.info("Using model: %s", args.model)
 
     # ── Load and gate ──────────────────────────────────────────────
     entries = load_config(args.config, force=args.force)
