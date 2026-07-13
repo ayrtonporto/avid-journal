@@ -90,7 +90,19 @@ class OpenAIChatProvider(APIProvider):
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    return data["choices"][0]["message"]["content"]
+                    msg = data["choices"][0]["message"]
+                    content = msg.get("content", "") or ""
+                    # DeepSeek v4 models return all output in reasoning_content
+                    if not content.strip():
+                        reasoning = msg.get("reasoning_content", "") or ""
+                        if reasoning.strip():
+                            content = reasoning
+                    if not content.strip():
+                        raise RuntimeError(
+                            "API returned empty response "
+                            "(both content and reasoning_content are empty)"
+                        )
+                    return content
 
                 # Error handling
                 try:

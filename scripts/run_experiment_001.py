@@ -25,6 +25,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Load environment variables from .env (needed by avid-clean providers)
+from dotenv import load_dotenv
+load_dotenv()
+
 # Ensure repo root is on sys.path for src.* imports
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -149,7 +153,12 @@ def formalize_statement(
     import shutil
     import tempfile
 
-    from src.formalization.orchestrator import formalize_paper
+    # Ensure avid-clean is on sys.path for the multi-model formalization system
+    _AVID_CLEAN = _REPO_ROOT / "avid-clean"
+    if str(_AVID_CLEAN) not in sys.path:
+        sys.path.insert(0, str(_AVID_CLEAN))
+
+    from formalization.orchestrator import formalize_paper
 
     result: dict = {
         "lean_statement": None,
