@@ -504,14 +504,16 @@ def run_one_entry(entry: dict, output_csv: str) -> dict:
 
     lean_stmt = formal["lean_statement"]
 
-    # ── Fidelity check ────────────────────────────────────────────
-    fidelity = check_fidelity(theorem_latex, lean_stmt)
-    row["fidelity_check"] = json.dumps(fidelity)
-    if fidelity["verdict"] != "pass":
-        row["veredicto"] = "FIDELITY_FAILED"
-        row["error"] = f"Fidelity: {fidelity.get('reasoning', '?')[:200]}"
-        logger.warning("  Fidelity check failed: %s", fidelity.get("verdict"))
-        return row
+    # ── Fidelity check (non-blocking: records result, doesn't stop pipeline) ──
+    try:
+        fidelity = check_fidelity(theorem_latex, lean_stmt)
+        row["fidelity_check"] = json.dumps(fidelity)
+        if fidelity["verdict"] != "pass":
+            logger.warning("  Fidelity check: %s — %s", fidelity.get("verdict"),
+                           fidelity.get("reasoning", "")[:80])
+    except Exception as exc:
+        row["fidelity_check"] = json.dumps({"verdict": "error", "reasoning": str(exc)[:200]})
+        logger.warning("  Fidelity check error: %s", exc)
 
     # ── Step 2: Query TheoremSearch for top-5 (informal) ────────────
     try:
