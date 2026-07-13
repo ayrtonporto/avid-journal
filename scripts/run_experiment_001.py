@@ -43,6 +43,11 @@ DEFAULT_OUTPUT_CSV = "results/experiment_run_001.csv"
 DEFAULT_REPORT = "docs/experiment_run_001_report.md"
 LEAN_PROJECT_DIR = "lean_project"
 
+# Ensure Claude Code CLI is on PATH (npm global install on Windows)
+_NPM_BIN = Path.home() / "AppData" / "Roaming" / "npm"
+if _NPM_BIN.is_dir() and str(_NPM_BIN) not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = str(_NPM_BIN) + os.pathsep + os.environ.get("PATH", "")
+
 
 # ── Gate enforcement ───────────────────────────────────────────────────
 
@@ -109,90 +114,21 @@ def make_minimal_tex(arxiv_id: str, theorem_latex: str) -> str:
 """
 
 
-# ── Formalization (via OpenCode API) ────────────────────────────────────
-
-FORMALIZE_PROMPT = """You are an expert in Lean 4 and Mathlib 4.
-Translate the following LaTeX theorem statement into Lean 4 code.
-
-Rules:
-- Output ONLY the Lean 4 code, no explanations.
-- Use `import Mathlib` at the top.
-- The statement should be a `theorem` or `example`.
-- Use proper Mathlib 4 names. If unsure about a lemma name, use `sorry`.
-- The code must be syntactically valid Lean 4.
-
-LaTeX statement:
-{latex_statement}
-
-Lean 4 code:"""
-
-
-def _call_opencode(prompt: str, model: str = "deepseek-v4-pro", temperature: float = 0.0, max_tokens: int = 2000) -> str:
-    """Call OpenCode API for chat completion. Returns response text or raises."""
-    import requests
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    api_key = os.getenv("OPENCODE_GO_API_KEY", "")
-    base_url = os.getenv("OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1").rstrip("/")
-
-    if not api_key:
-        raise RuntimeError("OPENCODE_GO_API_KEY not set")
-
-    url = f"{base_url}/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-
-    # Network courtesy: exponential backoff
-    backoff = [5, 10, 20]
-    for attempt, wait in enumerate(backoff + [0]):
-        try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=120)
-            if resp.status_code == 429 and attempt < len(backoff):
-                logger.warning("OpenCode 429 — backoff %d/%d, %ds", attempt + 1, len(backoff), wait)
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            data = resp.json()
-            msg = data["choices"][0]["message"]
-            content = msg.get("content", "") or ""
-            # DeepSeek models sometimes return all output in reasoning_content
-            if not content.strip():
-                reasoning = msg.get("reasoning_content", "") or ""
-                if reasoning.strip():
-                    logger.info("Using reasoning_content as fallback (%d chars)", len(reasoning))
-                    content = reasoning
-            if not content.strip():
-                logger.warning("Empty response from API (attempt %d)", attempt + 1)
-                continue
-            return content.strip()
-        except (requests.ConnectionError, requests.Timeout) as exc:
-            if attempt < len(backoff):
-                logger.warning("OpenCode %s — backoff %d/%d, %ds", type(exc).__name__, attempt + 1, len(backoff), wait)
-                time.sleep(wait)
-                continue
-            raise
-
-    raise RuntimeError("OpenCode API failed after retries")
+# ── Formalization (via AViD pipeline → Claude Code) ──────────────────
 
 
 def formalize_statement(
     arxiv_id: str,
     theorem_latex: str,
     lean_project_dir: str = LEAN_PROJECT_DIR,
-    max_attempts: int = 3,
+    max_attempts: int = 1,
 ) -> dict:
-    """Formalize a LaTeX theorem statement into Lean 4 using OpenCode API.
+    """Formalize a LaTeX theorem into Lean 4 using the AViD formalization pipeline.
 
-    Tries up to max_attempts times with compiler feedback.
+    Writes a minimal .tex, invokes ``formalize_paper()`` from
+    ``src.formalization.orchestrator`` (Claude Code with compile→fix cycle),
+    extracts the resulting .lean code, and copies it to
+    ``results/formalizations/<arxiv_id>.lean``.
 
     Returns dict with:
       - lean_statement: str or None
@@ -200,58 +136,87 @@ def formalize_statement(
       - attempts: int
       - errors: list of error messages
       - success: bool
+      - lean_path: str
     """
-    result = {
+    import shutil
+    import tempfile
+
+    from src.formalization.orchestrator import formalize_paper
+
+    result: dict = {
         "lean_statement": None,
         "lean_imports": "import Mathlib",
         "attempts": 0,
         "errors": [],
         "success": False,
+        "lean_path": "",
     }
 
-    prompt = FORMALIZE_PROMPT.format(latex_statement=theorem_latex[:2000])
+    safe_id = re.sub(r"[^a-zA-Z0-9_]", "_", arxiv_id)
+    formal_dir = _REPO_ROOT / "results" / "formalizations"
+    formal_dir.mkdir(parents=True, exist_ok=True)
+    lean_file = formal_dir / f"{safe_id}.lean"
 
-    for attempt in range(1, max_attempts + 1):
-        logger.info("  Formalization attempt %d/%d for %s", attempt, max_attempts, arxiv_id)
-        result["attempts"] = attempt
+    # ── Write minimal .tex ────────────────────────────────────────
+    tmpdir = Path(tempfile.mkdtemp(prefix="avid_exp_"))
+    try:
+        tex_path = tmpdir / f"{safe_id}.tex"
+        tex_path.write_text(make_minimal_tex(arxiv_id, theorem_latex), encoding="utf-8")
 
+        logger.info("  Invoking AViD formalization pipeline for %s", arxiv_id)
+        result["attempts"] = 1
+
+        paper_result = formalize_paper(
+            tex_path=str(tex_path),
+            paper_title=arxiv_id,
+            base_dir=str(tmpdir / "lean_out"),
+            dry_run=False,
+            parent_project=lean_project_dir,
+            blocks_range="1",  # only the first (and only) block
+            resume=False,
+        )
+
+        # ── Extract verified block ────────────────────────────────
+        verified_blocks = [
+            b for b in paper_result.get("results", [])
+            if b.get("status") == "✅ verified"
+        ]
+
+        if verified_blocks:
+            block = verified_blocks[0]
+            project_dir = Path(paper_result["project_dir"])
+            lean_name = block.get("lean_name", "")
+            block_path = project_dir / "Blocks" / f"{lean_name}.lean"
+
+            if block_path.exists():
+                lean_code = block_path.read_text(encoding="utf-8")
+                # Copy to results/formalizations/
+                lean_file.write_text(lean_code, encoding="utf-8")
+                result["lean_statement"] = lean_code
+                result["lean_path"] = str(lean_file)
+                result["success"] = True
+                logger.info("  ✅ Formalization successful (%d bytes)", len(lean_code))
+            else:
+                result["errors"].append(f"Block .lean not found at {block_path}")
+                logger.warning("  Block file not found")
+        else:
+            # Collect errors from failed blocks
+            failed = [b for b in paper_result.get("results", []) if b.get("status") != "✅ verified"]
+            for b in failed:
+                err = b.get("error", str(b.get("status", "unknown")))
+                result["errors"].append(err)
+            statuses = [b.get("status", "?") for b in paper_result.get("results", [])]
+            logger.warning("  No verified blocks. Statuses: %s", statuses)
+
+    except Exception as exc:
+        result["errors"].append(f"Pipeline error: {exc}")
+        logger.error("  Pipeline exception: %s", exc)
+    finally:
+        # Clean up temp dir (keep results/formalizations/<id>.lean)
         try:
-            lean_code = _call_opencode(prompt, temperature=0.0)
-        except Exception as exc:
-            result["errors"].append(f"API error (attempt {attempt}): {exc}")
-            logger.warning("  API error: %s", exc)
-            continue
-
-        # Extract the Lean statement (strip markdown fences, handle reasoning_content)
-        lean_code = lean_code.strip()
-        # Try to find a ```lean ... ``` code block (common in reasoning_content)
-        code_block_match = re.search(r"```(?:lean)?\s*\n(.*?)\n```", lean_code, re.DOTALL)
-        if code_block_match:
-            lean_code = code_block_match.group(1).strip()
-        else:
-            # Fallback: strip leading/trailing fences
-            lean_code = re.sub(r"^```(?:lean)?\s*\n?", "", lean_code)
-            lean_code = re.sub(r"\n?```\s*$", "", lean_code)
-
-        # Try to compile
-        compile_ok, compile_error = _verify_lean(lean_code, arxiv_id, lean_project_dir)
-        if compile_ok:
-            result["lean_statement"] = lean_code
-            result["success"] = True
-            result["lean_path"] = str(
-                _REPO_ROOT / "results" / "formalizations" / f"{re.sub(r'[^a-zA-Z0-9_]', '_', arxiv_id)}.lean"
-            )
-            logger.info("  ✅ Compilation successful on attempt %d", attempt)
-            break
-        else:
-            result["errors"].append(f"Compilation error (attempt {attempt}): {compile_error[:200]}")
-            logger.warning("  ❌ Compilation failed: %s", compile_error[:100])
-            # Add compiler feedback to prompt for next attempt
-            prompt = (
-                f"{FORMALIZE_PROMPT.format(latex_statement=theorem_latex[:2000])}\n\n"
-                f"The previous attempt produced this compilation error:\n{compile_error[:500]}\n\n"
-                f"Please fix the error and provide corrected Lean 4 code."
-            )
+            shutil.rmtree(tmpdir)
+        except Exception:
+            pass
 
     return result
 
