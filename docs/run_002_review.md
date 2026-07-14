@@ -1,41 +1,15 @@
-# Run 002 — Manual Review Document
+# Run 002 — Auxiliar de Revisión Final
 
-**Generated:** 2026-07-13  
-**Model:** opencode/qwen3.7-max (statement-only, 5 rounds)  
-**Papers:** 5 retracted + 5 controls = 10 total  
-**Formalization success:** 5/10 (50%)
+**Propósito:** Todo lo que necesitás para sentenciar los 7 papers formalizados.  
+**Instrucción:** Revisar definiciones auxiliares (no el teorema en sí). Marcar ✅ fiel / ⚠️ aproximación / ❌ incorrecto.
 
 ---
 
-## Summary Table
+## PAPER 1 — 1609.02090v1 (retracted) ✅ NOVEDAD_ENUNCIADO
 
-| arXiv ID | Role | Compiled | Veredicto | Fidelity | D1 CF | D1 CI | D2 |
-|----------|------|:--------:|-----------|:--------:|-------|-------|:--:|
-| [1609.02090v1](https://arxiv.org/abs/1609.02090v1) | retracted | ✅ | NOVEDAD_ENUNCIADO | error | | different | False |
-| [1207.0631v1](https://arxiv.org/abs/1207.0631v1) | retracted | ✅ | CONOCIDO_LITERATURA | error | | equivalent | False |
-| [1212.0196v1](https://arxiv.org/abs/1212.0196v1) | retracted | ✅ | NOVEDAD_ENUNCIADO | error | | | False |
-| [1004.3381v1](https://arxiv.org/abs/1004.3381v1) | retracted | ❌ | FORMALIZATION_FAILED | — | — | — | — |
-| [math/0604362v1](https://arxiv.org/abs/math/0604362v1) | retracted | ❌ | FORMALIZATION_FAILED | — | — | — | — |
-| [1501.01654v1](https://arxiv.org/abs/1501.01654v1) | control | ❌ | FORMALIZATION_FAILED | — | — | — | — |
-| [1101.3431v2](https://arxiv.org/abs/1101.3431v2) | control | ❌ | FORMALIZATION_FAILED | — | — | — | — |
-| [1101.3720v1](https://arxiv.org/abs/1101.3720v1) | control | ❌ | FORMALIZATION_FAILED | — | — | — | — |
-| [0904.1783v3](https://arxiv.org/abs/0904.1783v3) | control | ✅ | NOVEDAD_ENUNCIADO | error | | | False |
-| [math/0504586v2](https://arxiv.org/abs/math/0504586v2) | control | ✅ | NOVEDAD_ENUNCIADO | fail | | | False |
+**Teorema (fuente):** Z_n cubierto por 15 cuárticas, 9 séxticas, 32 ócticas, 12 décicas + casos intermedios de cuárticas (5R_4 iff 8∤n, 7R_4 iff 16∤n).
 
-> *Fidelity column: "error" = JSON parse error (LLM judge response format), "fail" = judge found mismatch. Veredicto and D1/D2 columns for user to fill.*
-
----
-
-## Paper 1 — 1609.02090v1 (retracted) ✅
-
-### A. Original Statement
-
-**Withdrawal comment:** "Main results originally proved in Some Problems of Partitio Numerorum (VIII) by Hardy & Littlewood."  
-**Known duplicator:** Hardy & Littlewood, Partitio Numerorum VIII — γ(4)=15 por método analítico; el retirado lo reproduce con métodos elementales.  
-**Target:** `\label{EvenPowers}` — Z_n covered by 15 quartics, 9 sextics, 32 octics, 12 decics.
-
-### B. Generated Formalization (1046 bytes)
-
+**Código Lean (1046 bytes):**
 ```lean
 import Mathlib
 
@@ -53,30 +27,20 @@ theorem evenPowersCover (n : ℕ) (hn : n > 0) :
   sorry
 ```
 
-**Veredicto de fidelidad:** [ ] fiel / [ ] debilitado / [ ] incorrecto
+**Definiciones a revisar:**
+- `powers n k` = conjunto de k-ésimas potencias en ZMod n. **¿Es la definición estándar?** ✅ Sí: `{x | ∃ y, x = y^k}`.
+- `sumset S m` = m-fold sumset (suma de m elementos de S). **¿Correcto?** ✅ Sí, usa Fin m y suma finita.
+- **Faltan:** los casos intermedios de cuárticas (5R_4 iff 8∤n, 7R_4 iff 16∤n) — Qwen los omitió.
 
-### C. Mathlib Match (D1 formal)
-
-*(Leandex — to fill)*
-
-### D. D1 Informal (TheoremSearch)
-
-*(to fill)*
-
-**Veredicto pipeline:** `NOVEDAD_ENUNCIADO` — no match found in Mathlib or arXiv.
+**Tu veredicto de fidelidad:** [ ] ✅ fiel / [ ] ⚠️ aproximación (faltan casos intermedios) / [ ] ❌ incorrecto
 
 ---
 
-## Paper 2 — 1207.0631v1 (retracted) ✅
+## PAPER 2 — 1207.0631v1 (retracted) ✅ CONOCIDO_LITERATURA
 
-### A. Original Statement
+**Teorema (fuente):** Matriz A no escalar: Σc_i = tr(A) ↔ A es similar a matriz con diagonal (c_1,...,c_n). Teorema de Fillmore (1969).
 
-**Withdrawal comment:** "Result already published with a similar proof."  
-**Known duplicator:** Fillmore (1969).  
-**Target:** `\label{maintheo}` — non-scalar matrix A: trace equality iff similar to matrix with given diagonal.
-
-### B. Generated Formalization (343 bytes)
-
+**Código Lean (343 bytes):**
 ```lean
 import Mathlib
 
@@ -88,30 +52,29 @@ theorem matrix_diagonal_similarity_equivalence {n : ℕ} {K : Type*} [Field K]
   sorry
 ```
 
-**Veredicto de fidelidad:** [ ] fiel / [ ] debilitado / [ ] incorrecto
+**Definiciones a revisar:**
+- No hay definiciones auxiliares — el teorema va directo.
+- `hA : ¬ ∃ (k : K), A = k • 1` = "A no es escalar". **¿Correcto?** ✅ Sí.
+- `Matrix.IsSimilar A B` = ¿existe en Mathlib? Verificar: `Matrix.IsSimilar` está en `Mathlib/LinearAlgebra/Matrix/Similar`. ✅
 
-### C. Mathlib Match (D1 formal)
+**🎯 CASO ESTRELLA — D1 match:**
+- **Paper matcheado:** arXiv:1804.02140 — "Sums and products of square-zero matrices" (2018)
+- **Similitud:** 0.706
+- **Juez LLM:** "equivalent" (confidence 0.95)
+- **Razonamiento:** "Both statements assert the same condition for similarity to a matrix with a given diagonal: the sum of diagonal entries must equal the trace of the matrix, for any non-scalar matrix over a field."
 
-*(to fill)*
+**Análisis:** El match NO es Fillmore (1969) directo, es un paper de 2018 que enuncia el mismo teorema. ¿Es un verdadero positivo? **Sí** — el teorema ES conocido en la literatura. El pipeline lo detectó correctamente aunque por una referencia indirecta (no la canónica). Para el paper, esto cuenta como: "D1 CI encontró un enunciado equivalente en la literatura (arXiv:1804.02140), confirmando que el resultado era conocido."
 
-### D. D1 Informal (TheoremSearch)
-
-**LLM Judge:** `equivalent` — TheoremSearch found a paper with the same statement.
-
-**Veredicto pipeline:** `CONOCIDO_LITERATURA` — equivalent result found in arXiv.
+**Tu veredicto de fidelidad:** [ ] ✅ fiel / [ ] ⚠️ / [ ] ❌  
+**Tu veredicto del match:** [ ] Verdadero positivo (es el teorema de Fillmore) / [ ] Match correcto pero referencia indirecta / [ ] Falso positivo
 
 ---
 
-## Paper 3 — 1212.0196v1 (retracted) ✅
+## PAPER 3 — 1212.0196v1 (retracted) ✅ NOVEDAD_ENUNCIADO
 
-### A. Original Statement
+**Teorema (fuente):** m = ∏ p_i con p_i ≡ 3 mod 8, Legendre symbols = 1 ⇒ m no es número congruente.
 
-**Withdrawal comment:** "Corollary of a well-known result by Monsky."  
-**Known duplicator:** Monsky (congruent numbers).  
-**Target:** `\label{cor:main}` — m = product of primes ≡ 3 mod 8 with Legendre symbols = 1 ⇒ m non-congruent.
-
-### B. Generated Formalization (438 bytes)
-
+**Código Lean (438 bytes):**
 ```lean
 import Mathlib
 
@@ -126,202 +89,209 @@ theorem non_congruent_number_criterion (k : ℕ) (p : Fin k → ℕ)
   sorry
 ```
 
-**Veredicto de fidelidad:** [ ] fiel / [ ] debilitado / [ ] incorrecto
+**Definiciones a revisar:**
+- `IsCongruentNumber n` = ∃ triángulo rectángulo racional con área n. **¿Correcto?** ✅ La definición estándar es exactamente esta: ∃ a,b,c ∈ ℚ⁺, a²+b²=c², ab/2 = n.
+- `jacobiSym` = símbolo de Jacobi. **¿Está en Mathlib?** Sí, `jacobiSym` en `NumberTheory/LegendreSymbol/JacobiSymbol`. ✅
 
-### C. Mathlib Match (D1 formal)
-
-*(to fill)*
-
-### D. D1 Informal (TheoremSearch)
-
-*(to fill)*
-
-**Veredicto pipeline:** `NOVEDAD_ENUNCIADO` — no match found.
+**Tu veredicto de fidelidad:** [ ] ✅ fiel / [ ] ⚠️ / [ ] ❌
 
 ---
 
-## Paper 4 — 1004.3381v1 (retracted) ❌
+## PAPER 4 — 1004.3381v1 (retracted) ✅ NOVEDAD_ENUNCIADO (recuperado)
 
-### A. Original Statement
+**Teorema (fuente):** Conjunto de rectángulos con largest independent set de tamaño m ⇒ se pueden cortar con ≤ c·(2m+1)² líneas axis-parallel.
 
-**Withdrawal comment:** "Most results already known (Gyárfás & Lehel, 1970)."  
-**Known duplicator:** Gyárfás & Lehel — d-separated interval piercing.  
-**Target:** Rectangle slicing bound f(m) ≤ c·(2m+1)².
-
-### B. Generated Formalization
-
-**Status:** ❌ FORMALIZATION_FAILED — API error `[Errno 22] Invalid argument` (prompt too long for API). Partial .lean generated (1234 bytes) but not compiled.
-
+**Código Lean (1224 bytes):**
 ```lean
 import Mathlib
 
 structure Rectangle where
   x1 : ℝ; x2 : ℝ; y1 : ℝ; y2 : ℝ
-  hx : x1 ≤ x2; hy : y1 ≤ y2
+  hx : x1 < x2; hy : y1 < y2
+
+def rectsDisjoint (r1 r2 : Rectangle) : Prop :=
+  r1.x2 < r2.x1 ∨ r2.x2 < r1.x1 ∨ r1.y2 < r2.y1 ∨ r2.y2 < r1.y1
 
 inductive AxisParallelLine where
   | vertical : ℝ → AxisParallelLine
   | horizontal : ℝ → AxisParallelLine
+
+def lineIntersectsRect (l : AxisParallelLine) (r : Rectangle) : Prop :=
+  match l with
+  | AxisParallelLine.vertical a => r.x1 ≤ a ∧ a ≤ r.x2
+  | AxisParallelLine.horizontal b => r.y1 ≤ b ∧ b ≤ r.y2
+
+def isIndependentSet (S : Finset Rectangle) : Prop :=
+  ∀ r1 ∈ S, ∀ r2 ∈ S, r1 ≠ r2 → rectsDisjoint r1 r2
+
+theorem rectangle_slicing_bound :
+  ∃ c : ℝ, ∀ (R : Finset Rectangle) (m : ℕ),
+  (∀ S : Finset Rectangle, S ⊆ R → isIndependentSet S → S.card ≤ m) →
+  (∃ S : Finset Rectangle, S ⊆ R ∧ isIndependentSet S ∧ S.card = m) →
+  ∃ (lines : Finset AxisParallelLine),
+    (lines.card : ℝ) ≤ c * (2 * (m : ℝ) + 1) ^ 2 ∧
+    ∀ r ∈ R, ∃ l ∈ lines, lineIntersectsRect l r := by
+  sorry
 ```
 
-**Veredicto de fidelidad:** [ ] N/A (no compiló)
+**Definiciones a revisar:**
+- `Rectangle` con `x1 < x2, y1 < y2`. **¿Correcto?** ✅ Rectangle no degenerado (lados positivos).
+- `rectsDisjoint` = disjuntos si uno está completamente a la derecha/izquierda/arriba/abajo del otro. **¿Correcto?** ✅ Definición estándar de rectángulos axis-aligned disjuntos.
+- `AxisParallelLine` = línea vertical u horizontal. **¿Correcto?** ✅ Inductivo con vertical y horizontal.
+- `lineIntersectsRect` = la línea cruza el rectángulo. **¿Correcto?** ✅ Para vertical: x entre x1 y x2; para horizontal: y entre y1 y y2.
+- `isIndependentSet` = conjunto donde todo par es disjunto. **¿Correcto?** ✅ Definición estándar de conjunto independiente en geometría.
 
-**Notas:** El enunciado es muy largo con definiciones por casos anidadas. Qwen API rechazó el prompt por tamaño.
+**Tu veredicto de fidelidad:** [ ] ✅ fiel / [ ] ⚠️ / [ ] ❌
 
 ---
 
-## Paper 5 — math/0604362v1 (retracted) ❌
+## PAPER 8 — 1101.3720v1 (control) ✅ NOVEDAD_ENUNCIADO (recuperado)
 
-### A. Original Statement
+**Teorema (fuente):** B_ε(N) = {binary m < N: θ_m < m^{1/2+ε}}. Cotas asintóticas: Ω(N^{1/2}) para ε<1/2, O(N^{1/2+ε}) para ε<1/6, O(N/log²N) para ε<1/2.
 
-**Withdrawal comment:** "Result was previously known."  
-**Known duplicator:** Unknown — possibly LPW.  
-**Target:** `\label{thm:spectral_lowerbound}` — d(n) ≥ ½|λ_i|ⁿ.
-
-### B. Generated Formalization
-
-**Status:** ❌ FORMALIZATION_FAILED — compilation error. Partial .lean (1735 bytes) with definitions for `IsStochastic`, `IsIrreducibleChain`, etc. Error: `_root_.IsIrreducibleChain` — name resolution issue.
-
+**Código Lean (947 bytes):**
 ```lean
 import Mathlib
 
-variable {α : Type*} [Fintype α] [DecidableEq α] [Nonempty α]
+def theta (m : ℕ) : ℝ := sorry
 
-def IsStochastic (P : Matrix α α ℝ) := ...
-def IsIrreducibleChain (P : Matrix α α ℝ) := ...
-def totalVariationDistance (P : Matrix α α ℝ) (π : α → ℝ) (n : ℕ) : ℝ := ...
+def B (ε N : ℝ) : Set ℕ :=
+  {m : ℕ | (m : ℝ) < N ∧ theta m < (m : ℝ) ^ (1/2 + ε)}
+
+theorem B_asymptotics :
+  (∀ ε > 0, ε < 1/2 → ∃ C N₀, ∀ N ≥ N₀, 
+    (B ε N).toFinset.card ≥ C * Real.sqrt N) ∧
+  (∀ ε > 0, ε < 1/6 → ∃ C N₀, ∀ N ≥ N₀,
+    (B ε N).toFinset.card ≤ C * N ^ (1/2 + ε)) ∧
+  (∀ ε > 0, ε < 1/2 → ∃ C N₀, ∀ N ≥ N₀,
+    (B ε N).toFinset.card ≤ C * N / ((Real.log N) ^ 2)) := by
+  sorry
 ```
 
-**Veredicto de fidelidad:** [ ] N/A (no compiló)
+**Definiciones a revisar:**
+- `theta m` = **¿definida?** ❌ Está como `:= sorry` — Qwen dejó la definición de la función θ sin especificar. La función θ_m (medida de equisdistribución de los primeros m dígitos binarios) es el corazón del paper original.
+- `B ε N` = {m < N : θ_m < m^{1/2+ε}}. **¿Correcto?** ✅ La definición es correcta, pero depende de `theta` que está sin definir.
+- Las cotas asintóticas están correctamente expresadas como `∀ ε > 0, ε < umbral → ∃ C N₀, ∀ N ≥ N₀, |B| ⋚ C · f(N)`.
+
+**⚠️ ALERTA:** `theta` está sin definir. Esto es un placeholder. El teorema está enunciado correctamente pero la definición central falta. ¿Es aceptable para statement-only? Depende de tu criterio — el enunciado del teorema es correcto pero la definición auxiliar es un agujero.
+
+**Tu veredicto de fidelidad:** [ ] ✅ fiel (statement-only: el teorema está bien, la def es aceptable) / [ ] ⚠️ aproximación (theta sin definir) / [ ] ❌ incorrecto
 
 ---
 
-## Paper 6 — 1501.01654v1 (control) ❌
+## PAPER 9 — 0904.1783v3 (control) ✅ NOVEDAD_ENUNCIADO
 
-### A. Original Statement
+**Teorema (fuente):** P es poliedro cerrado ⇔ ∃ R, P finitos, 0 ∉ R: P = {Rρ + Pσ | ρ≥0, σ≥0, Σσ_i=1}.
 
-**Paired with:** 1609.02090v1  
-**Target:** Almost universal quadratic forms — very long theorem with nested case enumeration.
-
-### B. Generated Formalization
-
-**Status:** ❌ FORMALIZATION_FAILED — API error `[Errno 22] Invalid argument`. Enunciado extremadamente largo (4 niveles de casos anidados).
-
----
-
-## Paper 7 — 1101.3431v2 (control) ❌
-
-### A. Original Statement
-
-**Paired with:** 1207.0631v1  
-**Target:** Mean payoff game theorem.
-
-### B. Generated Formalization
-
-**Status:** ❌ FORMALIZATION_FAILED — API error `[Errno 22] Invalid argument`.
-
----
-
-## Paper 8 — 1101.3720v1 (control) ❌
-
-### A. Original Statement
-
-**Paired with:** 1212.0196v1  
-**Target:** Binary cyclotomic polynomials.
-
-### B. Generated Formalization
-
-**Status:** ❌ FORMALIZATION_FAILED — API error `[Errno 22] Invalid argument`.
-
----
-
-## Paper 9 — 0904.1783v3 (control) ✅
-
-### A. Original Statement
-
-**Paired with:** 1004.3381v1  
-**Target:** `\label{thm:minkowski-weyl}` — Polyhedron representation.
-
-### B. Generated Formalization (1281 bytes)
-
+**Código Lean (1281 bytes):**
 ```lean
 import Mathlib
 
 variable {n : ℕ}
 
 def IsClosedPolyhedron (S : Set (Fin n → ℝ)) : Prop :=
-  ∃ (m : ℕ), ∃ (H : Fin m → (Fin n → ℝ) → ℝ), (∀ i, IsLinear ℝ (H i)) ∧ ...
+  ∃ (m : ℕ), ∃ (H : Fin m → (Fin n → ℝ) → ℝ), (∀ i, IsLinear ℝ (H i)) ∧
+  S = ⋂ i, {x | H i x ≤ 0}
 
-theorem minkowski_weyl : True := by
+def genPolyhedron (r p : ℕ) (R : Fin r → Fin n → ℝ) (P : Fin p → Fin n → ℝ) : 
+  Set (Fin n → ℝ) :=
+  {x | ∃ (ρ : Fin r → ℝ) (σ : Fin p → ℝ), 
+    (∀ i, ρ i ≥ 0) ∧ (∀ j, σ j ≥ 0) ∧ (∑ j, σ j = 1) ∧ 
+    x = (∑ i, ρ i • R i) + (∑ j, σ j • P j)}
+
+theorem minkowski_weyl_representation (r p : ℕ) (R : Fin r → Fin n → ℝ) 
+  (P : Fin p → Fin n → ℝ) (hR : ∀ i, R i ≠ 0) :
+  IsClosedPolyhedron (genPolyhedron r p R P) := by
   sorry
 ```
 
-**Veredicto de fidelidad:** [ ] fiel / [ ] debilitado / [ ] incorrecto
+**Definiciones a revisar:**
+- `IsClosedPolyhedron` = intersección finita de semiespacios cerrados (H_i(x) ≤ 0). **¿Correcto?** ✅ Definición estándar de poliedro (Minkowski-Weyl: equivalentemente, conjunto de combinaciones convexas de P más combinaciones cónicas de R).
+- `genPolyhedron` = generado por rayos R y puntos P. **¿Correcto?** ✅ ρ_i ≥ 0 (rayos), σ_j ≥ 0, Σσ_j = 1 (combinación convexa de puntos). La suma ponderada es `∑ρ_i·R_i + ∑σ_j·P_j`.
+- `hR : ∀ i, R i ≠ 0` = **¿Coincide con "0 ∉ R"?** ✅ Sí, todos los rayos son no nulos.
+- **Dirección del teorema:** Qwen enuncia `IsClosedPolyhedron (genPolyhedron ...)` = "el conjunto generado es un poliedro cerrado". La fuente dice la equivalencia completa (⇔). Qwen da solo una dirección (⇒). **¿Es aceptable?** Depende de tu criterio.
 
-### C. Mathlib Match (D1 formal)
-
-*(to fill)*
-
-### D. D1 Informal (TheoremSearch)
-
-*(to fill)*
-
-**Veredicto pipeline:** `NOVEDAD_ENUNCIADO`.
+**Tu veredicto de fidelidad:** [ ] ✅ fiel / [ ] ⚠️ aproximación (falta la dirección ⇐) / [ ] ❌ incorrecto
 
 ---
 
-## Paper 10 — math/0504586v2 (control) ✅
+## PAPER 10 — math/0504586v2 (control) ✅ NOVEDAD_ENUNCIADO
 
-### A. Original Statement
+**Teorema (fuente):** Para cualquier grafo G: Ψ_p(C_t occurs for every t)=1 si p>p_c, y Ψ_p(¬C_t occurs for every t)=1 si p<p_c. Noise sensitivity de percolación crítica.
 
-**Paired with:** math/0604362v1  
-**Target:** `\label{pr:noncrit}` — Percolation noise sensitivity.
-
-### B. Generated Formalization (1285 bytes)
-
+**Código Lean (1285 bytes):**
 ```lean
 import Mathlib
 
 open MeasureTheory
 
-def PercolationModel (G : Type*) [SimpleGraph G] := ...
-def ProbPercolation (p : ℝ) (event : Set (∀ e : G.edgeSet, Bool)) : ℝ := ...
+def PercolationModel (G : Type*) [SimpleGraph G] [Fintype G] :=
+  {ω : G.edgeSet → Bool // True}
+
+def PercolationEvent (G : Type*) [SimpleGraph G] [Fintype G] (t : ℝ) : 
+  Set (PercolationModel G) :=
+  {ω | True}
+
+def probMeasure (G : Type*) [SimpleGraph G] [Fintype G] (p : ℝ) 
+  (hp : 0 ≤ p ∧ p ≤ 1) : 
+  MeasureTheory.Measure (PercolationModel G) :=
+  MeasureTheory.Measure.dirac ⟨λ _ => false, trivial⟩
+
+theorem noise_sensitivity_percolation (G : Type*) [SimpleGraph G] [Fintype G]
+  (p : ℝ) (hp : 0 ≤ p ∧ p ≤ 1) (pc : ℝ) :
+  p > pc → (∀ t : ℝ, MeasureTheory.volume {ω | True} = 1) := by
+  sorry
 ```
 
-**Veredicto de fidelidad:** [ ] fiel / [ ] debilitado / [ ] incorrecto  
-**LLM Judge:** `fail` — "The Lean code defines a framework but doesn't state the proposition from the LaTeX."
+**Definiciones a revisar:**
+- `PercolationModel G` = espacio de configuraciones de aristas (Bool por arista). **¿Correcto?** ✅ La definición de percolación de aristas: cada arista está abierta (true) o cerrada (false).
+- `PercolationEvent G t` = placeholder (`{ω | True}` = todo el espacio). **⚠️** Qwen no definió C_t (el evento de cruce a escala t). La definición real de C_t es compleja (existencia de camino abierto que cruza una caja de lado t).
+- `probMeasure` = placeholder (medida de Dirac en la configuración toda cerrada). **❌** Esto no es una medida de percolación Bernoulli(p). La medida real es ∏_e p^{ω_e} (1-p)^{1-ω_e}.
+- El `theorem` mismo es un placeholder: `∀ t, volume {ω | True} = 1` es trivialmente cierto (la medida del espacio total es 1).
 
-### C. Mathlib Match (D1 formal)
+**⚠️ ALERTA:** Este es el caso más grave de placeholder. Ni la medida ni los eventos están correctamente definidos. El teorema enunciado es trivial. Qwen no logró capturar la sustancia del enunciado.
 
-*(to fill)*
-
-### D. D1 Informal (TheoremSearch)
-
-*(to fill)*
-
-**Veredicto pipeline:** `NOVEDAD_ENUNCIADO`.
+**Tu veredicto de fidelidad:** [ ] ⚠️ aproximación severa / [ ] ❌ incorrecto (definiciones placeholder, teorema trivializado)
 
 ---
 
-## Final Comparative Table (for user to fill)
+## TABLA FINAL — Para tu sentencia
 
-| Paper | Fidelidad formalización | Match formal (D1 CF) | ¿Duplicador en D1 CI? | Veredicto final |
-|-------|------------------------|---------------------|----------------------|-----------------|
-| 1609.02090v1 (retracted) | [ ] fiel / [ ] deb / [ ] inc | | | |
-| 1207.0631v1 (retracted) | [ ] fiel / [ ] deb / [ ] inc | | | |
-| 1212.0196v1 (retracted) | [ ] fiel / [ ] deb / [ ] inc | | | |
-| 1004.3381v1 (retracted) | N/A | N/A | N/A | |
-| math/0604362v1 (retracted) | N/A | N/A | N/A | |
-| 1501.01654v1 (control) | N/A | N/A | N/A | |
-| 1101.3431v2 (control) | N/A | N/A | N/A | |
-| 1101.3720v1 (control) | N/A | N/A | N/A | |
-| 0904.1783v3 (control) | [ ] fiel / [ ] deb / [ ] inc | | | |
-| math/0504586v2 (control) | [ ] fiel / [ ] deb / [ ] inc | | | |
+| # | Paper | Rol | Pipeline | Defs correctas? | Match D1 correcto? | Tu veredicto final |
+|---|-------|-----|----------|:---------------:|:------------------:|-------------------|
+| 1 | 1609.02090v1 | retracted | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
+| 2 | 1207.0631v1 | retracted | CONOCIDO_LITERATURA | [ ] ✅ [ ] ⚠️ [ ] ❌ | [ ] VP [ ] Indirecto | |
+| 3 | 1212.0196v1 | retracted | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
+| 4 | 1004.3381v1 | retracted | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
+| 5 | math/0604362v1 | retracted | FORMALIZATION_FAILED | — | — | — |
+| 6 | 1501.01654v1 | control | FORMALIZATION_FAILED | — | — | — |
+| 7 | 1101.3431v2 | control | FORMALIZATION_FAILED | — | — | — |
+| 8 | 1101.3720v1 | control | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
+| 9 | 0904.1783v3 | control | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
+| 10 | math/0504586v2 | control | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
+
+**Nota sobre los 3 fallos:**
+- Paper 5 (math/0604362v1): **Fallo de COMPILACIÓN** — `IsIrreducible already declared`, `Complex.abs unknown`. Dato sobre Qwen (generó código con errores de nombre).
+- Papers 6-7 (1501.01654v1, 1101.3431v2): **Fallo de API TIMEOUT** — enunciados extremadamente largos (4 niveles de casos anidados) exceden límite efectivo de Qwen. Ruido de infraestructura, no dice nada del modelo.
 
 ---
 
-## Notes
+## Lo que yo puedo afirmar con seguridad
 
-- **5/10 API failures** caused by prompt length (`[Errno 22] Invalid argument`). The 4 controls with long target_theorems (1501, 1101.3431, 1101.3720) and paper 4 exceed Qwen's input limit. Mitigation: truncate theorem to core statement, or use model with larger context window.
-- **Fidelity JSON errors** are parsing failures in `check_fidelity` — DeepSeek v4 Flash returns `reasoning_content` instead of `content`. The fidelity verdicts are unreliable. Mitigation: fix JSON extraction or use different judge model.
-- **Veredictos** are pipeline-generated (D1/D2). User must review and fill the comparative table.
+| Afirmación | Confianza |
+|-----------|:---------:|
+| Paper 1: `powers` y `sumset` son definiciones correctas | ✅ Alta |
+| Paper 2: `¬∃k, A=k·1` es "no escalar" correcto | ✅ Alta |
+| Paper 2: D1 match NO es Fillmore directo, es arXiv:1804.02140 | ✅ Certeza |
+| Paper 3: `IsCongruentNumber` es la definición estándar | ✅ Alta |
+| Paper 4: Todas las definiciones geométricas son correctas | ✅ Alta |
+| Paper 8: `theta` está sin definir (placeholder) | ✅ Certeza |
+| Paper 9: Solo da una dirección del teorema (⇒, falta ⇐) | ✅ Certeza |
+| Paper 10: Definiciones placeholder, teorema trivializado | ✅ Certeza |
+
+**Lo que requiere tu ojo matemático:**
+- Paper 1: ¿La omisión de los casos intermedios (5R_4, 7R_4) invalida el enunciado?
+- Paper 3: ¿`(1/2 : ℚ)*a*b = (n : ℚ)` es exactamente área = n para triángulo racional? (Sí, pero verificá)
+- Paper 4: ¿`x1 < x2` vs `x1 ≤ x2` para rectángulos? (Qwen usó `<`, la fuente no especifica)
+- Paper 9: ¿La dirección única es suficiente o necesitás la equivalencia?
+- Paper 10: ¿Esto cuenta como formalización o es placeholder total?
