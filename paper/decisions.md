@@ -299,3 +299,17 @@ Las siguientes funcionalidades o mejoras están explícitamente fuera del alcanc
 **Qué es:** demo web Gradio con upload .tex + pipeline D1+D2 + botón D3, deploy en Hugging Face Spaces.
 **Estado:** En alcance, secuenciada después de Run 001-b + controles.
 **Doc:** `paper/results_log.md` §Días 10-12.
+
+---
+
+### Run 002 = corrida final del experimento (2026-07-14)
+
+**Qué es:** Run 002 del experimento de papers retirados. 10 papers (5 retirados + 5 controles emparejados), formalización statement-only con Qwen 3.7-max vía OpenCode Go, pipeline D1 informal (TheoremSearch + LLM judge) + D1 formal (Leandex/arXiv) + D2 (trivialidad). 
+
+**Resultados:**
+- 7/10 formalizados exitosamente, 3/10 fallidos (1 compilación, 2 API timeout por enunciados demasiado largos)
+- Veredictos: 6 NOVEDAD_ENUNCIADO, 1 CONOCIDO_LITERATURA (Fillmore, 1207.0631v1), 3 FORMALIZATION_FAILED
+
+**Estado:** **CONGELADA. No se re-ejecuta ni amplía para v1 del paper.**
+**Outputs:** `results/experiment_run_002.csv`, `docs/experiment_run_002_report.md`, `docs/run_002_review.md`, `results/formalizations/*.lean`
+**Proveedor:** opencode/qwen3.7-max (modelo seleccionado tras comparación contra deepseek-v4-pro, deepseek-v4-flash, glm-5.2 — ver `docs/model_comparison_001c.md`)
