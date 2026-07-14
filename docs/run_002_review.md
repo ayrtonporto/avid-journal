@@ -329,19 +329,23 @@ theorem noise_sensitivity_percolation (G : Type*) [SimpleGraph G] [Fintype G]
 
 ---
 
-## TABLA FINAL
+## TABLA FINAL — VEREDICTOS DEL AUTOR
 
-| # | Paper | Rol | Pipeline | LaTeX → Lean | Match D1 | Tu veredicto |
-|---|-------|-----|----------|:------------:|:--------:|-------------|
-| 1 | 1609.02090v1 | ret | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
-| 2 | 1207.0631v1 | ret | CONOCIDO_LITERATURA | [ ] ✅ [ ] ⚠️ [ ] ❌ | [ ] VP [ ] Ind | |
-| 3 | 1212.0196v1 | ret | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
-| 4 | 1004.3381v1 | ret | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
-| 5 | math/0604362v1 | ret | FORMALIZATION_FAILED | — | — | — |
-| 6 | 1501.01654v1 | ctrl | FORMALIZATION_FAILED | — | — | — |
-| 7 | 1101.3431v2 | ctrl | FORMALIZATION_FAILED | — | — | — |
-| 8 | 1101.3720v1 | ctrl | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
-| 9 | 0904.1783v3 | ctrl | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
-| 10 | math/0504586v2 | ctrl | NOVEDAD_ENUNCIADO | [ ] ✅ [ ] ⚠️ [ ] ❌ | — | |
+| # | Paper | Rol | Pipeline | Fidelidad LaTeX→Lean | Match D1 | Veredicto final |
+|---|-------|-----|----------|:---------------------:|:--------:|-----------------|
+| 1 | 1609.02090v1 | ret | NOVEDAD_ENUNCIADO | ✅ Fiel | — | **Fiel.** Omite casos intermedios pero el núcleo del teorema está correcto. El enunciado es muy específico (γ(k) para 4 valores concretos), difícil de encontrar por un pipeline de novedad — entendible que haya pasado como NOVEDAD a pesar de ser un retirado. |
+| 2 | 1207.0631v1 | ret | CONOCIDO_LITERATURA | ✅ Fiel | VP indirecto | **Fiel.** Teorema bien formalizado. El pipeline encontró arXiv:1804.02140 (2018), que es posterior al retirado (2012) y cita a Fillmore (1969) de pasada. No es el match ideal (Fillmore directo) pero es un verdadero positivo: el teorema ES conocido. AViD juzga como si fueran nuevos — el pipeline acertó aunque por referencia indirecta. |
+| 3 | 1212.0196v1 | ret | NOVEDAD_ENUNCIADO | ✅ Fiel | — | **Fiel.** Traducción correcta. El pipeline no encontró el paper original de Monsky — veredicto NOVEDAD_ENUNCIADO confirmed. |
+| 4 | 1004.3381v1 | ret | NOVEDAD_ENUNCIADO | ✅ Fiel | — | **Fiel.** Todas las definiciones geométricas (Rectangle, rectsDisjoint, AxisParallelLine, isIndependentSet) correctas. |
+| 5 | math/0604362v1 | ret | FORMALIZATION_FAILED | — | — | Fallo de compilación (IsIrreducible duplicado, Complex.abs no encontrado). Dato sobre Qwen. |
+| 6 | 1501.01654v1 | ctrl | FORMALIZATION_FAILED | — | — | API timeout (enunciado extremadamente largo). Ruido de infraestructura. |
+| 7 | 1101.3431v2 | ctrl | FORMALIZATION_FAILED | — | — | API timeout. Ruido de infraestructura. |
+| 8 | 1101.3720v1 | ctrl | NOVEDAD_ENUNCIADO | ❌ Incorrecto | — | **Mal traducido.** `theta := sorry` en una definición es inaceptable — la función θ_m es el corazón del paper. El teorema está enunciado pero la definición central es un placeholder. |
+| 9 | 0904.1783v3 | ctrl | NOVEDAD_ENUNCIADO | ⚠️ Aproximación | — | **Falta la dirección ⇐.** Qwen solo prueba ⇒ (genPolyhedron → IsClosedPolyhedron). El teorema original es una equivalencia (⇔). |
+| 10 | math/0504586v2 | ctrl | NOVEDAD_ENUNCIADO | ❌ Incorrecto | — | **Pésimo.** Definiciones placeholder (probMeasure = Dirac, PercolationEvent = {ω\|True}). El teorema enunciado es trivialmente cierto (volume del espacio total = 1). No captura la sustancia del enunciado original. |
 
-**3 fallos:** Paper 5 = compilación (dato sobre Qwen). Papers 6-7 = API timeout (ruido de infraestructura).
+## Notas sobre los fallos
+
+Los 3 papers sin formalizar no son iguales:
+- **Paper 5**: fallo de COMPILACIÓN — Qwen generó código con error de nombre (`IsIrreducible` duplicado, `Complex.abs` no encontrado). Es un dato sobre la capacidad del modelo.
+- **Papers 6 y 7**: fallo de API TIMEOUT — los enunciados son extremadamente largos (4 niveles de casos anidados) y exceden el límite efectivo de Qwen vía OpenCode. Es ruido de infraestructura, no dice nada sobre el modelo.
