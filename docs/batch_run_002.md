@@ -1,7 +1,7 @@
 # Batch Run 002 — Informal Match Formalization
 
 **Date:** 2026-07-05
-**Provider:** opencode (deepseek-v4-flash via verification_loop, 3 rounds/attempt)
+**Provider:** opencode (deepseek-v4-pro via verification_loop, 3 rounds/attempt)
 **Timeout per attempt:** 1200s (20 min, not reached — all failed faster)
 **Max attempts:** 3
 **Papers:** 2 (config/informal_matches.yaml)

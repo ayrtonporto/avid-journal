@@ -474,7 +474,7 @@ Cada hallazgo con su fuente interna exacta y una línea de contexto.
 
 | Hallazgo | Fuente | Contexto |
 |---|---|---|
-| **Autoformalización de papers reales: 0% (0/2)** | `docs/batch_run_002.md:49-56`, `docs/batch_run_003.md:50-58` | DeepSeek no logra formalizar pruebas no triviales de LaTeX a Lean 4, incluso con 6 rondas de feedback. |
+| **Autoformalización de papers reales: 0% (0/2)** | `docs/batch_run_002.md:49-56`, `docs/batch_run_003.md:50-58` | DeepSeek V4 Pro no logra formalizar pruebas no triviales de LaTeX a Lean 4, incluso con 6 rondas de feedback (45 llamadas API, 0 éxitos). **Nota (2026-07-12):** pendiente re-medición opcional con Qwen 3.7-max (ganador del benchmark de enunciados). |
 | **Pipeline de formalización con agentes:** 2 ejemplos funcionando (TinyEvens, AyrtonPortoTesis) | `docs/PROGRESS.md:28` | Con Claude Code agentic, funciona para pruebas simples. Sin medición de tasa sobre corpus grande. |
 | **Formalización vía API no confiable** para C_I Stage B | `docs/scout_d3_informal.md:209-218` | Timeout a 120s. *"La formalización es el cuello de botella. Sin un provider confiable y rápido, el pipeline informal → D3 no es práctico en tiempo real."* |
 
@@ -488,7 +488,7 @@ Cada hallazgo con su fuente interna exacta y una línea de contexto.
 
 | Contradicción | Doc 1 | Doc 2 | Detalle |
 |---|---|---|---|
-| **Modelo usado en batch 002** | `docs/batch_run_002.md:2` dice provider `opencode (deepseek-v4-flash)` | `docs/batch_run_003.md:68` dice que 002 usaba modelo `pro` (implícito) | Batch 002 header dice "deepseek-v4-flash" pero la tabla de comparación en 003 dice "Modelo: pro (implícito)". El header de 002 probablemente es el correcto (flash), y la tabla de 003 tiene un error al caracterizar 002 retroactivamente. |
+| **Modelo usado en batch 002** | `docs/batch_run_002.md:4` decía `deepseek-v4-flash` | `docs/batch_run_003.md:68` decía `pro (implícito)` | **RESUELTA (2026-07-12):** El header de 002 era el erróneo. Ambos batches (002 y 003) usaron deepseek-v4-PRO. Header de 002 corregido. |
 | **Número de oleans en Windows** | `paper/CLAUDE_CODE_BRIEFING.md:88` dice "7871 oleans" | `paper/results_log.md:50` dice "8247 oleans" | `results_log.md` (Día 4, 2026-06-07) reporta 8247. `CLAUDE_CODE_BRIEFING.md` (2026-06-08) dice 7871. Posiblemente Mathlib se actualizó entre días o uno de los dos números es un error de conteo. El número más reciente y medido es 8247. |
 | **Overhead de startup en Windows** | `paper/results_log.md:51` dice "~30 s con OS cache caliente" | `paper/CLAUDE_CODE_BRIEFING.md:46` dice "D2 tarda ~30s por invocación" | Consistente. `paper/decisions.md:176` dice "Overhead de inicio fijo: ~30s/invocación". |
 
