@@ -100,18 +100,18 @@ for i, p in enumerate(papers):
         results = search_theoremsearch(theorem_text[:1000], top_k=10)
         
         top1 = results[0] if results else None
-        row['top1_score'] = round(top1.score, 4) if top1 else 0
+        row['top1_score'] = round(top1.similarity_score, 4) if top1 else 0
         row['top1_title'] = (top1.title or '')[:150] if top1 else ''
         row['top1_arxiv_id'] = (top1.arxiv_id or '') if top1 else ''
         
-        top3 = [round(r.score, 4) for r in results[:3]]
+        top3 = [round(r.similarity_score, 4) for r in results[:3]]
         row['top3_scores'] = json.dumps(top3)
         
         top10 = []
         for r in results[:10]:
             top10.append({
                 'title': (r.title or '')[:100],
-                'score': round(r.score, 4),
+                'score': round(r.similarity_score, 4),
                 'arxiv_id': r.arxiv_id or '',
             })
         row['top10_json'] = json.dumps(top10)
