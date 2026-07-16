@@ -1,0 +1,41 @@
+# Wide Study — Pre-registered Configuration
+# D1-informal only. No formalization in this study.
+# Created: 2026-07-14
+
+description: >
+  Estudio ancho: D1-informal sobre TODO el dataset de retirados y controles
+  (52 papers). Complementa la Run 002 (estudio profundo, pipeline completo,
+  n=10). Este estudio es solo triage: TheoremSearch + LLM judge sobre
+  enunciados LaTeX, sin formalización.
+
+papers: 52  # 26 retracted + 26 controls (from control_candidates.yaml)
+
+# ── Pre-registered thresholds (DO NOT CHANGE after study starts) ──
+thresholds:
+  strong_match:
+    description: "Papers that pass this threshold are candidates for deep stage (formalization)."
+    rule: "(theoremsearch_score >= 0.75) OR (llm_judge_verdict == 'equivalent')"
+    theoremsearch_min_score: 0.75
+    llm_judge_equivalent: true
+
+# ── Pipeline config ──
+pipeline:
+  theoremsearch:
+    top_k: 10
+    auto_exclude_self: true
+  llm_judge:
+    model: deepseek-v4-flash
+    temperature: 0.0
+    top_n_candidates: 3  # judge only top-3 from TheoremSearch
+
+# ── Outputs ──
+outputs:
+  csv: results/wide_study.csv
+  report: docs/wide_study_report.md
+
+# ── Stage gating ──
+# Deep stage (formalization) is a FUTURE separate experiment.
+# This study only produces the candidate list.
+deep_stage:
+  status: not_started
+  condition: "Only papers with strong_match = true, after user review."
