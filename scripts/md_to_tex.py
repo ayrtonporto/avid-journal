@@ -62,8 +62,11 @@ def convert_table(md_table):
         if i == 0:
             latex += "\\hline\n"
     latex += "\\hline\n\\end{tabular}\n"
-    latex += "\\caption{}\n\\label{}\n\\end{table}"
+    latex += f"\\caption{{Table {convert_table.counter}: }}\n\\label{{tab:{convert_table.counter}}}\n\\end{{table}}"
+    convert_table.counter += 1
     return latex
+
+convert_table.counter = 1
 
 def md_to_latex(text):
     """Convert markdown body text to LaTeX."""

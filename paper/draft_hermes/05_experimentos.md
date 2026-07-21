@@ -1,4 +1,4 @@
-# 5. Experimentos
+# Experimentos
 
 Esta sección reporta tres bloques de evaluación, todos de carácter preliminar. El primero describe cómo se construyó el dataset de papers retirados que sirve de ground truth para los experimentos. El segundo presenta un estudio profundo sobre 10 papers con el pipeline D1+D2 completo, incluyendo una auditoría manual de fidelidad de formalización. El tercero presenta un estudio ancho sobre 52 papers usando similitud semántica de enunciados. Los tres bloques comparten una misma metodología: comparar papers retirados de arXiv por duplicación de resultados previos contra papers de control emparejados por categoría y año.
 
@@ -75,8 +75,12 @@ De los 10 papers, 7 fueron formalizados exitosamente y 3 fallaron: uno por error
 
 Sobre los 7 papers formalizados, el pipeline emitió:
 
-- **6 `NOVEDAD_ENUNCIADO`**: el enunciado no fue encontrado en Mathlib ni en la literatura informal.
-- **1 `CONOCIDO_LITERATURA`**: Paper 2 (1207.0631v1, teorema de Fillmore sobre matrices). D1 C_I encontró arXiv:1804.02140 (2018) que trata el mismo teorema. El LLM judge emitió `equivalent` con confianza 0.95. El veredicto es correcto: el teorema de Fillmore es conocido en la literatura desde al menos 1969.
+- **6 `NOVEDAD_ENUNCIADO`**: el enunciado no fue encontrado en Mathlib ni en la literatura informal (Papers 1, 3, 4, 8, 9, 10).
+- **1 `CONOCIDO_LITERATURA`**: Paper 2 (1207.0631v1, teorema de Fillmore sobre matrices). D1 C_I encontró arXiv:1804.02140 (2018) que trata el mismo teorema. El LLM judge emitió `equivalent` con confianza 0.95.
+
+<!-- fuente: results/experiment_run_002.csv:2-3 (veredictos), docs/run_002_verdicts.md:12-19 (Paper 1), :17-21 (Paper 2) -->
+
+De los 4 papers retirados con formalización fiel (Papers 1, 2, 3, 4), el pipeline detectó la no-novedad en 1 caso (Paper 2, vía C_I) y produjo 3 falsos negativos (Papers 1, 3, 4), todos con veredicto `NOVEDAD_ENUNCIADO`. Los 3 falsos negativos se explican por el punto ciego temporal del corpus (L14): los duplicadores de estos papers (Hardy y Littlewood ~1920, Monsky, Gyárfás y Lehel 1970) son anteriores a arXiv y no están indexados en TheoremSearch. Los 3 controles con formalización exitosa (Papers 8, 9, 10) recibieron `NOVEDAD_ENUNCIADO`, pero sus formalizaciones no eran fieles (sección 5.3.4), de modo que el experimento no aporta evidencia sobre falsos positivos en ninguna dirección.
 
 <!-- fuente: results/experiment_run_002.csv:2-3 (veredictos), docs/run_002_verdicts.md:12-19 (Paper 1), :17-21 (Paper 2) -->
 
@@ -109,19 +113,35 @@ El primer autor revisó manualmente cada una de las 7 formalizaciones exitosas, 
 
 ### 5.3.5 Caso de prior art: 1404.0187
 
-El Paper 1 (1609.02090v1, problema de Waring sobre Z_n) es un caso ilustrativo de los límites de D1. El paper fue retirado porque su resultado principal (γ(4) = 15) ya había sido probado por Hardy y Littlewood. Sin embargo, D1 informal no encontró a Hardy y Littlewood en el top 5 de TheoremSearch. Lo que sí encontró fue arXiv:1404.0187 ("Representing Integers as the Sum of Two Squares in the Ring Z_n"), un paper de 2014 sobre exactamente el mismo problema, con score 0.637. El duplicador canónico (Hardy & Littlewood, circa 1920) no aparece porque TheoremSearch indexa arXiv, no la literatura anterior a 1991.
+El Paper 1 (1609.02090v1) contiene dos resultados independientes: el teorema `SquaresZn` (representar enteros como suma de dos cuadrados en Z_n), que el propio paper atribuye explícitamente a [HJL] (arXiv:1404.0187), y el teorema `EvenPowers` (γ(4) = 15), que es el target del experimento tras el re-apuntado. El paper fue retirado porque `EvenPowers` ya había sido probado por Hardy y Littlewood (circa 1920). D1 informal no encontró a Hardy y Littlewood en el top 5 de TheoremSearch. Lo que sí encontró, con score 0.637, fue arXiv:1404.0187, el paper que contiene `SquaresZn`: un resultado que el autor del paper retirado ya citaba como trabajo previo.
 
-<!-- fuente: docs/prior_art_1404.md:1-36 (verificación de prior art), docs/run_002_verdicts.md:12-15 (Paper 1) -->
+<!-- fuente: docs/prior_art_1404.md:1-37 (verificación de prior art, re-target a EvenPowers) -->
 
-Este caso ilustra el punto ciego temporal de D1: el corpus informal cubre arXiv, no la literatura matemática completa. Resultados anteriores a la era de los preprints electrónicos son invisibles para el sistema.
+Este caso ilustra la brecha entre recuperación por similitud e identidad de resultado: el sistema encontró un paper que duplica OTRO teorema del mismo artículo (uno que el autor nunca reclamó como propio), no el resultado por el que el paper fue retirado. Es un hallazgo verdadero pero irrelevante para la pregunta formulada. El duplicador canónico de `EvenPowers` (Hardy & Littlewood, circa 1920) no aparece porque TheoremSearch indexa arXiv, no la literatura anterior a 1991.
 
-<!-- fuente: paper/PAPER_BRIEF.md:192-198 (caso 1404.0187) -->
+### 5.3.6 Modos de falla de la verificación por compilación
+
+La formalización automática introduce un problema que no existe en la verificación manual: un archivo `.lean` puede compilar con `exit 0` sin contener una formalización fiel del teorema original. Durante el desarrollo del sistema se documentaron cinco modos de falla, cada uno motivando una guardia nueva, y cada guardia dejando pasar el siguiente:
+
+1. **Archivo vacío.** Un archivo `.lean` sin declaraciones compila limpiamente. En Run 001, 5 de 5 "formalizaciones" iniciales eran archivos de 0 bytes que pasaban el criterio de éxito original. Solución: guardia anti-vacío (`_has_real_declaration()`), que exige al menos una keyword `theorem`, `lemma` o `def` en el archivo generado.
+
+2. **Definición placeholder.** Una definición como `def CongruentNumber := True` compila, es sustantiva (pasa la guardia anti-vacío), pero no captura la definición matemática. Detectado en el Paper 3 de Run 002 con el modelo DeepSeek. Solución parcial: prompt reforzado que instruye al modelo a no trivializar definiciones.
+
+3. **Definición sustantiva sin el teorema.** Tras el prompt anti-trivialización, el mismo Paper 3 generó una definición correcta de `IsCongruentNumber` (con `∃ a b c`, `a² + b² = c²`, `a*b/2 = n`) pero omitió el enunciado del teorema. El archivo compilaba, la definición era matemáticamente correcta, y el teorema estaba ausente.
+
+4. **`sorry` en definición auxiliar.** Un `sorry` dentro de una definición (`theta m := sorry` en el Paper 8 de Run 002) compila y pasa cualquier guardia sintáctica. La definición es sustantiva (contiene una firma de función), pero su cuerpo es un placeholder. Solución parcial: el criterio de éxito del orquestador rechaza archivos con `has_sorry=True`, pero esto depende de que el verificador detecte el `sorry` en el código generado.
+
+5. **Una sola dirección de una equivalencia.** El Paper 9 de Run 002 formalizó solo la dirección (⇒) de un teorema que en el paper original es un si y solo si (⇔). El archivo compila, la definición es fiel, la dirección demostrada es correcta, pero falta la otra mitad del enunciado.
+
+<!-- fuente: docs/run_002_verdicts.md:32-50 (Papers 8, 9, 10 con problemas de fidelidad), docs/decisions.md:307-317 (Run 002, anotación de fidelidad) -->
+
+Estos cinco peldaños comparten una propiedad: la compilación verifica coherencia, nunca fidelidad semántica. Cada guardia (anti-vacío, anti-sorry, prompt anti-trivialización) cierra una clase de fallo y deja pasar la siguiente porque el problema de fondo (¿el código Lean generado significa lo mismo que el LaTeX original?) no es decidible por medios sintácticos. De ahí que la auditoría manual del autor (sección 5.3.4) sea irreducible: ningún test automático puede garantizar que `def PercolationEvent := {ω | True}` no es una formalización aceptable de "evento de percolación". Conecta con L17.
 
 ## 5.4 Estudio ancho: Wide Study v2
 
 ### 5.4.1 Diseño original y defectos metodológicos (v1)
 
-El objetivo del wide study era evaluar, a escala, si una métrica simple de similitud semántica de enunciados basta para distinguir papers retirados de controles. La primera versión (v1) corrió sobre los 52 papers del dataset (26 retirados + 26 controles), consultando TheoremSearch con el texto del primer teorema de cada paper (truncado a 1000 caracteres) y registrando el top-10 de matches.
+El objetivo del wide study era evaluar, a escala, si una métrica simple de similitud semántica de enunciados basta para distinguir papers retirados de controles. La primera versión (v1) corrió sobre los 52 papers del dataset: 26 retirados y 26 controles, uno por cada par (el primer control asignado según `config/wide_study.yaml`). Se consultó TheoremSearch con el texto del primer teorema de cada paper (truncado a 1000 caracteres) y se registró el top-10 de matches.
 
 <!-- fuente: docs/wide_study_audit.md:1-5, docs/wide_study_audit.md:53-62 (diseño) -->
 
@@ -145,7 +165,7 @@ La versión 2 corrigió ambos defectos:
 
 ### 5.4.3 Resultados (v2)
 
-La v2 se ejecutó sobre los 52 papers originales. Tras filtrado, 37 resultaron evaluables (tenían texto de teorema extraíble y generaron resultados de TheoremSearch distintos de self-match). Los resultados:
+La v2 se ejecutó sobre los 52 papers originales. De ellos, 37 resultaron evaluables (tenían texto de teorema extraíble y generaron resultados de TheoremSearch distintos de self-match) y 15 fueron saltados por falta de entorno de teorema extraíble (`no_theorem_env`). El desglose por rol muestra un sesgo de submuestra: 5 retirados y 10 controles fueron saltados, es decir, los controles tuvieron el doble de probabilidad de ser excluidos. La causa es que los papers de control, seleccionados por categoría y año pero no por disponibilidad de enunciados, incluyen notas cortas, surveys y artículos con entornos no estándar que el extractor no reconoce. Los resultados:
 
 - **7 strong matches** (score ≥ 0.75): 5 retirados y 2 controles.
 - **Mann-Whitney U test** sobre la distribución de similarity scores entre retirados y controles: **p = 0.854**.
@@ -156,7 +176,7 @@ La v2 se ejecutó sobre los 52 papers originales. Tras filtrado, 37 resultaron e
 
 El valor p = 0.854 indica que no hay diferencia estadísticamente significativa entre las distribuciones de scores de similitud de papers retirados y controles. Dicho de otra forma: la similitud semántica de enunciados, medida como embedding coseno contra el índice de TheoremSearch, no permite distinguir un paper que duplica resultados previos de uno que no.
 
-Este es el resultado principal del wide study y es un **resultado negativo**: con la métrica actual y el corpus disponible, el sistema no puede separar retirados de controles a escala. Las razones posibles son múltiples: (a) el withdrawal comment es un proxy ruidoso de ground truth (un paper puede ser retirado por duplicación sin que su enunciado principal sea textualmente cercano al original duplicado); (b) TheoremSearch indexa enunciados modernos de arXiv, no la literatura clásica donde están los duplicadores originales; (c) el texto del primer teorema de un paper no necesariamente es el enunciado duplicado.
+Este es el resultado principal del wide study y es un **resultado negativo**: con la métrica actual y el corpus disponible, el sistema no puede separar retirados de controles a escala. Las razones posibles son múltiples: (a) el withdrawal comment es un proxy ruidoso de ground truth (un paper puede ser retirado por duplicación sin que su enunciado principal sea textualmente cercano al original duplicado); (b) TheoremSearch indexa enunciados modernos de arXiv, no la literatura clásica donde están los duplicadores originales; (c) el texto del primer teorema de un paper no necesariamente es el enunciado duplicado; (d) el sesgo de submuestra documentado (10 controles vs 5 retirados saltados) puede atenuar artificialmente cualquier diferencia real entre los grupos.
 
 <!-- fuente: paper/PAPER_BRIEF.md (interpretación preliminar) -->
 
@@ -174,7 +194,7 @@ Este es el resultado principal del wide study y es un **resultado negativo**: co
 
 1. El pipeline corre de extremo a extremo sobre papers reales, con una tasa de formalización del 70% (7/10) en el estudio profundo, pero esa tasa es engañosamente alta porque los papers fueron seleccionados manualmente entre los más formalizables del dataset.
 
-2. Allí donde el pipeline corre, D1 encuentra matches relevantes en la literatura informal (Paper 2) y no produce falsos positivos (los 4 retirados fieles fueron correctamente clasificados como `NOVEDAD_ENUNCIADO` porque Mathlib no contiene sus enunciados). Pero el punto ciego temporal impide encontrar duplicadores canónicos anteriores a arXiv (caso Hardy & Littlewood).
+2. Sobre los 4 papers retirados con formalización fiel, el pipeline detectó la no-novedad en 1 caso (Paper 2, vía C_I) y produjo 3 falsos negativos (Papers 1, 3, 4). Los falsos negativos se explican por el punto ciego temporal del corpus (L14): los duplicadores de estos papers (Hardy y Littlewood ~1920, Monsky, Gyárfás y Lehel 1970) son anteriores a arXiv. Los 3 controles con formalización exitosa tuvieron formalizaciones no fieles, por lo que el experimento no aporta evidencia sobre falsos positivos.
 
 3. A escala, la señal de novedad se diluye. El wide study no encuentra diferencia entre retirados y controles. Esto puede reflejar una limitación del corpus, una limitación de la métrica de similitud semántica como proxy de novedad, o una combinación de ambas.
 

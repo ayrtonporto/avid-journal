@@ -1,4 +1,4 @@
-# 6. Limitaciones
+# Limitaciones
 
 Las limitaciones de AViD v1 se agrupan en tres categorías: las del framework conceptual (qué mide la métrica y qué no), las de la implementación (qué hace el sistema actual y qué no), y las del diseño experimental (qué nos dicen realmente los números reportados).
 
@@ -46,7 +46,7 @@ Las limitaciones de AViD v1 se agrupan en tres categorías: las del framework co
 
 <!-- fuente: paper/limitations.md L7, docs/PROJECT_STATE.md eval set 26+9 -->
 
-**L8. La medición depende del proceso de formalización.** AViD evalúa la prueba formalizada, no la prueba platónica. Dos formalizaciones distintas del mismo argumento informal podrían dar distancias de Jaccard diferentes. El math filter sobre premisas (Filtro 1 + Filtro 2) reduce este ruido pero no lo elimina.
+**L8. La medición depende del proceso de formalización.** AViD evalúa la prueba formalizada, no la prueba platónica. Dos formalizaciones distintas del mismo argumento informal pueden dar distancias de Jaccard diferentes. El hallazgo de convergencia documentado en §4.1 vuelve esto más tajante: D3 mide distancia entre formalizaciones, y la relación entre esa distancia y la distancia entre las ideas informales originales queda sin establecer. Dos pruebas pueden producir distancia 1.0 porque el formalizador eligió lemas distintos (T09), y pruebas con ideas distintas pueden colapsar porque el formalizador convergió al mismo lema de Mathlib (T07). El math filter sobre premisas (Filtro 1 + Filtro 2) reduce el ruido de formalización dentro de una misma estrategia de prueba pero no resuelve el problema de fondo.
 
 <!-- fuente: paper/limitations.md L8 -->
 

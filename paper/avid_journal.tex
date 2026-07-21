@@ -34,7 +34,7 @@
 \begin{abstract}
 Los sistemas de inteligencia artificial aplicados a la matematica verifican correccion pero no novedad. Un teorema generado automaticamente puede compilar en Lean sin errores y, sin embargo, ser un resultado ya conocido en Mathlib o en la literatura informal. Este articulo presenta AViD Journal, un pipeline que recibe un articulo en LaTeX, formaliza sus teoremas en Lean 4, y emite un veredicto de novedad con grounding formal mediante un arbol de decision en tres dimensiones: D1 (no-existencia previa en corpus formal e informal), D2 (no-trivialidad via tacticas automaticas), y D3 (distancia de Jaccard sobre premisas estructurales). El sistema se evalua de forma preliminar contra tres fuentes de ground truth: un eval set de 24 teoremas hand-curated, un experimento con 10 papers retirados de arXiv por duplicacion, y un estudio ancho sobre 52 papers (26 retirados + 26 controles). D2 alcanza 91.7\% de precision sobre el eval set, D1 C\_F cubre el 100\% de los teoremas no triviales, y D3 produce una escalera de distancias consistente con el juicio humano. El estudio ancho arroja un resultado negativo (Mann-Whitney $p = 0.854$): la similitud semantica de enunciados no basta para separar papers retirados de controles. El articulo documenta 17 limitaciones del framework, la implementacion y el diseno experimental, y propone vias concretas de mejora.
 \end{abstract}
-\section{1. Introducción}
+\section{Introducción}
 
 En febrero de 2026, el sistema Axiom Math presentó como propia una conjetura que ya había sido formulada y nombrada por el matemático André Fel dos años antes. El incidente, cubierto por Scientific American, no fue un caso aislado: ilustra un modo de falla sistemático de los sistemas de inteligencia artificial aplicados a la matemática. Los modelos de lenguaje pueden generar enunciados que compilan, que son correctos, y que sin embargo no son nuevos.
 
@@ -74,7 +74,7 @@ Este artículo presenta AViD Journal (Automated Verification in Demonstrations),
 
 La sección 2 sitúa este trabajo en la intersección de cuatro frentes de investigación. La sección 3 describe el pipeline completo: parser, formalización, corpus de referencia, las tres dimensiones y el árbol de veredictos. La sección 4 valida cada instrumento por separado (D2 contra el eval set, D3 contra pares de calibración). La sección 5 reporta los experimentos con papers retirados y el estudio ancho, ambos como evidencia preliminar. La sección 6 enumera las limitaciones del framework, la implementación y el diseño experimental. La sección 7 cierra con lo construido y lo pendiente.
 
-\section{2. Trabajo relacionado}
+\section{Trabajo relacionado}
 
 El problema de determinar si un teorema es nuevo toca cuatro frentes de investigación que rara vez se cruzan. Esta sección los recorre en orden, desde la infraestructura de búsqueda hasta la novedad bibliométrica, y cierra con una tabla de posicionamiento.
 
@@ -154,15 +154,15 @@ COMPOSE [VERIFICAR] & Predice forward & $\times$ & $\times$ & \checkmark & $\tim
 **AViD** & \checkmark (Mathlib + arXiv + TheoremSearch) & \checkmark (6 tácticas + blacklist) & \checkmark (Jaccard + 2 filtros) & \checkmark & \checkmark (8 veredictos) \\
 \hline
 \end{tabular}
-\caption{}
-\label{}
+\caption{Table 1: }
+\label{tab:1}
 \end{table}
 
 
 La diferencia no está en ninguna celda individual sino en la columna completa: los trabajos previos construyen piezas de infraestructura (búsqueda, formalización, similitud); AViD las ensambla en un pipeline que recibe un paper en LaTeX y devuelve un veredicto de novedad con grounding formal.
 
 
-\section{3. El pipeline AViD}
+\section{El pipeline AViD}
 
 El sistema recibe un archivo \texttt{.tex}, extrae sus bloques matemáticos, los formaliza en Lean 4, y aplica un árbol de decisión en tres dimensiones para emitir un veredicto de novedad. Esta sección describe cada etapa con el detalle necesario para su reproducción conceptual.
 
@@ -334,10 +334,10 @@ El orquestador (\texttt{src/novelty\_v2/orchestrator.py}) implementa el árbol d
 El sistema está implementado en Python 3.11+ y corre sobre Windows 10 nativo. La base de código se organiza en dos módulos: \texttt{src/} contiene el parser original, el orquestador de novedad (\texttt{src/novelty\_v2/}) y las tres dimensiones (D1, D2, D3); \texttt{avid-clean/} contiene una copia del parser y un orquestador de formalización reescrito con abstracción multi-modelo. El árbol de veredictos se ejecuta desde \texttt{src/novelty\_v2/} y es idéntico independientemente de qué orquestador haya formalizado el paper.
 
 
-El proyecto completo cuenta con 167 pruebas superadas y 1 saltada (julio 2026), un dataset de evaluación de 24 teoremas evaluados de 26 planificados más 9 slots pendientes, y un dataset de 33 papers retirados por duplicación con 52 controles emparejados.
+El proyecto completo cuenta con 167 pruebas superadas y 1 saltada (julio 2026), un dataset de evaluación de 24 teoremas evaluados (de 26 planificados, más 9 slots pendientes), y un dataset de 33 papers retirados por duplicación con 52 controles emparejados.
 
 
-\section{4. Validación de instrumentos}
+\section{Validación de instrumentos}
 
 Antes de evaluar el sistema completo contra papers reales (sección 5), esta sección valida cada instrumento por separado contra ground truth conocido: D3 contra pares de calibración con juicio humano, D2 contra el eval set de 24 teoremas, y D1 contra la cobertura del mismo eval set.
 
@@ -360,30 +360,30 @@ T09a vs T09b & genuinely\_different & 0.0 & 1.0 & 0 & 6 \\
 T07 vs T08 (cross-pair) & Control: no relacionados & 0.0 & 1.0 & 0 & 10 \\
 \hline
 \end{tabular}
-\caption{}
-\label{}
+\caption{Table 2: }
+\label{tab:2}
 \end{table}
 
 
 \textbf{Interpretación de la escalera.}
 
-\textbf{T08 (distancia = 0.7222).} Dos pruebas genuinamente distintas de la irracionalidad de raiz de 2 producen una distancia alta. Las 5 premisas compartidas son lemas fundacionales (aritmetica de \texttt{Nat}, \texttt{mul\_comm}, \texttt{eq\_of\_sub\_eq\_zero}); las 13 premisas exclusivas de cada lado capturan las estrategias divergentes (divisibilidad por primos vs. valuacion 2-adica). El umbral theta = 0.5 clasifica correctamente este par como "pruebas distantes".
+\textbf{T08 (distancia = 0.7222).} Dos pruebas genuinamente distintas de la irracionalidad de raíz de 2 producen una distancia alta. Las 5 premisas compartidas son lemas fundacionales (aritmética de \texttt{Nat}, \texttt{mul\_comm}, \texttt{eq\_of\_sub\_eq\_zero}); las 13 premisas exclusivas de cada lado capturan las estrategias divergentes (divisibilidad por primos vs. valuación 2-adica). El umbral theta = 0.5 clasifica correctamente este par como "pruebas distantes".
 
-\textbf{T07 (distancia = 0.50).} Las dos pruebas de la infinitud de primos (Euclides y Euler) quedan exactamente en el umbral. Tras la formalizacion en Lean, ambas colapsaron a la misma invocacion del lema \texttt{Nat.exists\_infinite\_primes}. Con solo 2 premisas totales tras los filtros y 1 compartida, el Jaccard es fragil: pequenos cambios en el comportamiento de los filtros invertirian el veredicto. El juez humano las etiqueto como \texttt{same\_disguised}: enunciados distintos en la fuente LaTeX, identicos en el proof term elaborado. Este par ilustra un fenomeno recurrente en D3: la autoformalizacion tiende a colapsar pruebas conceptualmente distintas hacia el lema de Mathlib mas cercano.
-
-
-\textbf{T09 (distancia = 1.0, interseccion = 0).} Las dos pruebas de la suma de Gauss (induccion con \texttt{sum\_range\_succ} + \texttt{ring} vs. formula cerrada con \texttt{Finset.sum\_range\_id}) no comparten ninguna premisa tras los filtros. Cada lado tiene 6 premisas, todas exclusivas de su estrategia. El juez humano las etiqueto como \texttt{genuinely\_different}, y la distancia maxima refleja correctamente esa diferencia. Este es el resultado esperado tras la reescritura de T09a con induccion (la version anterior usaba el mismo lema \texttt{sum\_range\_id} que T09b y colapsaba).
+\textbf{T07 (distancia = 0.50).} Las dos pruebas de la infinitud de primos (Euclides y Euler) quedan exactamente en el umbral. Tras la formalización en Lean, ambas colapsaron a la misma invocación del lema \texttt{Nat.exists\_infinite\_primes}. Con solo 2 premisas totales tras los filtros y 1 compartida, el Jaccard es frágil: pequeños cambios en el comportamiento de los filtros invertirian el veredicto. El juez humano las etiqueto como \texttt{same\_disguised}: enunciados distintos en la fuente LaTeX, idénticos en el proof term elaborado. Este par ilustra un fenómeno recurrente en D3: la autoformalizacion tiende a colapsar pruebas conceptualmente distintas hacia el lema de Mathlib mas cercano.
 
 
-\textbf{Control negativo (T07 vs. T08).} La distancia entre un teorema de teoria de numeros (infinitud de primos) y uno de analisis (irracionalidad de raiz de 2) es 1.0 con interseccion vacia. Esto confirma que D3 no produce similitud espuria entre teoremas de dominios matematicos distintos.
+\textbf{T09 (distancia = 1.0, intersección = 0).} Las dos pruebas de la suma de Gauss (inducción con \texttt{sum\_range\_succ} + \texttt{ring} vs. formula cerrada con \texttt{Finset.sum\_range\_id}) no comparten ninguna premisa tras los filtros. Cada lado tiene 6 premisas, todas exclusivas de su estrategia. El juez humano las etiqueto como \texttt{genuinely\_different}, y la distancia máxima refleja correctamente esa diferencia. Este es el resultado esperado tras la reescritura de T09a con inducción (la versión anterior usaba el mismo lema \texttt{sum\_range\_id} que T09b y colapsaba).
 
 
-\textbf{Hallazgo de convergencia.} Mathlib, en su version actual (v4.29.0), contiene tipicamente una sola prueba canonica para cada teorema clasico. El caso T07 lo ilustra de forma extrema: dos estrategias de prueba que un matematico consideraria distintas (factorial de Euclides, divergencia de Euler) colapsan al mismo lema \texttt{Nat.exists\_infinite\_primes} al ser formalizadas. Esto implica que D3 mide distancia relativa al corpus formal, no a un espacio abstracto de demostraciones. Reportamos D3 como "relativo a Mathlib v4.29.0".
+\textbf{Control negativo (T07 vs. T08).} La distancia entre un teorema de teoría de numeros (infinitud de primos) y uno de análisis (irracionalidad de raíz de 2) es 1.0 con intersección vacia. Esto confirma que D3 no produce similitud espuria entre teoremas de dominios matemáticos distintos.
+
+
+\textbf{Hallazgo de convergencia.} Mathlib, en su versión actual (v4.29.0), contiene típicamente una sola prueba canónica para cada teorema clásico. El caso T07 lo ilustra de forma extrema: dos estrategias de prueba que un matemático consideraría distintas (factorial de Euclides, divergencia de Euler) colapsan al mismo lema \texttt{Nat.exists\_infinite\_primes} al ser formalizadas. Esto revela algo más fuerte que la relatividad al corpus: D3 mide distancia entre FORMALIZACIONES, y la relación entre esa distancia y la distancia entre las ideas informales originales queda sin establecer. Dos pruebas pueden producir distancia 1.0 porque el formalizador eligió lemas distintos, no porque las ideas subyacentes lo sean. Complementariamente, T07 muestra que pruebas con ideas distintas pueden colapsar a distancia 0.5 (o menor) cuando el formalizador converge al mismo lema de Mathlib. Reportamos D3 como "relativo a la formalización en Mathlib v4.29.0".
 
 
 \subsection{4.2 D2: filtro de trivialidad}
 
-El filtro de trivialidad se evaluo sobre 24 de los 26 teoremas del eval set (T20 y T21 no fueron formalizados en esta corrida: T20 requeria una salida especifica de LLM no recolectada, y T21 dependia de seleccionar un caso del ConjecturingProvingLoop de Kasaura et al. que quedo pendiente de implementacion). Los 24 teoremas evaluados cubren triviales por diseno, clasicos en Mathlib, pares con distinta prueba, enunciados cercanos, casos generados por IA, y casos de falla.
+El filtro de trivialidad se evaluo sobre 24 de los 26 teoremas del eval set (T20 y T21 no fueron formalizados en esta corrida: T20 requeria una salida especifica de LLM no recolectada, y T21 dependia de seleccionar un caso del ConjecturingProvingLoop de Kasaura et al. que quedo pendiente de implementación). Los 24 teoremas evaluados cubren triviales por diseno, clásicos en Mathlib, pares con distinta prueba, enunciados cercanos, casos generados por IA, y casos de falla.
 
 
 \subsubsection{Resultados completos}
@@ -404,8 +404,8 @@ T19 & Teorema generado por LLM sobre pares & `aesop` & 13.3 & Trivial (probable)
 T22 & n par entonces n+0 es par & `norm\_num` & 13.5 & Caso de falla para D1 \\
 \hline
 \end{tabular}
-\caption{}
-\label{}
+\caption{Table 3: }
+\label{tab:3}
 \end{table}
 
 
@@ -423,32 +423,32 @@ T01, T02, T03, T04, T05, T06 & Clasicos en Mathlib & No trivial (correcto) \\
 T07a, T08a, T09a & Pares con distinta prueba & No trivial (correcto) \\
 T10, T11, T12, T13 & Enunciados cercanos & No trivial (correcto) \\
 T18 & Suma de impares = n\textasciicircum{}2 (trampa de control) & No trivial (correcto) \\
-T23 & Grafo conexo y aciclico es arbol & No trivial (correcto) \\
+T23 & Grafo conexo y aciclico es árbol & No trivial (correcto) \\
 T24 & Haces coherentes en esquema noetheriano & No trivial (correcto) \\
 T25 & n par sii 2 divide a n & No trivial (correcto) \\
 T26 & Suma de n pares es par & No trivial (correcto) \\
 \hline
 \end{tabular}
-\caption{}
-\label{}
+\caption{Table 4: }
+\label{tab:4}
 \end{table}
 
 
-\textbf{Casos notables.} T18 (suma de los primeros n impares es n\textasciicircum{}2) es una trampa de control: no es trivial (requiere induccion), y D2 correctamente no la cerro. T23 (definicion de arbol como conexo + aciclico) en esta corrida tampoco fue cerrado por D2, a diferencia de corridas anteriores donde \texttt{tauto} lo cerraba sobre una definicion conjuntiva; el enunciado Lean efectivamente usado en esta evaluacion difiere del que producia el falso positivo. T14 (suma de 4 pares) fue cerrado por \texttt{aesop} en 13.6s, a diferencia del falso negativo documentado en la seccion 3.4.2 donde \texttt{aesop} requeria \textasciitilde{}215s: la diferencia se debe al enunciado Lean concreto generado en esta corrida, que resulto mas simple de cerrar.
+\textbf{Casos notables.} T18 (suma de los primeros n impares es n\textasciicircum{}2) es una trampa de control: no es trivial (requiere inducción), y D2 correctamente no la cerro. T23 (definición de árbol como conexo + aciclico) en esta corrida tampoco fue cerrado por D2, a diferencia de corridas anteriores donde \texttt{tauto} lo cerraba sobre una definición conjuntiva; el enunciado Lean efectivamente usado en esta evaluación difiere del que producia el falso positivo. T14 (suma de 4 pares) fue cerrado por \texttt{aesop} en 13.6s, a diferencia del falso negativo documentado en la seccion 3.4.2 donde \texttt{aesop} requeria \textasciitilde{}215s: la diferencia se debe al enunciado Lean concreto generado en esta corrida, que resulto mas simple de cerrar.
 
 \subsubsection{Agregado}
 
-Sobre los 24 teoremas evaluados, D2 acierta en 22 casos (91.7\%). Los 2 casos restantes (T19 y T22) son aciertos operacionales de D2 (los teoremas son triviales y D2 los detecto) cuya expectativa en el eval set era ambigua o estaba dirigida a otra dimension. No se registran falsos positivos ni falsos negativos de D2 en esta corrida. La precision D1+D2 combinada se discute en 4.3.
+Sobre los 24 teoremas evaluados, D2 acierta en 22 casos (91.7\%). Los 2 casos restantes (T19 y T22) quedan excluidos: T19 fue generado por un LLM y su expectativa en el eval set era "NO\_NOVEDOSO (probable)", sin una clasificación binaria contra la cual medir acierto; T22 fue diseñado para testear D1 (equivalencia sintáctica), no D2, y el veredicto de D2 no es informativo sobre la dimensión que el caso fue construido para evaluar. No se registran falsos positivos ni falsos negativos de D2 en los 22 casos con expectativa definida.
 
 
 \subsection{4.3 D1: cobertura del corpus formal}
 
-La rama C\_F de D1 (Leandex sobre Mathlib) encontro match para los 18 teoremas no triviales que alcanzaron esa etapa (100\% de cobertura sobre no triviales). Los 6 teoremas que aparecen sin match en C\_F (T14, T15, T16, T17, T19, T22) son exactamente los 6 que D2 detecto como triviales y sobre los cuales el pipeline aplico cortocircuito: D1 nunca se ejecuto para ellos porque el arbol de decision se detuvo en D2. La columna \texttt{d1\_existe\_en\_C\_F = False} en el CSV refleja esta no-ejecucion, no un fallo de Leandex.
+La rama C\_F de D1 (Leandex sobre Mathlib) encontro match para los 18 teoremas no triviales que alcanzaron esa etapa (100\% de cobertura sobre no triviales). Los 6 teoremas que aparecen sin match en C\_F (T14, T15, T16, T17, T19, T22) son exactamente los 6 que D2 detecto como triviales y sobre los cuales el pipeline aplico cortocircuito: D1 nunca se ejecuto para ellos porque el árbol de decision se detuvo en D2. La columna \texttt{d1\_existe\_en\_C\_F = False} en el CSV refleja esta no-ejecución, no un fallo de Leandex.
 
 
-\textbf{No hubo falsos positivos de D1 C\_F en esta corrida.} Todos los matches de Leandex corresponden a teoremas que efectivamente estan en Mathlib. Los 18 matches encontrados cubren: teoremas clasicos (T01-T06: Pitagoras, Fermat pequeno, teorema fundamental del calculo, infinitud de primos, irracionalidad de raiz de 2, suma de Gauss), pares de prueba (T07a, T08a, T09a), enunciados cercanos (T10-T13: primos impares, AM-GM), y casos de falla (T18, T23, T24, T25, T26).
+\textbf{No hubo falsos positivos de D1 C\_F en esta corrida.} Todos los matches de Leandex corresponden a teoremas que efectivamente estan en Mathlib. Los 18 matches encontrados cubren: teoremas clásicos (T01-T06: Pitagoras, Fermat pequeno, teorema fundamental del calculo, infinitud de primos, irracionalidad de raíz de 2, suma de Gauss), pares de prueba (T07a, T08a, T09a), enunciados cercanos (T10-T13: primos impares, AM-GM), y casos de falla (T18, T23, T24, T25, T26).
 
-La rama C\_I (busqueda en literatura informal via TheoremSearch, Semantic Scholar, arXiv y LLM judge) no se activo para ningun teorema de esta corrida. El motivo no es que los candidatos no superaran el threshold MiniLM de 0.40, sino que la condicion de entrada a C\_I (D2 = False y C\_F sin match) nunca se cumplio: todos los teoremas no triviales tenian match en C\_F, y todos los que no tenian match en C\_F eran triviales y fueron detenidos en D2. C\_I es una rama del arbol que el eval set actual, por su composicion (dominado por teoremas ya presentes en Mathlib), no ejercita.
+La rama C\_I (busqueda en literatura informal via TheoremSearch, Semantic Scholar, arXiv y LLM judge) no se activo para ningun teorema de esta corrida. El motivo no es que los candidatos no superaran el threshold MiniLM de 0.40, sino que la condicion de entrada a C\_I (D2 = False y C\_F sin match) nunca se cumplio: todos los teoremas no triviales tenian match en C\_F, y todos los que no tenian match en C\_F eran triviales y fueron detenidos en D2. C\_I es una rama del árbol que el eval set actual, por su composición (dominado por teoremas ya presentes en Mathlib), no ejercita.
 
 
 \subsection{4.4 Resumen de instrumentos}
@@ -459,18 +459,18 @@ La rama C\_I (busqueda en literatura informal via TheoremSearch, Semantic Schola
 \hline
 Instrumento & Validado contra & Resultado & Estado \\
 \hline
-D3 & 5 pares de calibracion (juicio humano firmado) & 3/3 pares calibrados consistentes con el juez: 2 genuinely\_different (T08, T09), 1 same\_disguised (T07). 2 controles correctos (self, unrelated). & Funcional, umbral theta=0.5 sin calibrar \\
-D2 & Eval set (24 teoremas) & 22/24 = 91.7\% de acierto; 2 casos con expectativa ambigua (T19, T22). Cero falsos positivos, cero falsos negativos. & Funcional \\
+D3 & 5 pares de calibración (juicio humano firmado) & 2/3 pares calibrados consistentes con el juez: T08 y T09 (genuinely\_different). T07 (same\_disguised) es un punto degenerado (unión = 2 premisas, intersección = 1), insuficiente para sostener calibración. 2 controles correctos (self, unrelated). & Funcional, umbral θ=0.5 sin calibrar, T07 no informativo \\
+D2 & Eval set (24 teoremas) & 22/24 = 91.7\% de acierto sobre casos con expectativa definida; 2 excluidos (T19, T22) por expectativa no binaria. & Funcional \\
 D1 C\_F & Eval set (18 teoremas no triviales) & 18/18 = 100\% de cobertura sobre no triviales. Los 6 sin match son triviales detenidos en D2. & Funcional \\
 D1 C\_I & No evaluada (rama no alcanzada en esta corrida) & Sin datos. El eval set no contiene teoremas que activen la condicion de entrada a C\_I. & No evaluada \\
 \hline
 \end{tabular}
-\caption{}
-\label{}
+\caption{Table 5: }
+\label{tab:5}
 \end{table}
 
 
-\section{5. Experimentos}
+\section{Experimentos}
 
 Esta sección reporta tres bloques de evaluación, todos de carácter preliminar. El primero describe cómo se construyó el dataset de papers retirados que sirve de ground truth para los experimentos. El segundo presenta un estudio profundo sobre 10 papers con el pipeline D1+D2 completo, incluyendo una auditoría manual de fidelidad de formalización. El tercero presenta un estudio ancho sobre 52 papers usando similitud semántica de enunciados. Los tres bloques comparten una misma metodología: comparar papers retirados de arXiv por duplicación de resultados previos contra papers de control emparejados por categoría y año.
 
@@ -520,8 +520,8 @@ deepseek-v4-flash & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ & **0/5
 glm-5.2 & \checkmark & \checkmark & $\times$ & \checkmark & timeout timeout & **3/5** \\
 \hline
 \end{tabular}
-\caption{}
-\label{}
+\caption{Table 6: }
+\label{tab:6}
 \end{table}
 
 
@@ -545,9 +545,12 @@ De los 10 papers, 7 fueron formalizados exitosamente y 3 fallaron: uno por error
 Sobre los 7 papers formalizados, el pipeline emitió:
 
 \begin{itemize}
-\item \textbf{6 \texttt{NOVEDAD\_ENUNCIADO}}: el enunciado no fue encontrado en Mathlib ni en la literatura informal.
-\item \textbf{1 \texttt{CONOCIDO\_LITERATURA}}: Paper 2 (1207.0631v1, teorema de Fillmore sobre matrices). D1 C\_I encontró arXiv:1804.02140 (2018) que trata el mismo teorema. El LLM judge emitió \texttt{equivalent} con confianza 0.95. El veredicto es correcto: el teorema de Fillmore es conocido en la literatura desde al menos 1969.
+\item \textbf{6 \texttt{NOVEDAD\_ENUNCIADO}}: el enunciado no fue encontrado en Mathlib ni en la literatura informal (Papers 1, 3, 4, 8, 9, 10).
+\item \textbf{1 \texttt{CONOCIDO\_LITERATURA}}: Paper 2 (1207.0631v1, teorema de Fillmore sobre matrices). D1 C\_I encontró arXiv:1804.02140 (2018) que trata el mismo teorema. El LLM judge emitió \texttt{equivalent} con confianza 0.95.
 \end{itemize}
+
+
+De los 4 papers retirados con formalización fiel (Papers 1, 2, 3, 4), el pipeline detectó la no-novedad en 1 caso (Paper 2, vía C\_I) y produjo 3 falsos negativos (Papers 1, 3, 4), todos con veredicto \texttt{NOVEDAD\_ENUNCIADO}. Los 3 falsos negativos se explican por el punto ciego temporal del corpus (L14): los duplicadores de estos papers (Hardy y Littlewood \textasciitilde{}1920, Monsky, Gyárfás y Lehel 1970) son anteriores a arXiv y no están indexados en TheoremSearch. Los 3 controles con formalización exitosa (Papers 8, 9, 10) recibieron \texttt{NOVEDAD\_ENUNCIADO}, pero sus formalizaciones no eran fieles (sección 5.3.4), de modo que el experimento no aporta evidencia sobre falsos positivos en ninguna dirección.
 
 
 \subsubsection{5.3.4 Auditoría de fidelidad del autor}
@@ -569,8 +572,8 @@ Paper & ID & Rol & Fidelidad \\
 10 & math/0504586v2 & control & $\times$ Incorrecto \\
 \hline
 \end{tabular}
-\caption{}
-\label{}
+\caption{Table 7: }
+\label{tab:7}
 \end{table}
 
 
@@ -587,17 +590,43 @@ Paper & ID & Rol & Fidelidad \\
 
 \subsubsection{5.3.5 Caso de prior art: 1404.0187}
 
-El Paper 1 (1609.02090v1, problema de Waring sobre Z\_n) es un caso ilustrativo de los límites de D1. El paper fue retirado porque su resultado principal (γ(4) = 15) ya había sido probado por Hardy y Littlewood. Sin embargo, D1 informal no encontró a Hardy y Littlewood en el top 5 de TheoremSearch. Lo que sí encontró fue arXiv:1404.0187 ("Representing Integers as the Sum of Two Squares in the Ring Z\_n"), un paper de 2014 sobre exactamente el mismo problema, con score 0.637. El duplicador canónico (Hardy \& Littlewood, circa 1920) no aparece porque TheoremSearch indexa arXiv, no la literatura anterior a 1991.
+El Paper 1 (1609.02090v1) contiene dos resultados independientes: el teorema \texttt{SquaresZn} (representar enteros como suma de dos cuadrados en Z\_n), que el propio paper atribuye explícitamente a [HJL] (arXiv:1404.0187), y el teorema \texttt{EvenPowers} (γ(4) = 15), que es el target del experimento tras el re-apuntado. El paper fue retirado porque \texttt{EvenPowers} ya había sido probado por Hardy y Littlewood (circa 1920). D1 informal no encontró a Hardy y Littlewood en el top 5 de TheoremSearch. Lo que sí encontró, con score 0.637, fue arXiv:1404.0187, el paper que contiene \texttt{SquaresZn}: un resultado que el autor del paper retirado ya citaba como trabajo previo.
 
 
-Este caso ilustra el punto ciego temporal de D1: el corpus informal cubre arXiv, no la literatura matemática completa. Resultados anteriores a la era de los preprints electrónicos son invisibles para el sistema.
+Este caso ilustra la brecha entre recuperación por similitud e identidad de resultado: el sistema encontró un paper que duplica OTRO teorema del mismo artículo (uno que el autor nunca reclamó como propio), no el resultado por el que el paper fue retirado. Es un hallazgo verdadero pero irrelevante para la pregunta formulada. El duplicador canónico de \texttt{EvenPowers} (Hardy \& Littlewood, circa 1920) no aparece porque TheoremSearch indexa arXiv, no la literatura anterior a 1991.
 
+\subsubsection{5.3.6 Modos de falla de la verificación por compilación}
+
+La formalización automática introduce un problema que no existe en la verificación manual: un archivo \texttt{.lean} puede compilar con \texttt{exit 0} sin contener una formalización fiel del teorema original. Durante el desarrollo del sistema se documentaron cinco modos de falla, cada uno motivando una guardia nueva, y cada guardia dejando pasar el siguiente:
+
+\begin{enumerate}
+\item \textbf{Archivo vacío.} Un archivo \texttt{.lean} sin declaraciones compila limpiamente. En Run 001, 5 de 5 "formalizaciones" iniciales eran archivos de 0 bytes que pasaban el criterio de éxito original. Solución: guardia anti-vacío (\texttt{\_has\_real\_declaration()}), que exige al menos una keyword \texttt{theorem}, \texttt{lemma} o \texttt{def} en el archivo generado.
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{Definición placeholder.} Una definición como \texttt{def CongruentNumber := True} compila, es sustantiva (pasa la guardia anti-vacío), pero no captura la definición matemática. Detectado en el Paper 3 de Run 002 con el modelo DeepSeek. Solución parcial: prompt reforzado que instruye al modelo a no trivializar definiciones.
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{Definición sustantiva sin el teorema.} Tras el prompt anti-trivialización, el mismo Paper 3 generó una definición correcta de \texttt{IsCongruentNumber} (con \texttt{∃ a b c}, \texttt{a² + b² = c²}, \texttt{a*b/2 = n}) pero omitió el enunciado del teorema. El archivo compilaba, la definición era matemáticamente correcta, y el teorema estaba ausente.
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{\texttt{sorry} en definición auxiliar.} Un \texttt{sorry} dentro de una definición (\texttt{theta m := sorry} en el Paper 8 de Run 002) compila y pasa cualquier guardia sintáctica. La definición es sustantiva (contiene una firma de función), pero su cuerpo es un placeholder. Solución parcial: el criterio de éxito del orquestador rechaza archivos con \texttt{has\_sorry=True}, pero esto depende de que el verificador detecte el \texttt{sorry} en el código generado.
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{Una sola dirección de una equivalencia.} El Paper 9 de Run 002 formalizó solo la dirección (⇒) de un teorema que en el paper original es un si y solo si (⇔). El archivo compila, la definición es fiel, la dirección demostrada es correcta, pero falta la otra mitad del enunciado.
+\end{enumerate}
+
+
+Estos cinco peldaños comparten una propiedad: la compilación verifica coherencia, nunca fidelidad semántica. Cada guardia (anti-vacío, anti-sorry, prompt anti-trivialización) cierra una clase de fallo y deja pasar la siguiente porque el problema de fondo (¿el código Lean generado significa lo mismo que el LaTeX original?) no es decidible por medios sintácticos. De ahí que la auditoría manual del autor (sección 5.3.4) sea irreducible: ningún test automático puede garantizar que \texttt{def PercolationEvent := {ω | True}} no es una formalización aceptable de "evento de percolación". Conecta con L17.
 
 \subsection{5.4 Estudio ancho: Wide Study v2}
 
 \subsubsection{5.4.1 Diseño original y defectos metodológicos (v1)}
 
-El objetivo del wide study era evaluar, a escala, si una métrica simple de similitud semántica de enunciados basta para distinguir papers retirados de controles. La primera versión (v1) corrió sobre los 52 papers del dataset (26 retirados + 26 controles), consultando TheoremSearch con el texto del primer teorema de cada paper (truncado a 1000 caracteres) y registrando el top-10 de matches.
+El objetivo del wide study era evaluar, a escala, si una métrica simple de similitud semántica de enunciados basta para distinguir papers retirados de controles. La primera versión (v1) corrió sobre los 52 papers del dataset: 26 retirados y 26 controles, uno por cada par (el primer control asignado según \texttt{config/wide\_study.yaml}). Se consultó TheoremSearch con el texto del primer teorema de cada paper (truncado a 1000 caracteres) y se registró el top-10 de matches.
 
 
 La v1 reportó 12 strong matches (papers con al menos un resultado de score ≥ 0.75), todos controles. Este resultado parecía prometedor pero resultó ser un artefacto de dos defectos metodológicos:
@@ -624,7 +653,7 @@ La versión 2 corrigió ambos defectos:
 
 \subsubsection{5.4.3 Resultados (v2)}
 
-La v2 se ejecutó sobre los 52 papers originales. Tras filtrado, 37 resultaron evaluables (tenían texto de teorema extraíble y generaron resultados de TheoremSearch distintos de self-match). Los resultados:
+La v2 se ejecutó sobre los 52 papers originales. De ellos, 37 resultaron evaluables (tenían texto de teorema extraíble y generaron resultados de TheoremSearch distintos de self-match) y 15 fueron saltados por falta de entorno de teorema extraíble (\texttt{no\_theorem\_env}). El desglose por rol muestra un sesgo de submuestra: 5 retirados y 10 controles fueron saltados, es decir, los controles tuvieron el doble de probabilidad de ser excluidos. La causa es que los papers de control, seleccionados por categoría y año pero no por disponibilidad de enunciados, incluyen notas cortas, surveys y artículos con entornos no estándar que el extractor no reconoce. Los resultados:
 
 \begin{itemize}
 \item \textbf{7 strong matches} (score ≥ 0.75): 5 retirados y 2 controles.
@@ -636,7 +665,7 @@ La v2 se ejecutó sobre los 52 papers originales. Tras filtrado, 37 resultaron e
 
 El valor p = 0.854 indica que no hay diferencia estadísticamente significativa entre las distribuciones de scores de similitud de papers retirados y controles. Dicho de otra forma: la similitud semántica de enunciados, medida como embedding coseno contra el índice de TheoremSearch, no permite distinguir un paper que duplica resultados previos de uno que no.
 
-Este es el resultado principal del wide study y es un \textbf{resultado negativo}: con la métrica actual y el corpus disponible, el sistema no puede separar retirados de controles a escala. Las razones posibles son múltiples: (a) el withdrawal comment es un proxy ruidoso de ground truth (un paper puede ser retirado por duplicación sin que su enunciado principal sea textualmente cercano al original duplicado); (b) TheoremSearch indexa enunciados modernos de arXiv, no la literatura clásica donde están los duplicadores originales; (c) el texto del primer teorema de un paper no necesariamente es el enunciado duplicado.
+Este es el resultado principal del wide study y es un \textbf{resultado negativo}: con la métrica actual y el corpus disponible, el sistema no puede separar retirados de controles a escala. Las razones posibles son múltiples: (a) el withdrawal comment es un proxy ruidoso de ground truth (un paper puede ser retirado por duplicación sin que su enunciado principal sea textualmente cercano al original duplicado); (b) TheoremSearch indexa enunciados modernos de arXiv, no la literatura clásica donde están los duplicadores originales; (c) el texto del primer teorema de un paper no necesariamente es el enunciado duplicado; (d) el sesgo de submuestra documentado (10 controles vs 5 retirados saltados) puede atenuar artificialmente cualquier diferencia real entre los grupos.
 
 
 \subsection{5.5 Resumen de hallazgos experimentales}
@@ -652,8 +681,8 @@ Run 002 (estudio profundo) & 10 papers & 7/10 formalizados; 1 acierto D1; asimet
 Wide Study v2 (estudio ancho) & 37 papers evaluables & p = 0.854; indistinguibles & Resultado negativo \\
 \hline
 \end{tabular}
-\caption{}
-\label{}
+\caption{Table 8: }
+\label{tab:8}
 \end{table}
 
 
@@ -664,7 +693,7 @@ Wide Study v2 (estudio ancho) & 37 papers evaluables & p = 0.854; indistinguible
 \end{enumerate}
 
 \begin{enumerate}
-\item Allí donde el pipeline corre, D1 encuentra matches relevantes en la literatura informal (Paper 2) y no produce falsos positivos (los 4 retirados fieles fueron correctamente clasificados como \texttt{NOVEDAD\_ENUNCIADO} porque Mathlib no contiene sus enunciados). Pero el punto ciego temporal impide encontrar duplicadores canónicos anteriores a arXiv (caso Hardy \& Littlewood).
+\item Sobre los 4 papers retirados con formalización fiel, el pipeline detectó la no-novedad en 1 caso (Paper 2, vía C\_I) y produjo 3 falsos negativos (Papers 1, 3, 4). Los falsos negativos se explican por el punto ciego temporal del corpus (L14): los duplicadores de estos papers (Hardy y Littlewood \textasciitilde{}1920, Monsky, Gyárfás y Lehel 1970) son anteriores a arXiv. Los 3 controles con formalización exitosa tuvieron formalizaciones no fieles, por lo que el experimento no aporta evidencia sobre falsos positivos.
 \end{enumerate}
 
 \begin{enumerate}
@@ -672,7 +701,7 @@ Wide Study v2 (estudio ancho) & 37 papers evaluables & p = 0.854; indistinguible
 \end{enumerate}
 
 
-\section{6. Limitaciones}
+\section{Limitaciones}
 
 Las limitaciones de AViD v1 se agrupan en tres categorías: las del framework conceptual (qué mide la métrica y qué no), las de la implementación (qué hace el sistema actual y qué no), y las del diseño experimental (qué nos dicen realmente los números reportados).
 
@@ -710,7 +739,7 @@ Las limitaciones de AViD v1 se agrupan en tres categorías: las del framework co
 \textbf{L7. Eval set pequeño y curado a mano.} El eval set actual tiene 26 teoremas firmes más 9 slots sin poblar, de los cuales 24 fueron evaluados en la corrida reportada (sección 4.2). La precisión de D2 aislado es de 22/24 = 91.7\%, con 2 casos de expectativa ambigua (T19 y T22). Estos números son evidencia preliminar, no validación a escala. Una corrida sobre Mathlib completo (\textasciitilde{}1.9 millones de líneas) o sobre un corpus arXiv mayor es trabajo futuro.
 
 
-\textbf{L8. La medición depende del proceso de formalización.} AViD evalúa la prueba formalizada, no la prueba platónica. Dos formalizaciones distintas del mismo argumento informal podrían dar distancias de Jaccard diferentes. El math filter sobre premisas (Filtro 1 + Filtro 2) reduce este ruido pero no lo elimina.
+\textbf{L8. La medición depende del proceso de formalización.} AViD evalúa la prueba formalizada, no la prueba platónica. Dos formalizaciones distintas del mismo argumento informal pueden dar distancias de Jaccard diferentes. El hallazgo de convergencia documentado en §4.1 vuelve esto más tajante: D3 mide distancia entre formalizaciones, y la relación entre esa distancia y la distancia entre las ideas informales originales queda sin establecer. Dos pruebas pueden producir distancia 1.0 porque el formalizador eligió lemas distintos (T09), y pruebas con ideas distintas pueden colapsar porque el formalizador convergió al mismo lema de Mathlib (T07). El math filter sobre premisas (Filtro 1 + Filtro 2) reduce el ruido de formalización dentro de una misma estrategia de prueba pero no resuelve el problema de fondo.
 
 
 \textbf{L9. D3 fuera del pipeline en tiempo real.} La extracción de premisas con \texttt{ExtractData.lean} requiere ejecutar \texttt{lake env lean} sobre archivos que posiblemente importen Mathlib completo. Aunque funciona en Windows nativo (sin requerir WSL), el tiempo de extracción no es compatible con un demo interactivo. En la arquitectura actual, D3 se ofrece como análisis a pedido, no como parte del flujo automático.
@@ -747,7 +776,7 @@ Las limitaciones de AViD v1 se agrupan en tres categorías: las del framework co
 Las limitaciones de AViD v1 trazan un perímetro claro. El sistema funciona sobre el subconjunto de teoremas que (a) son expresables en el fragmento \texttt{Prop} de Lean 4, (b) tienen un enunciado parseable por el extractor de LaTeX, (c) son formalizables por al menos uno de los modelos del backend, y (d) tienen premisas extraíbles por \texttt{ExtractData.lean}. Dentro de ese perímetro, el árbol de decisión D2-D1-D3 produce veredictos con grounding verificable. Fuera de él, el sistema es explícitamente incompleto. La sección 7 detalla qué queda por construir para expandir ese perímetro.
 
 
-\section{7. Conclusión}
+\section{Conclusión}
 
 Este artículo presentó AViD Journal: un pipeline que recibe un artículo en LaTeX, lo formaliza en Lean 4, y aplica un árbol de decisión en tres dimensiones para emitir un veredicto de novedad con grounding formal. La contribución central es la estructura del sistema, no la magnitud de los resultados experimentales. Ambos se reportan con el mismo nivel de detalle.
 
@@ -784,11 +813,11 @@ El sistema corre sobre Windows 10 nativo. Toda la infraestructura de extracción
 
 Los experimentos, reportados como preliminares en todos los casos, produjeron tres tipos de evidencia:
 
-\textbf{Evidencia de funcionamiento.} El pipeline corre de extremo a extremo. Formalizó 7 de 10 papers en el estudio profundo (Run 002). D2 acertó en 22 de 24 teoremas del eval set (91.7\%), con 2 casos de expectativa ambigua (T19 de origen LLM, T22 de equivalencia sintactica) y cero falsos positivos o negativos en la corrida reportada. D1 C\_F encontro los 18 teoremas no triviales que alcanzaron esa etapa (100\% de cobertura sobre no triviales); los 6 restantes fueron detenidos por D2 sin llegar a D1. D3 produjo una escalera de distancias consistente con el juicio humano en los 3 pares calibrados con etiqueta firmada por el autor (T07: same\_disguised, T08 y T09: genuinely\_different), mas 2 controles correctos (self, unrelated).
+\textbf{Evidencia de funcionamiento.} El pipeline corre de extremo a extremo. Formalizó 7 de 10 papers en el estudio profundo (Run 002). Sobre los 4 retirados con formalización fiel, el pipeline detectó la no-novedad en 1 caso (Paper 2, vía D1 C\_I) y produjo 3 falsos negativos (Papers 1, 3, 4), atribuibles al punto ciego temporal del corpus (L14). Los 3 controles evaluados tuvieron formalizaciones no fieles, por lo que el experimento no aporta evidencia sobre falsos positivos. D2 acertó en 22 de 24 teoremas del eval set (91.7\%), excluyendo 2 casos con expectativa ambigua (T19 y T22). D1 C\_F encontró los 18 teoremas no triviales que alcanzaron esa etapa, aunque esta cobertura está determinada por la composición del eval set (dominado por teoremas clásicos ya en Mathlib) y por la ausencia de umbral en Leandex v2. D3 produjo distancias consistentes con el juicio humano en 2 de los 3 pares calibrados (T08 y T09), con T07 como punto degenerado (unión = 2 premisas).
 
 \textbf{Evidencia de límites.} El wide study v2 (37 papers evaluables) no encontró diferencia estadísticamente significativa entre papers retirados y controles en la similitud semántica de enunciados (Mann-Whitney p = 0.854). El punto ciego temporal del corpus impide encontrar duplicadores anteriores a 1991 (caso Hardy \& Littlewood). La rama D1 informal, en su configuración actual con threshold MiniLM de 0.40, no se activa para ningún teorema del eval set. La auditoría de fidelidad de formalización reveló una asimetría preocupante: 4/4 papers retirados resultaron fieles contra 0/3 controles.
 
-\textbf{Evidencia metodológica.} La construcción del dataset de 33 papers retirados por duplicación, con 52 controles emparejados por categoría y año, establece un benchmark reusable. La comparación de cuatro modelos de formalización (Qwen 3.7-max 5/5, GLM-5.2 3/5, DeepSeek Pro 0/5, DeepSeek Flash 0/5) cuantifica la viabilidad relativa de distintos backends. Los defectos metodológicos del wide study v1 (self-matches por falta de auto-exclusión, 38/52 papers sin scores) quedan documentados como advertencia para trabajos futuros que usen TheoremSearch como fuente.
+\textbf{Evidencia metodológica.} La construcción del dataset de 26 papers retirados viables (de 33 candidatos), con 52 controles emparejados por categoría y año, establece un benchmark reusable. La comparación de cuatro modelos de formalización (Qwen 3.7-max 5/5, GLM-5.2 3/5, DeepSeek Pro 0/5, DeepSeek Flash 0/5) cuantifica la viabilidad relativa de distintos backends. Los defectos metodológicos del wide study v1 (self-matches por falta de auto-exclusión, 38/52 papers sin scores) quedan documentados como advertencia para trabajos futuros que usen TheoremSearch como fuente.
 
 
 \subsection{7.3 Lo pendiente}

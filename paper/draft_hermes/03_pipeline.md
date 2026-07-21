@@ -1,4 +1,4 @@
-# 3. El pipeline AViD
+# El pipeline AViD
 
 El sistema recibe un archivo `.tex`, extrae sus bloques matemáticos, los formaliza en Lean 4, y aplica un árbol de decisión en tres dimensiones para emitir un veredicto de novedad. Esta sección describe cada etapa con el detalle necesario para su reproducción conceptual.
 
@@ -202,6 +202,6 @@ El sistema está implementado en Python 3.11+ y corre sobre Windows 10 nativo. L
 
 <!-- fuente: docs/section3_facts.md:250-263 (tabla de diferencias avid-clean vs src) -->
 
-El proyecto completo cuenta con 167 pruebas superadas y 1 saltada (julio 2026), un dataset de evaluación de 24 teoremas evaluados de 26 planificados más 9 slots pendientes, y un dataset de 33 papers retirados por duplicación con 52 controles emparejados.
+El proyecto completo cuenta con 167 pruebas superadas y 1 saltada (julio 2026), un dataset de evaluación de 24 teoremas evaluados (de 26 planificados, más 9 slots pendientes), y un dataset de 33 papers retirados por duplicación con 52 controles emparejados.
 
 <!-- fuente: docs/PROJECT_STATE.md:102-105 (tests, eval set, dataset) -->

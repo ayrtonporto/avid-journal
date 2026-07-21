@@ -1,4 +1,4 @@
-# 1. Introducción
+# Introducción
 
 En febrero de 2026, el sistema Axiom Math presentó como propia una conjetura que ya había sido formulada y nombrada por el matemático André Fel dos años antes. El incidente, cubierto por Scientific American, no fue un caso aislado: ilustra un modo de falla sistemático de los sistemas de inteligencia artificial aplicados a la matemática. Los modelos de lenguaje pueden generar enunciados que compilan, que son correctos, y que sin embargo no son nuevos.
 

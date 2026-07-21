@@ -1,4 +1,4 @@
-# 2. Trabajo relacionado
+# Trabajo relacionado
 
 El problema de determinar si un teorema es nuevo toca cuatro frentes de investigación que rara vez se cruzan. Esta sección los recorre en orden, desde la infraestructura de búsqueda hasta la novedad bibliométrica, y cierra con una tabla de posicionamiento.
 
