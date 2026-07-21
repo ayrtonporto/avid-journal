@@ -76,7 +76,7 @@ Las limitaciones de AViD v1 se agrupan en tres categorías: las del framework co
 
 <!-- fuente: docs/prior_art_1404.md, paper/PAPER_BRIEF.md caso 1404.0187 -->
 
-**L15. θ = 0.5 sin calibrar.** El umbral de Jaccard para decidir entre `NOVEDAD_DEMOSTRACION` y `NO_NOVEDOSO_redundante` es el valor inicial de diseño (0.5). Fue propuesto para ser calibrado contra los pares T07, T08 y T09, pero la calibración está bloqueada: T07 está exactamente en la frontera (distancia = 0.50), T08 es correctamente clasificado (0.7222), y T09 tiene intersección vacía por un fallo de extracción. Las distancias se reportan crudas donde es posible; donde no, el veredicto es `INCONCLUSIVE`.
+**L15. θ = 0.5 sin calibrar.** El umbral de Jaccard para decidir entre `NOVEDAD_DEMOSTRACION` y `NO_NOVEDOSO_redundante` es el valor inicial de diseño (0.5). Fue propuesto para ser calibrado contra los pares T07, T08 y T09, pero la calibración está bloqueada: T07 está exactamente en la frontera (distancia = 0.50), T08 es correctamente clasificado (0.7222), y T09 tiene intersección vacía porque ambas pruebas usan conjuntos de premisas disjuntos (inducción vs. fórmula cerrada). Las distancias se reportan crudas donde es posible; donde no, el veredicto es `INCONCLUSIVE`.
 
 <!-- fuente: docs/PROJECT_STATE.md decisión θ=0.5 sin calibrar, docs/dimensions_facts.md θ=0.5 -->
 
