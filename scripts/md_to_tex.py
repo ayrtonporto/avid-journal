@@ -104,6 +104,10 @@ def md_to_latex(text):
     # Now escape LaTeX special chars in remaining plain text
     text = escape_latex(text)
 
+    # Fix LaTeX commands inside \texttt{}: change \cmd to \textbackslash cmd
+    text = re.sub(r'\\texttt\{(\\)([a-zA-Z]+)\}', r'\\texttt{\\textbackslash \2}', text)
+    text = re.sub(r'\\texttt\{(\\)([a-zA-Z]+)\}', r'\\texttt{\\textbackslash \2}', text)  # second pass for \\\\ escaped
+
     # Lists
     lines = text.split("\n")
     in_enum = False
@@ -295,6 +299,19 @@ K.~Dosen, ``Identity of Proofs,''
     parts.append("\n\\end{document}\n")
 
     output = "".join(parts)
+    # Replace Unicode emoji with LaTeX equivalents
+    emoji_map = {
+        '\u2705': r'\checkmark',           # ✅
+        '\u274c': r'$\times$',             # ❌
+        '\u26a0\ufe0f': r'$\triangle$',    # ⚠️
+        '\u26a0': r'$\triangle$',          # ⚠️ (sin variante)
+        '\u23f3': r'timeout',              # ⏳
+    }
+    for emoji, latex in emoji_map.items():
+        output = output.replace(emoji, latex)
+    # Fix double-escaped backslashes inside texttt (e.g., \texttt{\\foo} -> \texttt{\textbackslash foo})
+    output = re.sub(r'\\texttt\{\\\\([a-zA-Z]+)\}', r'\\texttt{\\textbackslash \1}', output)
+    output = re.sub(r'\\texttt\{\\\\([a-zA-Z]+)\}', r'\\texttt{\\textbackslash \1}', output)  # second pass for chained
     # Clean up excess blank lines
     output = re.sub(r"\n{4,}", "\n\n\n", output)
     # Clean up double backslash issues from tables

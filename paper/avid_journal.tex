@@ -146,12 +146,12 @@ En el frente bibliométrico, \textbf{Uzzi et al.} (Science, 2013) miden novedad 
 \hline
 Sistema & ¿Chequea existencia? & ¿Filtra trivialidad? & ¿Mide distancia de prueba? & ¿Corpus informal? & ¿Emite veredicto? \\
 \hline
-Kasaura et al. & ✅ (solo Mathlib) & ❌ & ❌ & ❌ & ❌ (sí/no) \\
-LeanConjecturer [VERIFICAR] & ✅ (exact?) & ✅ (aesop) & ❌ & ❌ & ❌ \\
-TheoremSearch & ✅ (9.2M) & ❌ & ❌ & ✅ & ❌ \\
-Atlas (Yoo) & ❌ & ❌ & ✅ (Jaccard) & ❌ & ❌ \\
-COMPOSE [VERIFICAR] & Predice forward & ❌ & ❌ & ✅ & ❌ \\
-**AViD** & ✅ (Mathlib + arXiv + TheoremSearch) & ✅ (6 tácticas + blacklist) & ✅ (Jaccard + 2 filtros) & ✅ & ✅ (8 veredictos) \\
+Kasaura et al. & \checkmark (solo Mathlib) & $\times$ & $\times$ & $\times$ & $\times$ (sí/no) \\
+LeanConjecturer [VERIFICAR] & \checkmark (exact?) & \checkmark (aesop) & $\times$ & $\times$ & $\times$ \\
+TheoremSearch & \checkmark (9.2M) & $\times$ & $\times$ & \checkmark & $\times$ \\
+Atlas (Yoo) & $\times$ & $\times$ & \checkmark (Jaccard) & $\times$ & $\times$ \\
+COMPOSE [VERIFICAR] & Predice forward & $\times$ & $\times$ & \checkmark & $\times$ \\
+**AViD** & \checkmark (Mathlib + arXiv + TheoremSearch) & \checkmark (6 tácticas + blacklist) & \checkmark (Jaccard + 2 filtros) & \checkmark & \checkmark (8 veredictos) \\
 \hline
 \end{tabular}
 \caption{}
@@ -169,7 +169,7 @@ El sistema recibe un archivo \texttt{.tex}, extrae sus bloques matemáticos, los
 
 \subsection{3.1 Ingesta y parseo del LaTeX}
 
-El parser extrae entornos matemáticos del fuente LaTeX: \texttt{theorem}, \texttt{lemma}, \texttt{proposition}, \texttt{corollary}, \texttt{definition}, y sus variantes en español (\texttt{teorema}, \texttt{lema}, \texttt{proposición}, \texttt{definición}, \texttt{corolario}). También reconoce variantes abreviadas (\texttt{thm}, \texttt{lem}, \texttt{prop}, \texttt{cor}, \texttt{defn}) y entornos definidos por el usuario mediante \texttt{\newtheorem} y \texttt{\theoremstyle}.
+El parser extrae entornos matemáticos del fuente LaTeX: \texttt{theorem}, \texttt{lemma}, \texttt{proposition}, \texttt{corollary}, \texttt{definition}, y sus variantes en español (\texttt{teorema}, \texttt{lema}, \texttt{proposición}, \texttt{definición}, \texttt{corolario}). También reconoce variantes abreviadas (\texttt{thm}, \texttt{lem}, \texttt{prop}, \texttt{cor}, \texttt{defn}) y entornos definidos por el usuario mediante \texttt{\textbackslash newtheorem} y \texttt{\textbackslash theoremstyle}.
 
 
 El parser extrae las dependencias entre bloques a partir de referencias cruzadas \texttt{\ref{}} y \texttt{\cite{}}. Con esas dependencias construye un grafo dirigido acíclico y aplica un ordenamiento topológico (algoritmo de Kahn) para determinar la secuencia de formalización: los bloques sin dependencias se procesan primero; los que dependen de otros, después.
@@ -514,10 +514,10 @@ Antes de ejecutar el experimento principal, se compararon cuatro modelos de leng
 \hline
 Modelo & 1609.02090v1 & 1207.0631v1 & 1212.0196v1 & 1004.3381v1 & math/0604362v1 & Éxito \\
 \hline
-deepseek-v4-pro & ❌ & ❌ & ⚠️ placeholder & ❌ & ❌ & **0/5** \\
-deepseek-v4-flash & ❌ & ❌ & ❌ & ❌ & ❌ & **0/5** \\
-**qwen3.7-max** & ✅ & ✅ & ✅ & ✅ & ✅ & **5/5** \\
-glm-5.2 & ✅ & ✅ & ❌ & ✅ & ⏳ timeout & **3/5** \\
+deepseek-v4-pro & $\times$ & $\times$ & $\triangle$ placeholder & $\times$ & $\times$ & **0/5** \\
+deepseek-v4-flash & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ & **0/5** \\
+**qwen3.7-max** & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & **5/5** \\
+glm-5.2 & \checkmark & \checkmark & $\times$ & \checkmark & timeout timeout & **3/5** \\
 \hline
 \end{tabular}
 \caption{}
@@ -560,13 +560,13 @@ El primer autor revisó manualmente cada una de las 7 formalizaciones exitosas, 
 \hline
 Paper & ID & Rol & Fidelidad \\
 \hline
-1 & 1609.02090v1 & retirado & ✅ Fiel \\
-2 & 1207.0631v1 & retirado & ✅ Fiel \\
-3 & 1212.0196v1 & retirado & ✅ Fiel \\
-4 & 1004.3381v1 & retirado & ✅ Fiel \\
-8 & 1101.3720v1 & control & ❌ Incorrecto \\
-9 & 0904.1783v3 & control & ⚠️ Aproximación \\
-10 & math/0504586v2 & control & ❌ Incorrecto \\
+1 & 1609.02090v1 & retirado & \checkmark Fiel \\
+2 & 1207.0631v1 & retirado & \checkmark Fiel \\
+3 & 1212.0196v1 & retirado & \checkmark Fiel \\
+4 & 1004.3381v1 & retirado & \checkmark Fiel \\
+8 & 1101.3720v1 & control & $\times$ Incorrecto \\
+9 & 0904.1783v3 & control & $\triangle$ Aproximación \\
+10 & math/0504586v2 & control & $\times$ Incorrecto \\
 \hline
 \end{tabular}
 \caption{}
