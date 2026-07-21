@@ -1,0 +1,916 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{array,booktabs,multirow}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage[numbers,sort&compress]{natbib}
+
+\newtheorem{theorem}{Teorema}[section]
+\newtheorem{lemma}[theorem]{Lema}
+\newtheorem{proposition}[theorem]{Proposicion}
+\newtheorem{corollary}[theorem]{Corolario}
+\newtheorem{definition}[theorem]{Definicion}
+\theoremstyle{remark}
+\newtheorem{remark}{Observacion}[section]
+
+\title{AViD Journal: Verificacion Automatizada de Novedad \\ de Teoremas con Grounding Formal}
+\author{Ayrton Porto\textsuperscript{1}}
+\date{Julio 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Los sistemas de inteligencia artificial aplicados a la matematica verifican correccion pero no novedad. Un teorema generado automaticamente puede compilar en Lean sin errores y, sin embargo, ser un resultado ya conocido en Mathlib o en la literatura informal. Este articulo presenta AViD Journal, un pipeline que recibe un articulo en LaTeX, formaliza sus teoremas en Lean 4, y emite un veredicto de novedad con grounding formal mediante un arbol de decision en tres dimensiones: D1 (no-existencia previa en corpus formal e informal), D2 (no-trivialidad via tacticas automaticas), y D3 (distancia de Jaccard sobre premisas estructurales). El sistema se evalua de forma preliminar contra tres fuentes de ground truth: un eval set de 24 teoremas hand-curated, un experimento con 10 papers retirados de arXiv por duplicacion, y un estudio ancho sobre 52 papers (26 retirados + 26 controles). D2 alcanza 91.7\% de precision sobre el eval set, D1 C\_F cubre el 100\% de los teoremas no triviales, y D3 produce una escalera de distancias consistente con el juicio humano. El estudio ancho arroja un resultado negativo (Mann-Whitney $p = 0.854$): la similitud semantica de enunciados no basta para separar papers retirados de controles. El articulo documenta 17 limitaciones del framework, la implementacion y el diseno experimental, y propone vias concretas de mejora.
+\end{abstract}
+\section{1. Introducción}
+
+En febrero de 2026, el sistema Axiom Math presentó como propia una conjetura que ya había sido formulada y nombrada por el matemático André Fel dos años antes. El incidente, cubierto por Scientific American, no fue un caso aislado: ilustra un modo de falla sistemático de los sistemas de inteligencia artificial aplicados a la matemática. Los modelos de lenguaje pueden generar enunciados que compilan, que son correctos, y que sin embargo no son nuevos.
+
+
+Abouzaid et al., en su examen \textit{First Proof} para inteligencia artificial matemática, lo enunciaron con precisión: "lo que nos falta es una manera sistemática de evaluar si esos lemas pueden ensamblarse en una prueba novedosa" (arXiv:2602.05192). El problema es doble. Por un lado, los sistemas actuales de AI matemática (Axiom, Harmonic, DeepSeek-Prover) verifican corrección pero no novedad. Por otro, el criterio ingenuo que equipara novedad con ausencia en Mathlib (Kasaura et al., arXiv:2509.14274) falla en dos direcciones: marca como nuevos teoremas triviales que ninguna táctica automatizada resolvería en 2026 pero que no requieren idea matemática genuina, y omite resultados que no están formalizados pero sí publicados en la literatura informal.
+
+
+Tao, en sus notas sobre \textit{Machine-Assisted Proof} (Notices of the AMS, 2025), planteó la pregunta en términos de escala: si la generación automática de teoremas se acelera, hace falta filtrar novedad automáticamente. La verificación humana, que ya es el cuello de botella del peer review tradicional, se vuelve inviable cuando quien propone teoremas es un modelo.
+
+
+Este artículo presenta AViD Journal (Automated Verification in Demonstrations), un sistema que aborda exactamente esa pregunta: ¿se puede arbitrar novedad de teoremas de manera automática, con grounding formal? La respuesta que ofrecemos no es un sí rotundo sino la construcción y evaluación temprana de un pipeline que recorre el camino completo, desde el LaTeX de un paper hasta un veredicto de novedad, y cuyos límites quedan tan documentados como sus aciertos.
+
+
+\subsection{1.1 Contribuciones}
+
+\begin{enumerate}
+\item \textbf{Una taxonomía de novedad como cruce de dos ejes.} La novedad de un teorema no se reduce a "está o no está en Mathlib". Proponemos dos ejes: el tipo del enunciado (idéntico, generalización, especialización, diferente) y las premisas de la demostración (idénticas, cercanas, distantes). El producto cartesiano produce cuatro casos netos más una zona gris para generalizaciones y especializaciones, que requieren revisión humana.
+\end{enumerate}
+
+
+\begin{enumerate}
+\item \textbf{Una métrica operacional de tres dimensiones.} D1 verifica la existencia previa del enunciado en un corpus formal (Mathlib, vía Leandex) y en un corpus informal (arXiv, Semantic Scholar, TheoremSearch, con un juez LLM). D2 filtra la trivialidad: si una táctica automatizada estándar cierra el enunciado, el teorema no es novedoso. D3 mide la distancia estructural entre demostraciones como la distancia de Jaccard sobre los conjuntos de premisas utilizados.
+\end{enumerate}
+
+
+\begin{enumerate}
+\item \textbf{Una implementación funcional del ciclo completo.} El pipeline integra parseo de LaTeX, formalización en Lean 4 mediante una abstracción multi-modelo (8 backends), y el árbol de decisión D2-D1-D3, corriendo sobre Windows nativo con Lean 4.29.0 y Mathlib.
+\end{enumerate}
+
+
+\begin{enumerate}
+\item \textbf{Evaluación preliminar contra ground truth real.} El sistema se evaluó en tres frentes: (a) un conjunto de 26 teoremas hand-curated que cubren casos de trivialidad, coincidencia exacta, pruebas alternativas y ruido deliberado (24 evaluados en la corrida de validación de instrumentos, sección 4); (b) un experimento con 10 papers retirados de arXiv por duplicación de resultados previos; y (c) un estudio ancho de 52 papers (26 retirados + 26 controles emparejados) usando similitud semántica de enunciados. Los resultados son preliminares en todos los casos, y el artículo dedica tanto espacio a los límites encontrados como a los aciertos.
+\end{enumerate}
+
+
+\subsection{1.2 Estructura del artículo}
+
+La sección 2 sitúa este trabajo en la intersección de cuatro frentes de investigación. La sección 3 describe el pipeline completo: parser, formalización, corpus de referencia, las tres dimensiones y el árbol de veredictos. La sección 4 valida cada instrumento por separado (D2 contra el eval set, D3 contra pares de calibración). La sección 5 reporta los experimentos con papers retirados y el estudio ancho, ambos como evidencia preliminar. La sección 6 enumera las limitaciones del framework, la implementación y el diseño experimental. La sección 7 cierra con lo construido y lo pendiente.
+
+\section{2. Trabajo relacionado}
+
+El problema de determinar si un teorema es nuevo toca cuatro frentes de investigación que rara vez se cruzan. Esta sección los recorre en orden, desde la infraestructura de búsqueda hasta la novedad bibliométrica, y cierra con una tabla de posicionamiento.
+
+
+\subsection{2.1 Buscadores e infraestructura de teoremas}
+
+El frente más concurrido es el de los motores de búsqueda de teoremas. \textbf{TheoremSearch} (Ilin, Alper, Inchiostro, arXiv:2602.05216) indexa 9.2 millones de enunciados extraídos de arXiv y siete fuentes adicionales. Genera un "slogan" en lenguaje natural por teorema para embeber y expone una API pública sin autenticación. Su motivación documentada (retiros por duplicación en arXiv) es exactamente la misma que motiva nuestro experimento con papers retirados. TheoremSearch encuentra enunciados similares; AViD agrega la capa de veredicto.
+
+
+\textbf{TheoremGraph + LeanGraph} (arXiv:2606.25363 [VERIFICAR]) construye un grafo unificado formal-informal con 11.7 millones de entornos tipo-teorema de arXiv y 18.3 millones de dependencias candidatas. Su componente LeanGraph abarca 388,105 nodos y 11.3 millones de aristas tipadas sobre 25 proyectos Lean. Es el competidor más cercano en infraestructura: ellos construyen el grafo; nosotros emitimos veredictos de novedad sobre él.
+
+
+\textbf{COMPOSE} (arXiv:2605.30333 [VERIFICAR]) predice teoremas futuros a partir de la estructura de citas y la estructura formal. La dirección es complementaria: COMPOSE genera hacia adelante; AViD verifica hacia atrás.
+
+
+El espacio de buscadores de Mathlib está saturado. \textbf{Loogle} [VERIFICAR], \textbf{LeanSearch} [VERIFICAR], \textbf{LeanExplore} (backend de Leandex) [VERIFICAR], y \textbf{Lean Finder / LeanStateSearch} [VERIFICAR] ofrecen búsqueda por patrón, por lenguaje natural, y por estado de prueba. AViD no compite en este espacio: consume estas herramientas como infraestructura (Leandex es el backend de D1 C\_F) y agrega la capa de decisión automatizada que ninguna de ellas ofrece.
+
+
+\textbf{Matlas} (arXiv:2604.17484) extrae 8.07 millones de enunciados de 435,000 artículos revisados por pares que abarcan de 1826 a 2025, provenientes de 180 revistas seleccionadas por criterio de citación ICM, más 1,900 libros de texto. Su motivación explícita, construir un motor de búsqueda de teoremas sobre fuentes con verificación editorial, es complementaria a la de AViD: donde TheoremSearch cubre arXiv (desde 1991), Matlas cubre revistas peer-reviewed hasta 1826. Un survey reciente sobre IA matemática (arXiv:2601.13209) cita a ambos como infraestructura para determinar si un resultado ya es conocido, posicionando el problema de AViD como reconocido por el campo.
+
+
+\subsection{2.2 Generación de conjeturas con filtros de novedad}
+
+\textbf{Kasaura et al.} (arXiv:2509.14274) definen novedad como ausencia en Mathlib, en la librería generada durante la sesión, y en una lista manual del conjeturador. Es el baseline ingenuo que AViD corrige: sin filtro de trivialidad (D2), un teorema como "la suma de cuatro pares es par" se marcaría como nuevo; sin distancia estructural (D3), dos pruebas distintas del mismo enunciado serían indistinguibles.
+
+
+\textbf{LeanConjecturer} (arXiv:2506.22005) filtra novedad con \texttt{exact?} contra Mathlib y no-trivialidad con \texttt{aesop}. El sistema generó 12,289 conjeturas desde 40 archivos semilla de Mathlib, de las cuales 3,776 resultaron sintácticamente válidas y no triviales (donde "no trivial" significa que \texttt{aesop} no las cierra). Estos son exactamente los mecanismos que AViD implementa como D1 (exact? como fallback de C\_F) y D2 (aesop en el conjunto T\_AUTO). La contribución de AViD no es inventar estos filtros sino integrarlos en un árbol de decisión de tres dimensiones que emite un veredicto, agregar D3 (distancia de premisas) y D1 informal (arXiv + TheoremSearch), y evaluar contra ground truth real.
+
+
+\textbf{Mining Math Conjectures} (arXiv:2412.16177) ataca el problema inverso (redundancia en conjeturas generadas por LLMs) con pruning heurístico, sin métrica formal. \textbf{Synthetic Theorem Generation} (OpenReview EeDSMy5Ruj) genera teoremas por forward-reasoning desde estados de prueba existentes. Ambos son referencias conceptuales que ilustran la necesidad de filtros de novedad en pipelines de generación.
+
+
+\subsection{2.3 Identidad y similitud de demostraciones}
+
+La distancia de Jaccard sobre conjuntos de premisas que AViD usa en D3 tiene una genealogía precisa en la literatura de premise selection. \textbf{Kaliszyk y Urban} (línea MaSh/Flyspeck, circa 2013-2015 [VERIFICAR]) usaron k-NN con features ponderadas por IDF para seleccionar premisas relevantes durante la demostración automática. AViD toma esa misma herramienta y la reposiciona: en lugar de usarla como input para construir pruebas, la usa como huella para comparar pruebas ya construidas. Sin esta cita, D3 parece TF-IDF redescubierto; con ella, es la aplicación legítima de una técnica establecida a un problema nuevo.
+
+
+\textbf{Magnushammer} (Mikuła, Jiang, Li et al., ICLR 2024 [PENDIENTE completar]) aplica premise selection con transformers, alcanzando 59.5\% de precisión en PISA contra 38.3\% de Sledgehammer. \textbf{Piotrowski et al.} (arXiv:2304.00994) introducen un "math filter" que preserva solo lemas de naturaleza claramente matemática usando nombres de teoremas de Mathlib como whitelist. AViD sigue exactamente esa receta en sus filtros previos al Jaccard.
+
+
+\textbf{The Network Structure of Mathlib} (arXiv:2604.24797 [VERIFICAR]) analiza el grafo de 308,129 declaraciones y 8.4 millones de aristas de Mathlib. Su hallazgo principal es que la centralidad de red captura infraestructura del lenguaje (tipo \texttt{Nat}, \texttt{Eq}, \texttt{List}) más que relevancia matemática. Este hallazgo justifica el Filtro 1 de D3: cuando AViD elimina premisas de los namespaces \texttt{Init.} y \texttt{Lean.} antes de calcular Jaccard, no aplica una heurística ad-hoc sino un filtro respaldado por evidencia publicada.
+
+
+\textbf{Yoo} (Axiom-Based Atlas, arXiv:2504.00063) representa teoremas como proof vectors sobre sistemas de axiomas y los compara con similitud coseno, distancia euclidiana o Jaccard. Es el trabajo más cercano en herramienta conceptual, pero con propósito opuesto: el Atlas organiza teoremas por similitud estructural; AViD usa esa similitud para decidir si una prueba es redundante.
+
+
+\textbf{Huch} (arXiv:2209.13305) documenta la distribución scale-free del grado de entrada en el AFP, relevante para trabajo futuro con premisas ponderadas por IDF.
+
+
+\subsection{2.4 Novedad bibliométrica y verificación}
+
+\textbf{Pseudo-Formalization / ArxivMathGradingBench} [VERIFICAR] verifica la corrección de pruebas de arXiv mediante formalización. Es el vecino exacto de AViD en el espacio de diseño: ellos verifican corrección; nosotros verificamos novedad. Un sistema completo de revisión automatizada requeriría ambas dimensiones.
+
+
+\textbf{MerLean} [VERIFICAR] es un pipeline paper-to-Lean que deja la verificación de novedad a revisores humanos. AViD es explícitamente la capa que MerLean delega.
+
+
+\textbf{First Proof} (Abouzaid et al., arXiv:2602.05192) documenta el modo de falla que motiva este trabajo: once matemáticos diseñaron un examen con problemas no publicados, y los LLMs "tienen tendencia a encontrar pruebas existentes y olvidadas en lo profundo de la literatura matemática y presentarlas como originales". Su diagnóstico ("lo que nos falta es una manera sistemática de evaluar si esos lemas pueden ensamblarse en una prueba novedosa") es la pregunta que AViD intenta responder.
+
+
+En el frente bibliométrico, \textbf{Uzzi et al.} (Science, 2013) miden novedad como combinaciones atípicas de revistas citadas sobre 17.9 millones de artículos. \textbf{Wang, Veugelers y Stephan} (2017) [PENDIENTE completar] y \textbf{Boyack y Klavans} (2014) [PENDIENTE completar] refinan la metodología. Estos trabajos operan a nivel de paper completo y no miran contenido deductivo; son el campo adyacente que AViD no alcanza pero señala como complementario.
+
+
+\subsection{2.5 Tabla de posicionamiento}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+Sistema & ¿Chequea existencia? & ¿Filtra trivialidad? & ¿Mide distancia de prueba? & ¿Corpus informal? & ¿Emite veredicto? \\
+\hline
+Kasaura et al. & ✅ (solo Mathlib) & ❌ & ❌ & ❌ & ❌ (sí/no) \\
+LeanConjecturer [VERIFICAR] & ✅ (exact?) & ✅ (aesop) & ❌ & ❌ & ❌ \\
+TheoremSearch & ✅ (9.2M) & ❌ & ❌ & ✅ & ❌ \\
+Atlas (Yoo) & ❌ & ❌ & ✅ (Jaccard) & ❌ & ❌ \\
+COMPOSE [VERIFICAR] & Predice forward & ❌ & ❌ & ✅ & ❌ \\
+**AViD** & ✅ (Mathlib + arXiv + TheoremSearch) & ✅ (6 tácticas + blacklist) & ✅ (Jaccard + 2 filtros) & ✅ & ✅ (8 veredictos) \\
+\hline
+\end{tabular}
+\caption{}
+\label{}
+\end{table}
+
+
+La diferencia no está en ninguna celda individual sino en la columna completa: los trabajos previos construyen piezas de infraestructura (búsqueda, formalización, similitud); AViD las ensambla en un pipeline que recibe un paper en LaTeX y devuelve un veredicto de novedad con grounding formal.
+
+
+\section{3. El pipeline AViD}
+
+El sistema recibe un archivo \texttt{.tex}, extrae sus bloques matemáticos, los formaliza en Lean 4, y aplica un árbol de decisión en tres dimensiones para emitir un veredicto de novedad. Esta sección describe cada etapa con el detalle necesario para su reproducción conceptual.
+
+
+\subsection{3.1 Ingesta y parseo del LaTeX}
+
+El parser extrae entornos matemáticos del fuente LaTeX: \texttt{theorem}, \texttt{lemma}, \texttt{proposition}, \texttt{corollary}, \texttt{definition}, y sus variantes en español (\texttt{teorema}, \texttt{lema}, \texttt{proposición}, \texttt{definición}, \texttt{corolario}). También reconoce variantes abreviadas (\texttt{thm}, \texttt{lem}, \texttt{prop}, \texttt{cor}, \texttt{defn}) y entornos definidos por el usuario mediante \texttt{\newtheorem} y \texttt{\theoremstyle}.
+
+
+El parser extrae las dependencias entre bloques a partir de referencias cruzadas \texttt{\ref{}} y \texttt{\cite{}}. Con esas dependencias construye un grafo dirigido acíclico y aplica un ordenamiento topológico (algoritmo de Kahn) para determinar la secuencia de formalización: los bloques sin dependencias se procesan primero; los que dependen de otros, después.
+
+
+No todos los entornos detectados pasan a la etapa siguiente. El orquestador solo formaliza tipos considerados "formalizables": \texttt{theorem}, \texttt{lemma}, \texttt{proposition}, \texttt{corollary} y sus variantes. Entornos como \texttt{remark}, \texttt{example}, \texttt{proof} y \texttt{definition} (cuando no es requerida como dependencia) se extraen pero no se formalizan.
+
+
+\textbf{Limitación conocida.} El parser opera por expresión regular compilada con una lista fija de nombres de entorno. Los papers que usan AMS-TeX (\texttt{\documentstyle{amsppt}}) o definen entornos con nombres idiosincráticos (\texttt{\begin{inizio}}, \texttt{\begin{numero}}) no son parseables por esta versión. De los 33 candidatos del dataset de retirados, 7 resultaron no viables por este motivo.
+
+
+\subsection{3.2 Formalización a Lean 4}
+
+\subsubsection{3.2.1 Abstracción multi-modelo}
+
+La formalización de cada bloque (enunciado y demostración) se delega a un modelo de lenguaje a través de una interfaz abstracta \texttt{ModelProvider}. La implementación actual (\texttt{avid-clean/}) soporta ocho backends: Claude Code (modo agéntico, vía CLI), Anthropic API (Claude Sonnet 4), OpenAI (GPT-4o), DeepSeek (Chat V3), OpenRouter (cualquier modelo), Mistral (Large), Gemini (2.5 Pro), y OpenCode Go (DeepSeek V4 Pro, el default).
+
+
+La arquitectura distingue dos familias de proveedores. Los "agénticos" (Claude Code) manejan su propio ciclo de verificación: el modelo recibe el prompt, genera código Lean, intenta compilar, y corrige iterativamente. Los "API" (todos los demás) usan un ciclo de verificación externo: el sistema envía el prompt, recibe la respuesta, extrae el código Lean, compila con \texttt{lake env lean}, y reenvía errores como feedback para la siguiente iteración.
+
+
+Cada bloque se clasifica en uno de cuatro modos según su complejidad estimada: \texttt{SIMPLE} (5 rondas máximas de corrección), \texttt{MEDIUM} (15 rondas), \texttt{HARD} (30 rondas), y \texttt{EXTERNAL} (sin modelo; se emite un axioma con referencia a la fuente).
+
+
+\subsubsection{3.2.2 Proyecto Lean compartido}
+
+Todos los papers comparten un único proyecto Lean 4 (v4.29.0) con una compilación de Mathlib (8247 archivos \texttt{.olean}). Cada paper se aloja como submódulo en \texttt{Papers/<Slug>/}. Los bloques formalizados se acumulan incrementalmente en un archivo \texttt{Paper.lean} y se registran en un índice \texttt{PAPER\_INDEX.md} que el orquestador consulta antes de buscar en Mathlib.
+
+
+El criterio de éxito de formalización es exigente: el archivo debe compilar sin errores (\texttt{returncode == 0}), sin \texttt{sorry} en ninguna declaración, y debe contener al menos una declaración sustantiva (keyword \texttt{theorem}, \texttt{lemma}, \texttt{def}, etc.). Los archivos vacíos o con únicamente imports se rechazan.
+
+
+\subsubsection{3.2.3 Modo statement-only}
+
+Para experimentos donde solo se requiere el enunciado (no la demostración), el sistema puede operar en modo "statement-only": el modelo genera el enunciado en Lean con \texttt{:= by sorry} y el criterio de éxito se relaja para aceptar \texttt{has\_sorry=True} siempre que no haya errores de compilación. Este modo no es una capacidad nativa del código base sino una configuración experimental de los prompts y del criterio de aceptación.
+
+
+\subsection{3.3 Corpus de referencia}
+
+El sistema compara cada enunciado contra tres corpus:
+
+\textbf{C\_F (corpus formal).} Mathlib v4.29.0, accedido a través de la API de Leandex. Leandex indexa los enunciados de teoremas de Mathlib y devuelve matches con su estatus de prueba (\texttt{proof\_status}). La versión actual de la API (v2) no proporciona scores de similitud; el sistema usa el ordenamiento provisto por la API y filtra resultados cuyo \texttt{proof\_status} es \texttt{"statement\_only"}.
+
+
+\textbf{C\_I (corpus informal).} Dos fuentes encadenadas. La etapa A consulta TheoremSearch (9.2 millones de enunciados extraídos de arXiv y 7 fuentes adicionales; API pública sin autenticación) más Semantic Scholar y arXiv directamente. Los candidatos se filtran con embeddings MiniLM: solo aquellos con similitud de coseno >= 0.40 pasan a la etapa B. En la etapa B, un juez LLM (DeepSeek V4 Flash, temperature=0) compara el enunciado candidato con cada resultado y emite uno de cuatro veredictos: \texttt{equivalent}, \texttt{generalization}, \texttt{specialization}, \texttt{different}.
+
+
+\textbf{Corpus propio.} A medida que el orquestador formaliza bloques de un paper, los acumula en \texttt{PAPER\_INDEX.md}. Los bloques ya procesados dentro del mismo paper se consultan antes de buscar en Mathlib, evitando que el sistema marque como "ya existente" un teorema que el propio paper acaba de introducir.
+
+
+\subsection{3.4 Las tres dimensiones}
+
+\subsubsection{3.4.1 D1: No-existencia previa}
+
+D1 verifica si el enunciado ya aparece en el corpus formal (C\_F) o informal (C\_I). La evaluación sigue un orden fijo con cortocircuito: si C\_F encuentra match, C\_I no se ejecuta.
+
+
+\textbf{Rama C\_F.} Se consulta la API de Leandex con el enunciado en lenguaje natural. Si Leandex devuelve al menos un resultado con \texttt{proof\_status != "statement\_only"}, se considera que el teorema existe en Mathlib. No hay umbral de similitud aplicado: Leandex v2 no proporciona scores.
+
+
+\textbf{Fallback \texttt{exact?}.} Si Leandex no encuentra match, el sistema ejecuta \texttt{example : τ := by exact?} con un presupuesto de 15 segundos. \texttt{exact?} busca teoremas en el entorno Lean cargado (Mathlib completo). Si encuentra uno que cierra el goal, se trata como match en C\_F con similitud sintética de 0.95. Esta táctica se clasifica como D1 (búsqueda de existencia), no como D2 (trivialidad), porque su función es encontrar un teorema ya demostrado, no cerrar el goal por automatización.
+
+
+\textbf{Rama C\_I.} Solo se activa si C\_F (Leandex + \texttt{exact?}) no encontró match. La etapa A (filtro grueso) consulta TheoremSearch, Semantic Scholar y arXiv. El threshold de embeddings MiniLM es 0.40: candidatos con score inferior se descartan. La etapa B (LLM judge, DeepSeek V4 Flash) recibe los candidatos supervivientes y los compara con el enunciado original.
+
+
+\subsubsection{3.4.2 D2: No-trivialidad}
+
+D2 verifica si el enunciado puede ser demostrado exclusivamente con tácticas automáticas estándar de Lean. Si alguna táctica cierra \texttt{example : τ := by T}, el teorema es trivial.
+
+\textbf{Tácticas, orden y presupuestos.} El conjunto \texttt{T\_AUTO} se ejecuta en este orden: \texttt{decide}, \texttt{norm\_num}, \texttt{simp}, \texttt{omega}, \texttt{tauto}, \texttt{aesop}. Las primeras cinco tienen un presupuesto de 10 segundos cada una; \texttt{aesop} dispone de 30 segundos. El orden prioriza tácticas baratas y específicas; \texttt{aesop}, que realiza búsqueda más exhaustiva, va al final. La ejecución se detiene en la primera táctica que cierra el goal.
+
+
+Cada invocación de táctica incurre en un overhead de inicio de \texttt{lake env lean}, medido empíricamente en 45 segundos en Windows. El presupuesto total por táctica es, por tanto, \texttt{budget + 45s}.
+
+
+\textbf{Blacklist de \texttt{norm\_num}.} La táctica \texttt{norm\_num} en Mathlib v4.29.0 incluye un atajo hardcodeado que cierra \texttt{Irrational (Real.sqrt 2)}. Para evitar este falso positivo, \texttt{norm\_num} se excluye cuando el enunciado contiene la palabra \texttt{Irrational}.
+
+
+\textbf{\texttt{exact?} no está en D2.} La táctica \texttt{exact?} fue removida de D2 y reubicada en D1 como fallback de C\_F (sección 3.4.1). La razón es semántica: \texttt{exact?} busca un teorema existente en el entorno, lo cual es verificación de existencia previa, no de trivialidad.
+
+
+\textbf{Caso de falla conocido.} T14 ("la suma de cuatro números pares es par") es sensible al enunciado Lean concreto generado por el formalizador. En corridas con enunciados que expanden la definición de paridad, \texttt{aesop} puede cerrarlo en \textasciitilde{}14s (ver sección 4.2). En corridas con enunciados que usan cuantificadores anidados sobre listas, \texttt{aesop} requiere \textasciitilde{}215s y excede el presupuesto de 30s. Esta variabilidad ilustra que el resultado de D2 no es una propiedad fija del teorema sino del par (enunciado formalizado, táctica, presupuesto).
+
+
+\subsubsection{3.4.3 D3: Distancia estructural de premisas}
+
+D3 mide cuán diferente es la demostración propuesta de una demostración existente en Mathlib. La métrica es la distancia de Jaccard sobre los conjuntos de premisas (lemas, teoremas, definiciones) usados en cada prueba.
+
+
+\textbf{Extracción de premisas.} Las premisas se extraen con \texttt{ExtractData.lean} (515 líneas), una herramienta standalone que recorre el \texttt{InfoTree} de Lean y recolecta, para cada nodo \texttt{TermInfo}, la constante referenciada (vía \texttt{constName?}), su ubicación de definición (\texttt{defPath}, \texttt{defPos}), y el módulo que la contiene (\texttt{modName}). Se excluyen las referencias que ocurren en el sitio mismo de definición de la constante, para evitar que un teorema se registre a sí mismo como premisa.
+
+
+El extractor funciona en Windows nativo (no requiere WSL ni LeanDojo). Un wrapper en Python (\texttt{premise\_extraction.py}) gestiona la ejecución y mantiene un caché por SHA256 del archivo fuente.
+
+
+\textbf{Pipeline de filtrado.} Antes de calcular Jaccard, las premisas pasan por dos filtros:
+
+\begin{enumerate}
+\item \textbf{Filtro 1 (namespace blacklist).} Se eliminan premisas cuyo \texttt{modName} comienza con \texttt{Init.} o \texttt{Lean.}. Estos namespaces contienen constructores de tipo del núcleo, instancias de typeclasses e internals de tácticas que el elaborador resuelve automáticamente; no reflejan contenido matemático y dominarían artificialmente la intersección.
+\end{enumerate}
+
+
+\begin{enumerate}
+\item \textbf{Filtro 2 (premisas del enunciado).} Se eliminan premisas cuya posición en el archivo fuente cae dentro del rango de líneas del enunciado del teorema. Las constantes que aparecen en el enunciado (hipótesis, tipos, definiciones locales) son parte de la firma, no de la prueba; comparar pruebas por las premisas del enunciado infla artificialmente la similitud.
+\end{enumerate}
+
+
+\textbf{Identidad canónica y deduplicación.} Dos premisas con el mismo \texttt{(defPath, defPos)} representan el mismo objeto lógico, aunque aparezcan en posiciones distintas de la prueba (por ejemplo, una función invocada dos veces). Antes de cualquier filtro, las premisas se deduplican por esta identidad canónica.
+
+
+\textbf{Cálculo de Jaccard.} Sean \texttt{P(A)} y \texttt{P(B)} los conjuntos de premisas (post-filtros, deduplicados). La distancia de Jaccard se define como:
+
+$$d\_J(A, B) = 1 - \frac{|P(A) \cap P(B)|}{|P(A) \cup P(B)|}$$
+
+El umbral de decisión es $\theta = 0.5$: si la distancia supera 0.5, las pruebas se consideran estructuralmente distintas (\texttt{pruebas\_distantes = True}). Si no lo supera, se consideran cercanas. Si alguno de los conjuntos queda vacío tras los filtros, no se emite distancia y el veredicto es \texttt{INCONCLUSIVE}.
+
+
+\textbf{Estado de calibración.} El umbral $\theta = 0.5$ es el valor inicial de diseño y no ha sido calibrado contra un conjunto amplio de pares. El único punto de datos calibrado es el par T08 (pruebas de irracionalidad de $\sqrt{2}$ por paridad vs. valuación 2-ádica), que arroja Jaccard = 0.7222 y es correctamente clasificado como "pruebas distintas" con $\theta = 0.5$.
+
+
+\subsection{3.5 Árbol de veredictos}
+
+El orquestador (\texttt{src/novelty\_v2/orchestrator.py}) implementa el árbol de decisión completo, que se recorre en orden de costo creciente:
+
+
+\begin{verbatim}D2 (trivialidad): ¿alguna táctica de T\_AUTO cierra τ?
+  ├── SÍ → NO\_NOVEDOSO\_trivial                         (FIN)
+  └── NO → D1 C\_F (Leandex)
+            ├── match → D3 (si hay premisas)
+            │           ├── distantes  → NOVEDAD\_DEMOSTRACION
+            │           ├── cercanas   → NO\_NOVEDOSO\_redundante
+            │           ├── vacías     → INCONCLUSIVE
+            │           └── no disponible → MATCH\_ENCONTRADO\_PENDIENTE\_D3
+            └── sin match → exact? (fallback)
+                            ├── match → mismo camino que C\_F
+                            └── sin match → D1 C\_I (arXiv/SS + LLM judge)
+                                            ├── equivalent → CONOCIDO\_LITERATURA
+                                            ├── generalization/specialization → ZONA\_GRIS
+                                            └── different/sin candidatos → NOVEDAD\_ENUNCIADO\end{verbatim}
+
+
+\textbf{Lógica de cortocircuito.} D2 es la primera evaluación porque es local y barata (segundos por táctica). Si el teorema es trivial, el árbol termina sin consultar APIs externas. D1 C\_F (Leandex) es la segunda porque es una consulta HTTP rápida. D1 C\_I es la tercera porque involucra múltiples APIs (TheoremSearch, Semantic Scholar, arXiv) y una llamada al LLM judge. D3 es la más cara (extracción de premisas + Jaccard) y solo se ejecuta cuando hay un match en C\_F que requiere dirimir si la prueba es novedosa o redundante.
+
+
+\textbf{Los ocho veredictos.} El sistema emite uno de ocho veredictos, cada uno con una interpretación operacional precisa:
+
+\begin{enumerate}
+\item \texttt{NOVEDAD\_ENUNCIADO}: sin match en C\_F ni C\_I.
+\item \texttt{NOVEDAD\_DEMOSTRACION}: match en C\_F, D3 indica pruebas distantes.
+\item \texttt{CONOCIDO\_LITERATURA}: match en C\_I (literatura informal), sin match en C\_F.
+\item \texttt{NO\_NOVEDOSO\_redundante}: match en C\_F, D3 indica misma prueba.
+\item \texttt{NO\_NOVEDOSO\_trivial}: D2 cierra con táctica estándar.
+\item \texttt{ZONA\_GRIS}: el LLM judge clasifica el match como generalización o especialización (requiere revisión humana).
+\item \texttt{MATCH\_ENCONTRADO\_PENDIENTE\_D3}: match en C\_F, D3 no disponible (sin premisas extraídas o sin par de comparación).
+\item \texttt{INCONCLUSIVE}: D3 ejecutado pero los conjuntos de premisas quedaron vacíos tras los filtros.
+\end{enumerate}
+
+
+\subsection{3.6 Implementación y estado actual}
+
+El sistema está implementado en Python 3.11+ y corre sobre Windows 10 nativo. La base de código se organiza en dos módulos: \texttt{src/} contiene el parser original, el orquestador de novedad (\texttt{src/novelty\_v2/}) y las tres dimensiones (D1, D2, D3); \texttt{avid-clean/} contiene una copia del parser y un orquestador de formalización reescrito con abstracción multi-modelo. El árbol de veredictos se ejecuta desde \texttt{src/novelty\_v2/} y es idéntico independientemente de qué orquestador haya formalizado el paper.
+
+
+El proyecto completo cuenta con 167 pruebas superadas y 1 saltada (julio 2026), un dataset de evaluación de 24 teoremas evaluados de 26 planificados más 9 slots pendientes, y un dataset de 33 papers retirados por duplicación con 52 controles emparejados.
+
+
+\section{4. Validación de instrumentos}
+
+Antes de evaluar el sistema completo contra papers reales (sección 5), esta sección valida cada instrumento por separado contra ground truth conocido: D3 contra pares de calibración con juicio humano, D2 contra el eval set de 24 teoremas, y D1 contra la cobertura del mismo eval set.
+
+
+\subsection{4.1 D3: escalera de calibración}
+
+La distancia de Jaccard se validó sobre cinco pares de teoremas para los cuales un juez humano (el primer autor) determinó la relación esperada entre sus demostraciones y firmó cada etiqueta. Los pares cubren el espectro completo: misma prueba (control self), pruebas genuinamente distintas, pruebas disfrazadas de distintas que resultaron idénticas tras la formalización, y teoremas completamente no relacionados (control cruzado).
+
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+Par & Tipo (juez) & Jaccard (similitud) & Distancia & Intersección & Unión \\
+\hline
+T08a vs T08a (self) & Control: misma prueba & 1.0 & 0.0 & 9 & 9 \\
+T07a vs T07b & same\_disguised & 0.50 & 0.50 & 1 & 2 \\
+T08a vs T08b & genuinely\_different & 0.2778 & 0.7222 & 5 & 18 \\
+T09a vs T09b & genuinely\_different & 0.0 & 1.0 & 0 & 6 \\
+T07 vs T08 (cross-pair) & Control: no relacionados & 0.0 & 1.0 & 0 & 10 \\
+\hline
+\end{tabular}
+\caption{}
+\label{}
+\end{table}
+
+
+\textbf{Interpretación de la escalera.}
+
+\textbf{T08 (distancia = 0.7222).} Dos pruebas genuinamente distintas de la irracionalidad de raiz de 2 producen una distancia alta. Las 5 premisas compartidas son lemas fundacionales (aritmetica de \texttt{Nat}, \texttt{mul\_comm}, \texttt{eq\_of\_sub\_eq\_zero}); las 13 premisas exclusivas de cada lado capturan las estrategias divergentes (divisibilidad por primos vs. valuacion 2-adica). El umbral theta = 0.5 clasifica correctamente este par como "pruebas distantes".
+
+\textbf{T07 (distancia = 0.50).} Las dos pruebas de la infinitud de primos (Euclides y Euler) quedan exactamente en el umbral. Tras la formalizacion en Lean, ambas colapsaron a la misma invocacion del lema \texttt{Nat.exists\_infinite\_primes}. Con solo 2 premisas totales tras los filtros y 1 compartida, el Jaccard es fragil: pequenos cambios en el comportamiento de los filtros invertirian el veredicto. El juez humano las etiqueto como \texttt{same\_disguised}: enunciados distintos en la fuente LaTeX, identicos en el proof term elaborado. Este par ilustra un fenomeno recurrente en D3: la autoformalizacion tiende a colapsar pruebas conceptualmente distintas hacia el lema de Mathlib mas cercano.
+
+
+\textbf{T09 (distancia = 1.0, interseccion = 0).} Las dos pruebas de la suma de Gauss (induccion con \texttt{sum\_range\_succ} + \texttt{ring} vs. formula cerrada con \texttt{Finset.sum\_range\_id}) no comparten ninguna premisa tras los filtros. Cada lado tiene 6 premisas, todas exclusivas de su estrategia. El juez humano las etiqueto como \texttt{genuinely\_different}, y la distancia maxima refleja correctamente esa diferencia. Este es el resultado esperado tras la reescritura de T09a con induccion (la version anterior usaba el mismo lema \texttt{sum\_range\_id} que T09b y colapsaba).
+
+
+\textbf{Control negativo (T07 vs. T08).} La distancia entre un teorema de teoria de numeros (infinitud de primos) y uno de analisis (irracionalidad de raiz de 2) es 1.0 con interseccion vacia. Esto confirma que D3 no produce similitud espuria entre teoremas de dominios matematicos distintos.
+
+
+\textbf{Hallazgo de convergencia.} Mathlib, en su version actual (v4.29.0), contiene tipicamente una sola prueba canonica para cada teorema clasico. El caso T07 lo ilustra de forma extrema: dos estrategias de prueba que un matematico consideraria distintas (factorial de Euclides, divergencia de Euler) colapsan al mismo lema \texttt{Nat.exists\_infinite\_primes} al ser formalizadas. Esto implica que D3 mide distancia relativa al corpus formal, no a un espacio abstracto de demostraciones. Reportamos D3 como "relativo a Mathlib v4.29.0".
+
+
+\subsection{4.2 D2: filtro de trivialidad}
+
+El filtro de trivialidad se evaluo sobre 24 de los 26 teoremas del eval set (T20 y T21 no fueron formalizados en esta corrida: T20 requeria una salida especifica de LLM no recolectada, y T21 dependia de seleccionar un caso del ConjecturingProvingLoop de Kasaura et al. que quedo pendiente de implementacion). Los 24 teoremas evaluados cubren triviales por diseno, clasicos en Mathlib, pares con distinta prueba, enunciados cercanos, casos generados por IA, y casos de falla.
+
+
+\subsubsection{Resultados completos}
+
+\textbf{D2 detecto correctamente la trivialidad en 6 teoremas:}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+Teorema & Descripcion & Tactica & Tiempo (s) & Expectativa \\
+\hline
+T14 & Suma de 4 pares es par & `aesop` & 13.6 & Trivial \\
+T15 & 2 + 2 = 4 & `decide` & 13.1 & Trivial \\
+T16 & n + 0 = n & `norm\_num` & 13.0 & Trivial \\
+T17 & n <= n + 1 & `norm\_num` & 13.0 & Trivial \\
+T19 & Teorema generado por LLM sobre pares & `aesop` & 13.3 & Trivial (probable) \\
+T22 & n par entonces n+0 es par & `norm\_num` & 13.5 & Caso de falla para D1 \\
+\hline
+\end{tabular}
+\caption{}
+\label{}
+\end{table}
+
+
+T19 y T22 merecen comentario. T19 fue generado por un LLM con la instruccion "enuncia y prueba un teorema original sobre numeros pares"; D2 lo cerro con \texttt{aesop}, confirmando la hipotesis de que los LLM tienden a producir enunciados triviales. T22 ("si n es par entonces n+0 es par") es logicamente equivalente a "si n es par entonces n es par"; D2 lo cerro con \texttt{norm\_num} en 13.5s, lo cual es correcto (el teorema es trivial) aunque T22 fue disenado para testear D1 (equivalencia sintactica), no D2. Ambos casos se clasifican como aciertos de D2 con expectativa ambigua.
+
+\textbf{D2 clasifico correctamente como no triviales los 18 teoremas restantes:}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+Teoremas & Categoria & Resultado D2 \\
+\hline
+T01, T02, T03, T04, T05, T06 & Clasicos en Mathlib & No trivial (correcto) \\
+T07a, T08a, T09a & Pares con distinta prueba & No trivial (correcto) \\
+T10, T11, T12, T13 & Enunciados cercanos & No trivial (correcto) \\
+T18 & Suma de impares = n\textasciicircum{}2 (trampa de control) & No trivial (correcto) \\
+T23 & Grafo conexo y aciclico es arbol & No trivial (correcto) \\
+T24 & Haces coherentes en esquema noetheriano & No trivial (correcto) \\
+T25 & n par sii 2 divide a n & No trivial (correcto) \\
+T26 & Suma de n pares es par & No trivial (correcto) \\
+\hline
+\end{tabular}
+\caption{}
+\label{}
+\end{table}
+
+
+\textbf{Casos notables.} T18 (suma de los primeros n impares es n\textasciicircum{}2) es una trampa de control: no es trivial (requiere induccion), y D2 correctamente no la cerro. T23 (definicion de arbol como conexo + aciclico) en esta corrida tampoco fue cerrado por D2, a diferencia de corridas anteriores donde \texttt{tauto} lo cerraba sobre una definicion conjuntiva; el enunciado Lean efectivamente usado en esta evaluacion difiere del que producia el falso positivo. T14 (suma de 4 pares) fue cerrado por \texttt{aesop} en 13.6s, a diferencia del falso negativo documentado en la seccion 3.4.2 donde \texttt{aesop} requeria \textasciitilde{}215s: la diferencia se debe al enunciado Lean concreto generado en esta corrida, que resulto mas simple de cerrar.
+
+\subsubsection{Agregado}
+
+Sobre los 24 teoremas evaluados, D2 acierta en 22 casos (91.7\%). Los 2 casos restantes (T19 y T22) son aciertos operacionales de D2 (los teoremas son triviales y D2 los detecto) cuya expectativa en el eval set era ambigua o estaba dirigida a otra dimension. No se registran falsos positivos ni falsos negativos de D2 en esta corrida. La precision D1+D2 combinada se discute en 4.3.
+
+
+\subsection{4.3 D1: cobertura del corpus formal}
+
+La rama C\_F de D1 (Leandex sobre Mathlib) encontro match para los 18 teoremas no triviales que alcanzaron esa etapa (100\% de cobertura sobre no triviales). Los 6 teoremas que aparecen sin match en C\_F (T14, T15, T16, T17, T19, T22) son exactamente los 6 que D2 detecto como triviales y sobre los cuales el pipeline aplico cortocircuito: D1 nunca se ejecuto para ellos porque el arbol de decision se detuvo en D2. La columna \texttt{d1\_existe\_en\_C\_F = False} en el CSV refleja esta no-ejecucion, no un fallo de Leandex.
+
+
+\textbf{No hubo falsos positivos de D1 C\_F en esta corrida.} Todos los matches de Leandex corresponden a teoremas que efectivamente estan en Mathlib. Los 18 matches encontrados cubren: teoremas clasicos (T01-T06: Pitagoras, Fermat pequeno, teorema fundamental del calculo, infinitud de primos, irracionalidad de raiz de 2, suma de Gauss), pares de prueba (T07a, T08a, T09a), enunciados cercanos (T10-T13: primos impares, AM-GM), y casos de falla (T18, T23, T24, T25, T26).
+
+La rama C\_I (busqueda en literatura informal via TheoremSearch, Semantic Scholar, arXiv y LLM judge) no se activo para ningun teorema de esta corrida. El motivo no es que los candidatos no superaran el threshold MiniLM de 0.40, sino que la condicion de entrada a C\_I (D2 = False y C\_F sin match) nunca se cumplio: todos los teoremas no triviales tenian match en C\_F, y todos los que no tenian match en C\_F eran triviales y fueron detenidos en D2. C\_I es una rama del arbol que el eval set actual, por su composicion (dominado por teoremas ya presentes en Mathlib), no ejercita.
+
+
+\subsection{4.4 Resumen de instrumentos}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+Instrumento & Validado contra & Resultado & Estado \\
+\hline
+D3 & 5 pares de calibracion (juicio humano firmado) & 3/3 pares calibrados consistentes con el juez: 2 genuinely\_different (T08, T09), 1 same\_disguised (T07). 2 controles correctos (self, unrelated). & Funcional, umbral theta=0.5 sin calibrar \\
+D2 & Eval set (24 teoremas) & 22/24 = 91.7\% de acierto; 2 casos con expectativa ambigua (T19, T22). Cero falsos positivos, cero falsos negativos. & Funcional \\
+D1 C\_F & Eval set (18 teoremas no triviales) & 18/18 = 100\% de cobertura sobre no triviales. Los 6 sin match son triviales detenidos en D2. & Funcional \\
+D1 C\_I & No evaluada (rama no alcanzada en esta corrida) & Sin datos. El eval set no contiene teoremas que activen la condicion de entrada a C\_I. & No evaluada \\
+\hline
+\end{tabular}
+\caption{}
+\label{}
+\end{table}
+
+
+\section{5. Experimentos}
+
+Esta sección reporta tres bloques de evaluación, todos de carácter preliminar. El primero describe cómo se construyó el dataset de papers retirados que sirve de ground truth para los experimentos. El segundo presenta un estudio profundo sobre 10 papers con el pipeline D1+D2 completo, incluyendo una auditoría manual de fidelidad de formalización. El tercero presenta un estudio ancho sobre 52 papers usando similitud semántica de enunciados. Los tres bloques comparten una misma metodología: comparar papers retirados de arXiv por duplicación de resultados previos contra papers de control emparejados por categoría y año.
+
+
+\subsection{5.1 Construcción del dataset de retirados}
+
+\subsubsection{5.1.1 Búsqueda y filtrado}
+
+Se consultó la API pública de arXiv (\texttt{export.arxiv.org}) con la query \texttt{cat:math.* AND co:withdrawn}, que devolvió 2600 papers retirados en categorías de matemática. Sobre el texto del withdrawal comment de cada paper, se aplicaron 23 patrones de expresión regular diseñados para identificar retiros por duplicación de resultados previos y excluir retiros por errores, gaps o problemas administrativos.
+
+
+Los patrones más frecuentes fueron: "result was/is already known" (5 ocurrencias), "had already been proved by [autor]" (4), "results are not new/original" (4), "subsumed by" (4), y "previously proved/proven by" (3).
+
+
+El resultado fueron 33 candidatos. De ellos, 26 resultaron viables (fuente LaTeX descargable desde arXiv, al menos un entorno de teorema detectable), y 7 no viables: sus fuentes usan formatos no estándar como AMS-TeX (\texttt{\documentstyle{amsppt}}) o nombres abreviados de entornos (\texttt{\begin{thm}} en lugar de \texttt{\begin{theorem}}) que el parser actual no reconoce.
+
+
+Los 26 papers viables cubren 17 categorías de matemática, con concentración en Combinatorics (math.CO, 4) y Algebraic Geometry (math.AG, 3), y un rango de años de 2001 a 2026 con mayor densidad en 2007–2016.
+
+
+\subsubsection{5.1.2 Controles emparejados}
+
+Para cada uno de los 26 papers retirados se seleccionaron 2 controles de arXiv con los siguientes criterios: misma categoría, año de publicación ±1, no retirados, y fuente LaTeX verificable con al menos un entorno de teorema. El emparejamiento se realizó mediante búsqueda programática sobre la API de arXiv con cortesía de red (delay de 3 segundos entre requests, backoff exponencial ante HTTP 429). Se verificaron 382 candidatos para obtener 52 controles (2 por cada retirado).
+
+
+El dataset completo para experimentos consta de 26 pares retirado + 2 controles cada uno (78 papers en total).
+
+
+\subsubsection{5.1.3 Calidad del ground truth}
+
+De los 26 papers retirados viables, 12 (46\%) citan explícitamente el trabajo previo que duplica su resultado, proporcionando autores, arXiv IDs o referencias a journals. Los 14 restantes usan frases genéricas ("already known", "not new") sin especificar la fuente. Para el experimento, el withdrawal comment del autor se toma como proxy de ground truth de duplicación, con la salvedad de que es un indicador imperfecto: el autor puede equivocarse sobre qué resultado exactamente ya existía, o puede retirar por motivos que no impliquen duplicación literal de enunciados.
+
+
+\subsection{5.2 Selección de modelo de formalización}
+
+Antes de ejecutar el experimento principal, se compararon cuatro modelos de lenguaje en la tarea de formalización statement-only (enunciado sin demostración) sobre los 5 papers retirados del smoke test. Los modelos y sus resultados:
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+Modelo & 1609.02090v1 & 1207.0631v1 & 1212.0196v1 & 1004.3381v1 & math/0604362v1 & Éxito \\
+\hline
+deepseek-v4-pro & ❌ & ❌ & ⚠️ placeholder & ❌ & ❌ & **0/5** \\
+deepseek-v4-flash & ❌ & ❌ & ❌ & ❌ & ❌ & **0/5** \\
+**qwen3.7-max** & ✅ & ✅ & ✅ & ✅ & ✅ & **5/5** \\
+glm-5.2 & ✅ & ✅ & ❌ & ✅ & ⏳ timeout & **3/5** \\
+\hline
+\end{tabular}
+\caption{}
+\label{}
+\end{table}
+
+
+\textbf{Ganador: Qwen 3.7-max (5/5).} Fue el único modelo que formalizó correctamente los 5 enunciados con definiciones matemáticamente sustantivas. Los modelos DeepSeek fallaron en todos los casos, principalmente por errores de síntesis y tokens inesperados. GLM-5.2 es un segundo fuerte (3/5, con errores reparables). Todos los experimentos subsiguientes usan Qwen 3.7-max como modelo de formalización, accedido a través de la API de OpenCode Go.
+
+
+\subsection{5.3 Estudio profundo: Run 002}
+
+\subsubsection{5.3.1 Diseño}
+
+Run 002 evaluó 10 papers (5 retirados + 5 controles emparejados) con el pipeline completo: formalización statement-only del enunciado en Lean 4, filtro de trivialidad D2, búsqueda en Mathlib D1 C\_F (Leandex), y búsqueda en literatura informal D1 C\_I (TheoremSearch + Semantic Scholar + LLM judge). Los 5 retirados se seleccionaron manualmente como casos claros de duplicación entre los 26 viables. Los 5 controles son los pares emparejados correspondientes.
+
+
+\subsubsection{5.3.2 Resultados de formalización}
+
+De los 10 papers, 7 fueron formalizados exitosamente y 3 fallaron: uno por error de compilación (\texttt{IsIrreducible} duplicado, \texttt{Complex.abs} no encontrado) y dos por timeout de API (enunciados con 4 niveles de casos anidados que exceden el límite de Qwen 3.7-max).
+
+
+\subsubsection{5.3.3 Veredictos del pipeline}
+
+Sobre los 7 papers formalizados, el pipeline emitió:
+
+\begin{itemize}
+\item \textbf{6 \texttt{NOVEDAD\_ENUNCIADO}}: el enunciado no fue encontrado en Mathlib ni en la literatura informal.
+\item \textbf{1 \texttt{CONOCIDO\_LITERATURA}}: Paper 2 (1207.0631v1, teorema de Fillmore sobre matrices). D1 C\_I encontró arXiv:1804.02140 (2018) que trata el mismo teorema. El LLM judge emitió \texttt{equivalent} con confianza 0.95. El veredicto es correcto: el teorema de Fillmore es conocido en la literatura desde al menos 1969.
+\end{itemize}
+
+
+\subsubsection{5.3.4 Auditoría de fidelidad del autor}
+
+El primer autor revisó manualmente cada una de las 7 formalizaciones exitosas, comparando el código Lean generado contra el enunciado LaTeX original, y asignó una clasificación de fidelidad:
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+Paper & ID & Rol & Fidelidad \\
+\hline
+1 & 1609.02090v1 & retirado & ✅ Fiel \\
+2 & 1207.0631v1 & retirado & ✅ Fiel \\
+3 & 1212.0196v1 & retirado & ✅ Fiel \\
+4 & 1004.3381v1 & retirado & ✅ Fiel \\
+8 & 1101.3720v1 & control & ❌ Incorrecto \\
+9 & 0904.1783v3 & control & ⚠️ Aproximación \\
+10 & math/0504586v2 & control & ❌ Incorrecto \\
+\hline
+\end{tabular}
+\caption{}
+\label{}
+\end{table}
+
+
+\textbf{Hallazgos de la auditoría:}
+
+\begin{itemize}
+\item \textbf{4/4 retirados resultaron fieles.} Los enunciados formalizados capturan correctamente los teoremas originales.
+\item \textbf{0/3 controles resultaron fieles.} Los tres controles presentan problemas graves: Paper 8 usa \texttt{theta m := sorry} (placeholder) en la definición central; Paper 9 solo formaliza una dirección de una equivalencia (⇒ en lugar de ⇔); Paper 10 define \texttt{PercolationEvent = {ω | True}} y \texttt{probMeasure} como medida de Dirac en lugar de Bernoulli(p), trivializando completamente el teorema.
+\end{itemize}
+
+
+\textbf{Asimetría retirados/controles.} La tasa de fidelidad es 4/4 para retirados y 0/3 para controles. Una posible explicación es un sesgo de selección: los controles, emparejados por categoría y año pero no por complejidad de enunciado, tienden a tener enunciados más largos y con más casos anidados, lo que aumenta la dificultad de formalización. Los dos controles que fallaron por timeout de API (Papers 6 y 7) refuerzan esta hipótesis.
+
+
+\subsubsection{5.3.5 Caso de prior art: 1404.0187}
+
+El Paper 1 (1609.02090v1, problema de Waring sobre Z\_n) es un caso ilustrativo de los límites de D1. El paper fue retirado porque su resultado principal (γ(4) = 15) ya había sido probado por Hardy y Littlewood. Sin embargo, D1 informal no encontró a Hardy y Littlewood en el top 5 de TheoremSearch. Lo que sí encontró fue arXiv:1404.0187 ("Representing Integers as the Sum of Two Squares in the Ring Z\_n"), un paper de 2014 sobre exactamente el mismo problema, con score 0.637. El duplicador canónico (Hardy \& Littlewood, circa 1920) no aparece porque TheoremSearch indexa arXiv, no la literatura anterior a 1991.
+
+
+Este caso ilustra el punto ciego temporal de D1: el corpus informal cubre arXiv, no la literatura matemática completa. Resultados anteriores a la era de los preprints electrónicos son invisibles para el sistema.
+
+
+\subsection{5.4 Estudio ancho: Wide Study v2}
+
+\subsubsection{5.4.1 Diseño original y defectos metodológicos (v1)}
+
+El objetivo del wide study era evaluar, a escala, si una métrica simple de similitud semántica de enunciados basta para distinguir papers retirados de controles. La primera versión (v1) corrió sobre los 52 papers del dataset (26 retirados + 26 controles), consultando TheoremSearch con el texto del primer teorema de cada paper (truncado a 1000 caracteres) y registrando el top-10 de matches.
+
+
+La v1 reportó 12 strong matches (papers con al menos un resultado de score ≥ 0.75), todos controles. Este resultado parecía prometedor pero resultó ser un artefacto de dos defectos metodológicos:
+
+\begin{enumerate}
+\item \textbf{Auto-exclusión ausente.} El script no excluía el propio paper de los resultados de TheoremSearch. De los 12 strong matches, 11 eran self-matches: el paper se encontró a sí mismo en el índice de TheoremSearch. Solo 1 match (math/0504586v2 vs. 0901.4760, "A survey on dynamical percolation") era genuinamente cruzado.
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{38 de 52 papers sin texto de teorema.} El script no pudo extraer enunciados para 38 papers. Las causas: arXiv retiró los fuentes de los papers retirados (el endpoint \texttt{arxiv.org/src/{id}} devuelve 404), y varios controles no estaban en el caché local. El resultado fue que 0 de 26 retirados tenían scores, haciendo imposible cualquier comparación.
+\end{enumerate}
+
+
+\subsubsection{5.4.2 Correcciones (v2)}
+
+La versión 2 corrigió ambos defectos:
+
+\begin{itemize}
+\item \textbf{Auto-exclusión.} Se pasó el parámetro \texttt{exclude\_arxiv\_ids} a la función \texttt{search\_theoremsearch()}, filtrando el propio paper de los resultados.
+\item \textbf{Cache lookup.} Se agregó búsqueda en el caché de la v1 (\texttt{cache/retracted\_dataset/}) para papers cuyas fuentes de arXiv ya no están disponibles.
+\item \textbf{Explicit skip.} Los papers sin texto de teorema extraíble se marcan explícitamente como \texttt{skip} en lugar de generar scores falsos.
+\end{itemize}
+
+
+\subsubsection{5.4.3 Resultados (v2)}
+
+La v2 se ejecutó sobre los 52 papers originales. Tras filtrado, 37 resultaron evaluables (tenían texto de teorema extraíble y generaron resultados de TheoremSearch distintos de self-match). Los resultados:
+
+\begin{itemize}
+\item \textbf{7 strong matches} (score ≥ 0.75): 5 retirados y 2 controles.
+\item \textbf{Mann-Whitney U test} sobre la distribución de similarity scores entre retirados y controles: \textbf{p = 0.854}.
+\end{itemize}
+
+
+\subsubsection{5.4.4 Interpretación}
+
+El valor p = 0.854 indica que no hay diferencia estadísticamente significativa entre las distribuciones de scores de similitud de papers retirados y controles. Dicho de otra forma: la similitud semántica de enunciados, medida como embedding coseno contra el índice de TheoremSearch, no permite distinguir un paper que duplica resultados previos de uno que no.
+
+Este es el resultado principal del wide study y es un \textbf{resultado negativo}: con la métrica actual y el corpus disponible, el sistema no puede separar retirados de controles a escala. Las razones posibles son múltiples: (a) el withdrawal comment es un proxy ruidoso de ground truth (un paper puede ser retirado por duplicación sin que su enunciado principal sea textualmente cercano al original duplicado); (b) TheoremSearch indexa enunciados modernos de arXiv, no la literatura clásica donde están los duplicadores originales; (c) el texto del primer teorema de un paper no necesariamente es el enunciado duplicado.
+
+
+\subsection{5.5 Resumen de hallazgos experimentales}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+Experimento & n & Resultado principal & Carácter \\
+\hline
+Comparación de modelos & 5 papers × 4 modelos & Qwen 3.7-max 5/5; DeepSeek Pro 0/5 & Selección de herramienta \\
+Run 002 (estudio profundo) & 10 papers & 7/10 formalizados; 1 acierto D1; asimetría de fidelidad (4/4 vs 0/3) & Evidencia de funcionamiento + límites \\
+Wide Study v2 (estudio ancho) & 37 papers evaluables & p = 0.854; indistinguibles & Resultado negativo \\
+\hline
+\end{tabular}
+\caption{}
+\label{}
+\end{table}
+
+
+\textbf{Tres conclusiones preliminares:}
+
+\begin{enumerate}
+\item El pipeline corre de extremo a extremo sobre papers reales, con una tasa de formalización del 70\% (7/10) en el estudio profundo, pero esa tasa es engañosamente alta porque los papers fueron seleccionados manualmente entre los más formalizables del dataset.
+\end{enumerate}
+
+\begin{enumerate}
+\item Allí donde el pipeline corre, D1 encuentra matches relevantes en la literatura informal (Paper 2) y no produce falsos positivos (los 4 retirados fieles fueron correctamente clasificados como \texttt{NOVEDAD\_ENUNCIADO} porque Mathlib no contiene sus enunciados). Pero el punto ciego temporal impide encontrar duplicadores canónicos anteriores a arXiv (caso Hardy \& Littlewood).
+\end{enumerate}
+
+\begin{enumerate}
+\item A escala, la señal de novedad se diluye. El wide study no encuentra diferencia entre retirados y controles. Esto puede reflejar una limitación del corpus, una limitación de la métrica de similitud semántica como proxy de novedad, o una combinación de ambas.
+\end{enumerate}
+
+
+\section{6. Limitaciones}
+
+Las limitaciones de AViD v1 se agrupan en tres categorías: las del framework conceptual (qué mide la métrica y qué no), las de la implementación (qué hace el sistema actual y qué no), y las del diseño experimental (qué nos dicen realmente los números reportados).
+
+
+\subsection{6.1 Limitaciones del framework conceptual}
+
+\textbf{L1. Métrica teorema-a-teorema, no artículo-completo.} AViD evalúa cada teorema individualmente contra el corpus. Un paper que reorganiza teoremas conocidos de forma novedosa (la combinación es lo nuevo, no las partes) no sería detectado. Esta es una decisión de scope para v1; una capa de agregación sobre teoremas queda como trabajo futuro.
+
+
+\textbf{L2. Jaccard ignora el peso de cada premisa.} Una premisa rara y específica (por ejemplo, un lema profundo de teoría algebraica de números) cuenta igual que una premisa ubicua (por ejemplo, \texttt{Nat.add\_comm}). La ponderación por IDF usando la distribución scale-free del AFP documentada por Huch (arXiv:2209.13305) es trabajo futuro.
+
+
+\textbf{L3. Solo opera sobre \texttt{Prop} (proof irrelevance).} La distancia de Jaccard sobre conjuntos de premisas asume proof irrelevance: dos pruebas de la misma proposición son intercambiables. Para teoremas en \texttt{Type} (donde la identidad de la prueba importa), la noción correcta sería homotópica, no de premisas. Extender D3 a un fragmento univalente es trabajo futuro de largo plazo.
+
+
+\textbf{Lakatos (1976).} AViD mide novedad sobre enunciados y pruebas congelados en un corpus formal. No captura novedad conceptual: una definición nueva que reformula un problema, o una demostración que introduce un método transferible a otros dominios. Esta limitación no es de implementación sino del marco mismo: la novedad transformacional es cualitativamente distinta de la novedad de enunciado y requiere criterios que exceden la comparación de premisas.
+
+
+\textbf{Došen (2003).} La identidad de pruebas es un problema indecidible en general. Jaccard sobre premisas es una aproximación computable que expone al sistema a dos tipos de error: falsos positivos (pruebas normalización-equivalentes que usan premisas superficialmente distintas) y falsos negativos (estrategias distintas que comparten lemas del núcleo). La elección de Jaccard es una decisión de ingeniería, no una solución al problema filosófico.
+
+
+\subsection{6.2 Limitaciones de la implementación v1}
+
+\textbf{L4. Equivalencia de tipos solo sintáctica (D1 nivel 0).} D1 compara enunciados por igualdad sintáctica tras normalización. No implementa \texttt{isDefEq} (equivalencia definicional vía kernel de Lean). Dos enunciados lógicamente equivalentes con sintaxis distinta (por ejemplo, \texttt{Even n} vs. \texttt{2 \mid n}) pueden producir un falso negativo. Documentado con los casos T22 y T25 del eval set. \texttt{isDefEq} está diferido por ser no prioritario para v1.
+
+
+\textbf{L5. D2 sobre-aproxima la trivialidad.} Las tácticas de \texttt{T\_AUTO}, en particular \texttt{aesop}, pueden cerrar teoremas que un matemático no consideraría triviales. El caso documentado es T23 (\texttt{IsTree = Connected ∧ IsAcyclic}), que en corridas con una definición conjuntiva fue cerrado por \texttt{tauto}, aunque en la corrida de evaluación reportada (sección 4.2) el enunciado Lean usado no activó ese camino. El sesgo es conservador hacia "no novedoso", que es el error seguro: es preferible marcar como trivial un teorema que no lo es que declarar novedoso uno que un estudiante puede probar en tres líneas.
+
+\textbf{L5b. Sensibilidad de D2 al enunciado formalizado.} T14 (suma de cuatro pares es par) ilustra que el resultado de D2 no es una propiedad fija del teorema sino del par (enunciado formalizado, táctica, presupuesto). En la corrida de evaluación, \texttt{aesop} lo cerró en 13.6s; en corridas anteriores con un enunciado Lean más complejo, la misma táctica requirió \textasciitilde{}215s y excedió el presupuesto de 30s. Esta variabilidad no es un bug sino una consecuencia de que D2 opera sobre el producto de la autoformalización, no sobre el enunciado platónico.
+
+
+\textbf{L6. Autoformalización de pruebas ajenas es frágil.} La rama D1 C\_I requiere traducir enunciados de papers de arXiv para compararlos con el enunciado candidato. La tasa de éxito de formalización de pruebas ajenas, medida con DeepSeek V4 Pro en 45 llamadas, fue de 0\%. Pendiente remedición con Qwen 3.7-max, que mostró mejor desempeño en formalización de enunciados (5/5 en el benchmark de modelos).
+
+
+\textbf{L7. Eval set pequeño y curado a mano.} El eval set actual tiene 26 teoremas firmes más 9 slots sin poblar, de los cuales 24 fueron evaluados en la corrida reportada (sección 4.2). La precisión de D2 aislado es de 22/24 = 91.7\%, con 2 casos de expectativa ambigua (T19 y T22). Estos números son evidencia preliminar, no validación a escala. Una corrida sobre Mathlib completo (\textasciitilde{}1.9 millones de líneas) o sobre un corpus arXiv mayor es trabajo futuro.
+
+
+\textbf{L8. La medición depende del proceso de formalización.} AViD evalúa la prueba formalizada, no la prueba platónica. Dos formalizaciones distintas del mismo argumento informal podrían dar distancias de Jaccard diferentes. El math filter sobre premisas (Filtro 1 + Filtro 2) reduce este ruido pero no lo elimina.
+
+
+\textbf{L9. D3 fuera del pipeline en tiempo real.} La extracción de premisas con \texttt{ExtractData.lean} requiere ejecutar \texttt{lake env lean} sobre archivos que posiblemente importen Mathlib completo. Aunque funciona en Windows nativo (sin requerir WSL), el tiempo de extracción no es compatible con un demo interactivo. En la arquitectura actual, D3 se ofrece como análisis a pedido, no como parte del flujo automático.
+
+
+\textbf{L10. D2 es relativo al par (T\_AUTO, Mathlib\_version).} Esto no es una limitación sino una propiedad del diseño: la trivialidad operacional depende de qué tácticas están disponibles y de qué tan potentes son. \texttt{norm\_num} en Mathlib v4.29.0 cierra \texttt{Irrational (Real.sqrt 2)} en 14 segundos; en 1870, esa demostración requería aproximadamente 5 páginas de análisis real. El paper reporta \texttt{T\_AUTO} y la versión exacta de Mathlib (v4.29.0, commit 8a178386) para permitir reproducción fiel. Reproducciones en versiones futuras pueden dar resultados distintos, y eso es esperable.
+
+
+\textbf{L11. Mathlib compila monolíticamente.} Los imports específicos de módulos (\texttt{import Mathlib.Data.Nat.Prime}, etc.) fallan al ejecutar \texttt{lake env lean} sobre archivos temporales. Solo \texttt{import Mathlib} e \texttt{import Mathlib.Tactic} funcionan como puntos de entrada. Esto obliga a que cada invocación de D2 cargue Mathlib completo, con un overhead de 45 segundos por proceso (medido en Windows). El precalentamiento de oleans al iniciar el demo amortiza este costo.
+
+
+\subsection{6.3 Limitaciones del diseño experimental}
+
+\textbf{L12. n pequeño en el estudio profundo.} Run 002 evaluó solo 10 papers (5 retirados + 5 controles), seleccionados manualmente entre los 26 viables del dataset. Los resultados (7/10 formalizados, 1 acierto en D1 informal) son ilustrativos pero no generalizables. Un experimento con los 26 retirados completos + sus 52 controles requeriría resolver el cuello de botella de formalización (tasa actual: 70\% en selección manual, probablemente menor en el dataset completo).
+
+
+\textbf{L13. Sesgo de formalizabilidad en el dataset.} Los 26 papers viables del dataset de retirados son aquellos cuya fuente LaTeX era parseable y cuyos enunciados eran formalizables. Los 7 excluidos (AMS-TeX, nombres abreviados de entornos) y los 2 controles que fallaron por timeout en Run 002 (enunciados demasiado largos) introducen un sesgo de accesibilidad técnica. No sabemos si los papers excluidos son sistemáticamente más o menos "duplicables" que los incluidos.
+
+
+\textbf{L14. Punto ciego temporal del corpus.} D1 informal indexa arXiv (desde 1991) y TheoremSearch (arXiv + 7 fuentes adicionales). La literatura matemática anterior a la era de los preprints electrónicos es invisible para el sistema. El caso documentado es el Paper 1 de Run 002 (1609.02090v1): el duplicador real es Hardy y Littlewood (circa 1920), pero D1 informal encontró arXiv:1404.0187 (2014) en su lugar. Este punto ciego no es inherente al diseño de AViD sino al corpus que consume: Matlas (arXiv:2604.17484), con 8.07 millones de enunciados de revistas peer-reviewed que cubren de 1826 a 2025, mitigaría este problema. Integrar Matlas como segundo proveedor de C\_I es trabajo futuro inmediato y una hipótesis contrastable: si el corpus se expande hacia atrás en el tiempo, la tasa de detección de duplicadores canónicos debería aumentar.
+
+
+\textbf{L15. θ = 0.5 sin calibrar.} El umbral de Jaccard para decidir entre \texttt{NOVEDAD\_DEMOSTRACION} y \texttt{NO\_NOVEDOSO\_redundante} es el valor inicial de diseño (0.5). Fue propuesto para ser calibrado contra los pares T07, T08 y T09, pero la calibración está bloqueada: T07 está exactamente en la frontera (distancia = 0.50), T08 es correctamente clasificado (0.7222), y T09 tiene intersección vacía porque ambas pruebas usan conjuntos de premisas disjuntos (inducción vs. fórmula cerrada). Las distancias se reportan crudas donde es posible; donde no, el veredicto es \texttt{INCONCLUSIVE}.
+
+
+\textbf{L16. D3 informal es experimental.} El puente "match en C\_I, descargar fuente del paper, formalizar su prueba, extraer premisas, comparar con D3" se implementó como prueba de concepto en \texttt{src/novelty\_v2/informal\_match.py} pero no tiene tasa de éxito medida. La formalización de pruebas ajenas, necesaria para este camino, tuvo 0\% de éxito en el PoC actual con DeepSeek V4 Pro. Reportamos esta capacidad como dirección de investigación, no como resultado.
+
+
+\textbf{L17. El withdrawal comment como ground truth es un proxy imperfecto.} El experimento con papers retirados asume que el comentario de retiro del autor es evidencia confiable de duplicación. La auditoría de Run 002 encontró que 3 de 5 papers de control tenían problemas de fidelidad de formalización (definiciones placeholder, equivalencias truncadas a una dirección, teoremas trivializados). Esto sugiere que la calidad del ground truth no es uniforme incluso entre papers no retirados. Para los retirados, 12 de 26 citan explícitamente el trabajo previo que los duplica; los 14 restantes usan frases genéricas ("already known") sin especificar la fuente.
+
+
+\subsection{6.4 Síntesis}
+
+Las limitaciones de AViD v1 trazan un perímetro claro. El sistema funciona sobre el subconjunto de teoremas que (a) son expresables en el fragmento \texttt{Prop} de Lean 4, (b) tienen un enunciado parseable por el extractor de LaTeX, (c) son formalizables por al menos uno de los modelos del backend, y (d) tienen premisas extraíbles por \texttt{ExtractData.lean}. Dentro de ese perímetro, el árbol de decisión D2-D1-D3 produce veredictos con grounding verificable. Fuera de él, el sistema es explícitamente incompleto. La sección 7 detalla qué queda por construir para expandir ese perímetro.
+
+
+\section{7. Conclusión}
+
+Este artículo presentó AViD Journal: un pipeline que recibe un artículo en LaTeX, lo formaliza en Lean 4, y aplica un árbol de decisión en tres dimensiones para emitir un veredicto de novedad con grounding formal. La contribución central es la estructura del sistema, no la magnitud de los resultados experimentales. Ambos se reportan con el mismo nivel de detalle.
+
+
+\subsection{7.1 Lo construido}
+
+El pipeline integra cinco componentes que, combinados, cubren el recorrido completo desde el fuente LaTeX hasta el veredicto:
+
+\begin{enumerate}
+\item \textbf{Parser de LaTeX} que extrae bloques matemáticos (teoremas, lemas, definiciones) y construye un grafo de dependencias para determinar el orden de formalización.
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{Capa de formalización multi-modelo} con ocho backends (Claude Code, Anthropic, OpenAI, DeepSeek, OpenRouter, Mistral, Gemini, y OpenCode Go como default), criterio de éxito exigente (sin errores, sin \texttt{sorry}, con declaración sustantiva), y proyecto Lean 4 compartido con Mathlib v4.29.0 (8,247 archivos \texttt{.olean}).
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{Tres corpus de referencia}: Mathlib v4.29.0 vía Leandex (formal), arXiv + Semantic Scholar + TheoremSearch con LLM judge (informal), y el corpus propio del paper vía \texttt{PAPER\_INDEX.md}.
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{Tres dimensiones de novedad}: D1 (no-existencia previa, ramas formal e informal con cortocircuito), D2 (no-trivialidad, 6 tácticas con presupuestos y blacklist para \texttt{norm\_num}), D3 (distancia de Jaccard sobre premisas con dos filtros, umbral theta = 0.5).
+\end{enumerate}
+
+\begin{enumerate}
+\item \textbf{Árbol de decisión} que compone las tres dimensiones en ocho veredictos, recorriendo las evaluaciones en orden de costo creciente: D2 (local, segundos), D1 C\_F (API rápida), D1 C\_I (múltiples APIs + LLM judge), D3 (extracción de premisas + Jaccard).
+\end{enumerate}
+
+
+El sistema corre sobre Windows 10 nativo. Toda la infraestructura de extracción de premisas (D3) funciona sin requerir WSL ni Docker. El código está disponible en \texttt{github.com/ayrtonporto/avid-journal}.
+
+
+\subsection{7.2 Lo medido}
+
+Los experimentos, reportados como preliminares en todos los casos, produjeron tres tipos de evidencia:
+
+\textbf{Evidencia de funcionamiento.} El pipeline corre de extremo a extremo. Formalizó 7 de 10 papers en el estudio profundo (Run 002). D2 acertó en 22 de 24 teoremas del eval set (91.7\%), con 2 casos de expectativa ambigua (T19 de origen LLM, T22 de equivalencia sintactica) y cero falsos positivos o negativos en la corrida reportada. D1 C\_F encontro los 18 teoremas no triviales que alcanzaron esa etapa (100\% de cobertura sobre no triviales); los 6 restantes fueron detenidos por D2 sin llegar a D1. D3 produjo una escalera de distancias consistente con el juicio humano en los 3 pares calibrados con etiqueta firmada por el autor (T07: same\_disguised, T08 y T09: genuinely\_different), mas 2 controles correctos (self, unrelated).
+
+\textbf{Evidencia de límites.} El wide study v2 (37 papers evaluables) no encontró diferencia estadísticamente significativa entre papers retirados y controles en la similitud semántica de enunciados (Mann-Whitney p = 0.854). El punto ciego temporal del corpus impide encontrar duplicadores anteriores a 1991 (caso Hardy \& Littlewood). La rama D1 informal, en su configuración actual con threshold MiniLM de 0.40, no se activa para ningún teorema del eval set. La auditoría de fidelidad de formalización reveló una asimetría preocupante: 4/4 papers retirados resultaron fieles contra 0/3 controles.
+
+\textbf{Evidencia metodológica.} La construcción del dataset de 33 papers retirados por duplicación, con 52 controles emparejados por categoría y año, establece un benchmark reusable. La comparación de cuatro modelos de formalización (Qwen 3.7-max 5/5, GLM-5.2 3/5, DeepSeek Pro 0/5, DeepSeek Flash 0/5) cuantifica la viabilidad relativa de distintos backends. Los defectos metodológicos del wide study v1 (self-matches por falta de auto-exclusión, 38/52 papers sin scores) quedan documentados como advertencia para trabajos futuros que usen TheoremSearch como fuente.
+
+
+\subsection{7.3 Lo pendiente}
+
+El trabajo futuro se organiza en tres frentes:
+
+\textbf{Mejoras de la métrica.}
+\begin{itemize}
+\item \textbf{F1:} Premisas ponderadas por IDF usando la distribución scale-free del AFP (Huch, arXiv:2209.13305).
+\item \textbf{F2:} Distancia sobre grafos de dependencia completos, no solo conjuntos de premisas.
+\item \textbf{F3:} \texttt{isDefEq} para D1 nivel 1 (equivalencia definicional, más allá de la igualdad sintáctica actual).
+\end{itemize}
+
+\textbf{Expansión experimental.}
+\begin{itemize}
+\item \textbf{F4:} Corrida del pipeline completo (D1+D2+D3) sobre Mathlib completo (\textasciitilde{}1.9 millones de líneas).
+\item \textbf{F5:} Benchmark sobre un corpus arXiv autoformalizado, análogo al enfoque de ArxivMathGradingBench.
+\item \textbf{F6:} Re-ejecución del wide study con el dataset ampliado a los 26 retirados viables y exploración de thresholds alternativos para MiniLM con medición propia de recall y precisión.
+\end{itemize}
+
+\textbf{Infraestructura.}
+\begin{itemize}
+\item \textbf{F7:} Múltiples modelos de autoformalización en paralelo (Numina, Axiom, Kimina, ProofFlow) para reducir la dependencia de un solo proveedor.
+\item \textbf{F8:} Demo web (Gradio + Hugging Face Spaces) con pipeline D1+D2 en tiempo real y D3 a pedido.
+\item \textbf{F9:} Integración con TheoremGraph + LeanGraph (arXiv:2606.25363 [VERIFICAR]) para heredar su grafo unificado formal-informal como corpus de D1 y D3.
+\item \textbf{F10:} Publicación del dataset de papers retirados como benchmark comunitario para verificación de novedad.
+\item \textbf{F11:} Integración de Matlas (arXiv:2604.17484) como segundo proveedor de C\_I, cerrando el punto ciego temporal anterior a 1991 (L14). Su corpus de 8.07 millones de enunciados de revistas peer-reviewed (1826-2025) complementa el horizonte arXiv de TheoremSearch.
+\end{itemize}
+
+
+\subsection{7.4 Cierre}
+
+AViD Journal no es un sistema que resuelva el problema de la novedad automática. Es un sistema que lo plantea de manera operacional, lo implementa, lo mide, y documenta exactamente dónde falla. Esa documentación de los límites (las 17 limitaciones de la sección 6, el resultado negativo del wide study, la asimetría de fidelidad en Run 002) es tan parte de la contribución como el pipeline mismo.
+
+La tesis del paper es que la pregunta "¿se puede arbitrar novedad automáticamente?" no se responde con un diseño de métrica ni con un argumento de arquitectura. Se responde construyendo el sistema, corriéndolo contra ground truth real, y reportando qué funcionó y qué no. Eso es lo que este artículo hace.
+
+
+\begin{thebibliography}{99}
+
+\bibitem{abouzaid2026}
+M.\textasciitilde{}Abouzaid \emph{et al.}, ``First Proof: A mathematics challenge for AI,''
+arXiv:2602.05192, 2026.
+
+\bibitem{tao2025}
+T.\textasciitilde{}Tao, ``Machine-Assisted Proof,''
+\emph{Notices of the AMS}, 2025.
+
+\bibitem{kasaura2025}
+K.\textasciitilde{}Kasaura \emph{et al.}, ``Discovering New Theorems via LLMs with In-Context Proof Learning in Lean,''
+arXiv:2509.14274, 2025.
+
+\bibitem{theoremsearch2026}
+A.\textasciitilde{}Ilin, T.\textasciitilde{}Alper, and L.\textasciitilde{}Inchiostro, ``TheoremSearch: Semantic Search over Theorems,''
+arXiv:2602.05216, 2026.
+
+\bibitem{theoremgraph2026}
+TheoremGraph + LeanGraph, arXiv:2606.25363, 2026. {[}VERIFICAR{]}
+
+\bibitem{compose2026}
+COMPOSE, arXiv:2605.30333, 2026. {[}VERIFICAR{]}
+
+\bibitem{leanconjecturer2025}
+N.\textasciitilde{}Onda \emph{et al.}, ``LeanConjecturer: Filtering Novelty in LLM-Generated Conjectures,''
+arXiv:2506.22005, 2025.
+
+\bibitem{matlas2026}
+Matlas: 8.07M theorem statements from 435K peer-reviewed articles (1826--2025),
+arXiv:2604.17484, 2026.
+
+\bibitem{yoo2025}
+S.\textasciitilde{}Yoo, ``The Axiom-Based Atlas of Mathematical Theorems,''
+arXiv:2504.00063, 2025.
+
+\bibitem{kaliszyk2013}
+C.\textasciitilde{}Kaliszyk and J.\textasciitilde{}Urban, ``MaSh: Machine Learning for Sledgehammer,''
+\emph{Interactive Theorem Proving (ITP)}, 2013. {[}VERIFICAR{]}
+
+\bibitem{magnushammer2024}
+M.\textasciitilde{}Mikula, A.\textasciitilde{}Jiang, W.\textasciitilde{}Li \emph{et al.}, ``Magnushammer: A Transformer-Based Approach to Premise Selection,''
+\emph{ICLR}, 2024.
+
+\bibitem{piotrowski2023}
+B.\textasciitilde{}Piotrowski \emph{et al.}, ``Machine-Learned Premise Selection for Lean,''
+arXiv:2304.00994, 2023.
+
+\bibitem{network2026}
+``The Network Structure of Mathlib,''
+arXiv:2604.24797, 2026. {[}VERIFICAR{]}
+
+\bibitem{huch2022}
+F.\textasciitilde{}Huch, ``Structure in Theorem Proving: Analyzing the Archive of Formal Proofs,''
+arXiv:2209.13305, 2022.
+
+\bibitem{mining2024}
+``Mining Math Conjectures from LLMs: A Pruning Approach,''
+arXiv:2412.16177, 2024.
+
+\bibitem{synthetic2024}
+``Synthetic Theorem Generation in Lean,''
+OpenReview EeDSMy5Ruj, 2024.
+
+\bibitem{withdrarxiv2024}
+R.\textasciitilde{}Rao \emph{et al.}, ``WithdrarXiv: A Large-Scale Dataset of Retracted Papers,''
+arXiv:2412.03775, 2024.
+
+\bibitem{pseudo2026}
+Pseudo-Formalization / ArxivMathGradingBench, 2026. {[}VERIFICAR{]}
+
+\bibitem{merlean2026}
+MerLean, 2026. {[}VERIFICAR{]}
+
+\bibitem{survey2026}
+``AI for Mathematics: Progress, Challenges, and Prospects,''
+arXiv:2601.13209, 2026.
+
+\bibitem{lakatos1976}
+I.\textasciitilde{}Lakatos, \emph{Proofs and Refutations}, Cambridge University Press, 1976.
+
+\bibitem{dosen2003}
+K.\textasciitilde{}Dosen, ``Identity of Proofs,''
+\emph{Bulletin of Symbolic Logic}, vol.\textasciitilde{}9, no.\textasciitilde{}4, 2003.
+
+\end{thebibliography}
+
+\end{document}
