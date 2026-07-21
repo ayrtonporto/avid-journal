@@ -94,7 +94,7 @@ D3 (a pedido): extraer premisas → Jaccard > θ? → NOVEDAD_DEMOSTRACION
 ### Componentes técnicos
 - **D2:** `lake env lean` sobre `example : τ := by T` para `T ∈ {decide, norm_num, simp, omega, tauto, aesop}`. Budgets: 10s/30s. Blacklist: `norm_num` no corre si el tipo menciona `Irrational`.
 - **D1 C_F:** Leandex API v2 (sin scores, similarity sintética por orden).
-- **D1 C_I:** Stage A: TheoremSearch + Semantic Scholar + arXiv (embeddings MiniLM, threshold 0.25). Stage B: LLM Judge (DeepSeek V4 Flash, temperature=0, 4 veredictos: equivalent/generalization/specialization/different).
+- **D1 C_I:** Stage A: TheoremSearch + Semantic Scholar + arXiv (embeddings MiniLM, threshold 0.40). Stage B: LLM Judge (DeepSeek V4 Flash, temperature=0, 4 veredictos: equivalent/generalization/specialization/different).
 - **D3:** ExtractData.lean (515 líneas, Windows nativo) → `compute_d3()` → Jaccard con Filtro 1 (infraestructura: `Init`, `Lean`, `Std`) + Filtro 2 (typeclasses: `Decidable`, `OfNat`, `simp` config).
 
 ---

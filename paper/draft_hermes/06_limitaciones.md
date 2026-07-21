@@ -72,7 +72,7 @@ Las limitaciones de AViD v1 se agrupan en tres categorías: las del framework co
 
 <!-- fuente: paper/PAPER_BRIEF.md §6 (sesgo de formalizabilidad), docs/retracted_dataset_report.md 7 no viables -->
 
-**L14. Punto ciego temporal del corpus.** D1 informal indexa arXiv (desde 1991) y TheoremSearch (arXiv + 7 fuentes adicionales). La literatura matemática anterior a la era de los preprints electrónicos es invisible para el sistema. El caso documentado es el Paper 1 de Run 002 (1609.02090v1): el duplicador real es Hardy y Littlewood (circa 1920), pero D1 informal encontró arXiv:1404.0187 (2014) en su lugar. Este no es un bug sino una limitación del corpus: AViD encuentra "lo que está en arXiv con embeddings similares", no necesariamente "el paper que el autor cita como fuente de la duplicación".
+**L14. Punto ciego temporal del corpus.** D1 informal indexa arXiv (desde 1991) y TheoremSearch (arXiv + 7 fuentes adicionales). La literatura matemática anterior a la era de los preprints electrónicos es invisible para el sistema. El caso documentado es el Paper 1 de Run 002 (1609.02090v1): el duplicador real es Hardy y Littlewood (circa 1920), pero D1 informal encontró arXiv:1404.0187 (2014) en su lugar. Este punto ciego no es inherente al diseño de AViD sino al corpus que consume: Matlas (arXiv:2604.17484), con 8.07 millones de enunciados de revistas peer-reviewed que cubren de 1826 a 2025, mitigaría este problema. Integrar Matlas como segundo proveedor de C_I es trabajo futuro inmediato y una hipótesis contrastable: si el corpus se expande hacia atrás en el tiempo, la tasa de detección de duplicadores canónicos debería aumentar.
 
 <!-- fuente: docs/prior_art_1404.md, paper/PAPER_BRIEF.md caso 1404.0187 -->
 

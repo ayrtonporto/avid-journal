@@ -90,8 +90,6 @@ D1 verifica si el enunciado ya aparece en el corpus formal (C_F) o informal (C_I
 
 <!-- fuente: docs/dimensions_facts.md:51-66 (threshold 0.40, bandas C_I) -->
 
-[FALTA: confirmar si el threshold de C_I es 0.40 (valor en código) o 0.25 (valor mencionado en PAPER_BRIEF.md). La discrepancia está documentada en docs/section3_facts.md:266-268.]
-
 ### 3.4.2 D2: No-trivialidad
 
 D2 verifica si el enunciado puede ser demostrado exclusivamente con tácticas automáticas estándar de Lean. Si alguna táctica cierra `example : τ := by T`, el teorema es trivial.

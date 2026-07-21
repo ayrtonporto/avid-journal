@@ -22,7 +22,7 @@ El espacio de buscadores de Mathlib está saturado. **Loogle** [VERIFICAR], **Le
 
 <!-- fuente: paper/bibliography_merged.md D1-D4 (buscadores de Mathlib) -->
 
-**Matlas** [VERIFICAR] extrae enunciados con sus dependencias de 435,000 papers y 1,900 libros, y los despliega en orden topológico ("unfolding"). Su solución al problema de "pruebas que delegan a lemas" es el estado del arte para D1 informal. AViD podría beneficiarse de integrarla.
+**Matlas** (arXiv:2604.17484) extrae 8.07 millones de enunciados de 435,000 artículos revisados por pares que abarcan de 1826 a 2025, provenientes de 180 revistas seleccionadas por criterio de citación ICM, más 1,900 libros de texto. Su motivación explícita, construir un motor de búsqueda de teoremas sobre fuentes con verificación editorial, es complementaria a la de AViD: donde TheoremSearch cubre arXiv (desde 1991), Matlas cubre revistas peer-reviewed hasta 1826. Un survey reciente sobre IA matemática (arXiv:2601.13209) cita a ambos como infraestructura para determinar si un resultado ya es conocido, posicionando el problema de AViD como reconocido por el campo.
 
 <!-- fuente: paper/bibliography_merged.md B2 (Matlas) -->
 
@@ -32,7 +32,7 @@ El espacio de buscadores de Mathlib está saturado. **Loogle** [VERIFICAR], **Le
 
 <!-- fuente: paper/bibliography_merged.md §1 (Kasaura et al.), paper/PAPER_BRIEF.md §1 (baseline ingenuo) -->
 
-**LeanConjecturer** [VERIFICAR] filtra novedad con `exact?` contra Mathlib y no-trivialidad con `aesop`. Estos son exactamente los mecanismos que AViD implementa como D1 (exact? como fallback de C_F) y D2 (aesop en el conjunto T_AUTO). La contribución de AViD no es inventar estos filtros sino integrarlos en un árbol de decisión de tres dimensiones que emite un veredicto, agregar D3 (distancia de premisas) y D1 informal (arXiv + TheoremSearch), y evaluar contra ground truth real.
+**LeanConjecturer** (arXiv:2506.22005) filtra novedad con `exact?` contra Mathlib y no-trivialidad con `aesop`. El sistema generó 12,289 conjeturas desde 40 archivos semilla de Mathlib, de las cuales 3,776 resultaron sintácticamente válidas y no triviales (donde "no trivial" significa que `aesop` no las cierra). Estos son exactamente los mecanismos que AViD implementa como D1 (exact? como fallback de C_F) y D2 (aesop en el conjunto T_AUTO). La contribución de AViD no es inventar estos filtros sino integrarlos en un árbol de decisión de tres dimensiones que emite un veredicto, agregar D3 (distancia de premisas) y D1 informal (arXiv + TheoremSearch), y evaluar contra ground truth real.
 
 <!-- fuente: paper/bibliography_merged.md B1 (LeanConjecturer) -->
 
