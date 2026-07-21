@@ -55,16 +55,16 @@
 ## 2. Baselines de mecanismo (Grupo B)
 
 ### B1. *LeanConjecturer*
-- **Identificador:** arXiv `[VERIFICAR]` (junio 2025)
+- **Identificador:** arXiv:2506.22005 (Onda et al., junio 2025)
 - **Mencionado en el repo:** No (incorporación nueva).
-- **Qué se afirma:** Filtra novedad de conjeturas con `exact?` contra Mathlib y no-trivialidad con `aesop` — exactamente los mecanismos de nuestro D1-formal (fallback) y D2, publicados como filtros estándar.
+- **Qué se afirma:** Genera 12,289 conjeturas desde 40 archivos semilla de Mathlib. Filtra con `exact?` contra Mathlib (existencia previa) y `aesop` (no-trivialidad). De las conjeturas generadas, 3,776 resultaron sintácticamente válidas y no triviales.
 - **Rol en nuestro paper:** **Baseline directo de mecanismo.** D1 (exact?) y D2 (aesop) no son contribución original nuestra; son filtros estándar que LeanConjecturer ya publicó. Nuestra contribución es: (a) la capa de veredicto integrada (tres dimensiones → un veredicto), (b) D3 (distancia de premisas) que ellos no tienen, (c) D1-informal (arXiv + TheoremSearch) más allá de Mathlib, (d) la evaluación empírica contra ground truth real (retirados). Citar para honestidad.
 
 ### B2. *Matlas*
-- **Identificador:** `[VERIFICAR]`
+- **Identificador:** arXiv:2604.17484 (abril 2026)
 - **Mencionado en el repo:** No (incorporación nueva).
-- **Qué se afirma:** Búsqueda a nivel teorema sobre 435K papers + 1.9K libros. Extrae enunciados CON sus dependencias y los despliega en orden topológico ("unfolding") para representaciones autocontenidas.
-- **Rol en nuestro paper:** **Estado del arte de D1-informal.** Su "unfolding" (despliegue topológico de dependencias) es la solución publicada al problema de "proofs que delegan a lemas" que nosotros documentamos con el flag `proof_delegates_to_lemmas` (batches 002/003). Citar para mostrar que el problema que encontramos ya tiene solución en la literatura — y que AViD podría beneficiarse de integrarla.
+- **Qué se afirma:** 8.07 millones de enunciados extraídos de 435K artículos revisados por pares que abarcan de 1826 a 2025, provenientes de 180 revistas seleccionadas por criterio de citación ICM, más 1.9K libros de texto. Motivación explícita: construir un motor de búsqueda de teoremas sobre fuentes con verificación editorial, notando que el peer review ofrece más fiabilidad que preprints como los de arXiv.
+- **Rol en nuestro paper:** **Complemento directo de D1-informal.** TheoremSearch cubre arXiv (desde 1991); Matlas cubre revistas peer-reviewed hasta 1826. Integrar Matlas como segundo proveedor de C_I mitigaría el punto ciego temporal documentado en L14 y es trabajo futuro inmediato.
 
 ### B3. *Pseudo-Formalization / ArxivMathGradingBench*
 - **Identificador:** arXiv `[VERIFICAR]` (mayo 2026)
@@ -277,8 +277,8 @@
 |---|---|---|---|
 | A2 | TheoremGraph + LeanGraph | arXiv 2606.25363 `[VERIFICAR]` | ALTA — competidor directo |
 | A3 | COMPOSE | arXiv 2605.30333 `[VERIFICAR]` | ALTA — competidor cercano |
-| B1 | LeanConjecturer | arXiv `[VERIFICAR]` | ALTA — baseline de mecanismo |
-| B2 | Matlas | ID `[VERIFICAR]` | MEDIA — estado del arte D1-informal |
+| B1 | LeanConjecturer | arXiv:2506.22005 | ALTA — baseline de mecanismo |
+| B2 | Matlas | arXiv:2604.17484 | MEDIA — complemento directo de D1-informal |
 | B3 | Pseudo-Formalization / ArxivMathGradingBench | arXiv `[VERIFICAR]` | MEDIA — vecino exacto |
 | B4 | MerLean | ID `[VERIFICAR]` | MEDIA — ya en el repo sin ID |
 | C1 | Kaliszyk & Urban (MaSh/Flyspeck) | Ref canónica `[VERIFICAR]` | ALTA — genealogía de D3 |

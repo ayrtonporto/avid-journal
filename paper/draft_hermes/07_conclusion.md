@@ -48,13 +48,14 @@ El trabajo futuro se organiza en tres frentes:
 **Expansión experimental.**
 - **F4:** Corrida del pipeline completo (D1+D2+D3) sobre Mathlib completo (~1.9 millones de líneas).
 - **F5:** Benchmark sobre un corpus arXiv autoformalizado, análogo al enfoque de ArxivMathGradingBench.
-- **F6:** Re-ejecución del wide study con el threshold MiniLM reducido a 0.25 y con el dataset ampliado a los 26 retirados viables.
+- **F6:** Re-ejecución del wide study con el dataset ampliado a los 26 retirados viables y exploración de thresholds alternativos para MiniLM con medición propia de recall y precisión.
 
 **Infraestructura.**
 - **F7:** Múltiples modelos de autoformalización en paralelo (Numina, Axiom, Kimina, ProofFlow) para reducir la dependencia de un solo proveedor.
 - **F8:** Demo web (Gradio + Hugging Face Spaces) con pipeline D1+D2 en tiempo real y D3 a pedido.
 - **F9:** Integración con TheoremGraph + LeanGraph (arXiv:2606.25363 [VERIFICAR]) para heredar su grafo unificado formal-informal como corpus de D1 y D3.
 - **F10:** Publicación del dataset de papers retirados como benchmark comunitario para verificación de novedad.
+- **F11:** Integración de Matlas (arXiv:2604.17484) como segundo proveedor de C_I, cerrando el punto ciego temporal anterior a 1991 (L14). Su corpus de 8.07 millones de enunciados de revistas peer-reviewed (1826-2025) complementa el horizonte arXiv de TheoremSearch.
 
 <!-- fuente: paper/PAPER_BRIEF.md §7 (future work), paper/bibliography_merged.md, docs/PROJECT_STATE.md pendientes -->
 
