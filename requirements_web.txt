@@ -1,0 +1,12 @@
+# AViD Journal — Web demo dependencies (D1-only)
+# Used by Hugging Face Spaces. Minimal deps: only D1 (no Lean, no Mathlib).
+
+gradio>=4.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+numpy>=1.24.0
+sentence-transformers>=2.2.0
+arxiv>=2.0.0
+
+# Testing (not needed in Space but useful for local dev)
+# pytest>=7.4.0
