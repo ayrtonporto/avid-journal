@@ -34,6 +34,7 @@ logger = logging.getLogger("avid-server")
 
 # ── Config ─────────────────────────────────────────────────────────────────
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+DEV_MODE = os.environ.get("AVID_DEV_MODE", "0") == "1"
 LANDING_HTML = Path(os.environ.get(
     "LANDING_HTML",
     "D:/Mis documentos/Documentos/avid-journal.github.io/AViD Journal - Landing.html",
@@ -68,12 +69,14 @@ async def landing():
 
     html = LANDING_HTML.read_text(encoding="utf-8")
 
-    # Inject Google Client ID and API base URL into the page
+    # Inject Google Client ID, API base URL, and dev mode flag
+    dev_flag = "true" if DEV_MODE else "false"
     html = html.replace(
         "</head>",
         f"""<script>
           window.AVID_GOOGLE_CLIENT_ID = "{GOOGLE_CLIENT_ID}";
           window.AVID_API_BASE = "";
+          window.AVID_DEV_MODE = {dev_flag};
         </script>
         </head>""",
     )
@@ -212,14 +215,16 @@ async def api_analyze(request: Request):
 
     Requires authentication. Tracks the action in the activity log.
     """
-    # Auth check
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    session = get_session(token)
-    if session is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    # Auth check (skipped in dev mode — uses anonymous user)
+    google_id = "dev-user"
+    if not DEV_MODE:
+        token = request.headers.get("Authorization", "").replace("Bearer ", "")
+        if not token:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        session = get_session(token)
+        if session is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        google_id = session.user.google_id
 
     # Rate limit (per-user)
     ip = request.client.host if request.client else "unknown"
@@ -249,7 +254,7 @@ async def api_analyze(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
     # Log the action
-    log_action(session.user.google_id, "analyze", {
+    log_action(google_id, "analyze", {
         "filename": uploaded.filename,
         "n_blocks": summary.get("n_blocks", 0),
         "n_errors": summary.get("n_errors", 0),
