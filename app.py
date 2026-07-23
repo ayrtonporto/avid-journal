@@ -238,6 +238,7 @@ with gr.Blocks(
         fn=process_tex,
         inputs=[file_input],
         outputs=[summary_box, results_table],
+        api_name="analyze",
     )
 
     gr.Markdown(
