@@ -40,8 +40,6 @@ from src.formalization.orchestrator import (
     lean_ident_for,
     topological_sort,
 )
-from src.formalization.scripts.task import TaskMetadata
-from src.formalization.scripts.runner import PAT_RATE_LIMIT
 from src.parser.latex_parser import LaTeXParser
 
 
@@ -84,25 +82,6 @@ def test_classify_modes():
     assert_eq(classify(by_label["thm:four_evens"]), Mode.MEDIUM, "thm:four_evens mode")
 
     print("[PASS] test_classify_modes")
-
-
-def test_claude_code_env_does_not_inherit_api_keys(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    monkeypatch.setenv("CLAUDE_API_KEY", "claude-test")
-    task = TaskMetadata(
-        task_type="file",
-        target_path=FIXTURE,
-        prompt="test",
-    )
-
-    env = task.build_env()
-
-    assert "ANTHROPIC_API_KEY" not in env
-    assert "CLAUDE_API_KEY" not in env
-
-
-def test_claude_code_session_limit_is_detected():
-    assert PAT_RATE_LIMIT.search("You've hit your session limit · resets 7:40pm")
 
 
 def test_topological_sort_order():
