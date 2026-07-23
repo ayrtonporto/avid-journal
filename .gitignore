@@ -33,6 +33,12 @@ htmlcov/
 # Logs locales de ejecución
 *.log
 
+# Stray results / temp files en raíz
+arxiv_verification_*.json
+
+# Project briefing (internal doc)
+IDEA.md
+
 # Cache local y auditorías de desarrollo
 cache/
 audit/

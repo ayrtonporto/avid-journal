@@ -1,18 +1,26 @@
 """
-AViD Journal - Formalization Orchestrator
-==========================================
+AViD Journal - Formalization Orchestrator (model-agnostic)
+==========================================================
 Pipeline principal: LaTeX -> (parser) -> bloques -> (topo sort) ->
-por cada bloque: classify -> Claude Code (o axioma) -> verificar ->
+por cada bloque: classify -> ModelProvider -> verificar ->
 append a Paper.lean -> registrar en PAPER_INDEX.md.
+
+La seleccion del modelo se hace por configuracion (variable de entorno
+AVID_MODEL_PROVIDER o parametro explicito). El orchestrator no tiene
+dependencia en ningun modelo concreto.
 
 Uso:
     from src.formalization.orchestrator import formalize_paper
 
+    # Usa el provider por defecto (Claude Code)
+    result = formalize_paper(tex_path="paper.tex", paper_title="My Paper")
+
+    # Usa un provider especifico
     result = formalize_paper(
-        tex_path="tests/fixtures/sample_paper.tex",
-        paper_title="Sample Paper",
+        tex_path="paper.tex",
+        paper_title="My Paper",
+        model="deepseek",
     )
-    print(result["summary"])
 """
 
 from __future__ import annotations
@@ -22,7 +30,6 @@ import os
 import re
 import sys
 import time
-import subprocess
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -36,31 +43,58 @@ try:
 except Exception:
     pass
 
-_THIS_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _THIS_DIR.parents[1]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+# ── Path setup ──────────────────────────────────────────────────
+# Necesitamos acceso a:
+#   - prompts/ y lean_project/ (repo original)
+#   - parser/ (repo local avid-clean/)
+_THIS_DIR = Path(__file__).resolve().parent  # avid-clean/formalization/
+_STAGING_ROOT = _THIS_DIR.parent  # avid-clean/
+
+# 1) Asegurar que avid-clean/ está en sys.path (para imports locales como parser/)
+if str(_STAGING_ROOT) not in sys.path:
+    sys.path.insert(0, str(_STAGING_ROOT))
+
+# 2) Buscar el repo original (contiene prompts/, lean_project/, src/)
+_candidate = _STAGING_ROOT
+_ORIGINAL_REPO: Optional[Path] = None
+for _ in range(5):
+    if (_candidate / "prompts").exists() and (_candidate / "lean_project").exists():
+        _ORIGINAL_REPO = _candidate
+        break
+    _candidate = _candidate.parent
+if _ORIGINAL_REPO is None:
+    _ORIGINAL_REPO = _STAGING_ROOT.parents[1]  # fallback
+if str(_ORIGINAL_REPO) not in sys.path:
+    sys.path.insert(0, str(_ORIGINAL_REPO))
 
 # ruff: noqa: E402
-from src.formalization.complexity import (
+from src.formalization.complexity import (  # noqa: E402
     Mode,
     classify,
     max_rounds_for,
     prompt_file_for,
 )
-from src.formalization import mathlib_search
-from src.formalization.lean_project import (
+from src.formalization import mathlib_search  # noqa: E402
+from src.formalization.lean_project import (  # noqa: E402
     AVID_REPO_ROOT,
     DEFAULT_PARENT_PROJECT,
     LeanProjectManager,
     create_paper_project,
     slugify,
 )
-from src.formalization.scripts.lean_checker import check_lean_file
-from src.parser.latex_parser import LaTeXParser
+from src.formalization.scripts.lean_checker import check_lean_file  # noqa: E402
 
+# ── Parser: desde el paquete local avid-clean/parser/ ──────────
+from parser.latex_parser import LaTeXParser  # noqa: E402
 
-PROMPTS_DIR = AVID_REPO_ROOT / "prompts"
+# ── Providers: import relativo desde el paquete local ──────────
+from .providers import (  # noqa: E402
+    ModelProvider,
+    FormalizationResult,
+    resolve_provider,
+)
+
+PROMPTS_DIR = _ORIGINAL_REPO / "prompts"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -96,7 +130,6 @@ def topological_sort(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     Bloques sin label o sin dependencias mantienen el orden del parser.
     Si hay un ciclo, emite un warning y devuelve el orden original.
     """
-    # Indexa por label para mapear referencias a posiciones reales
     label_to_idx: Dict[str, int] = {}
     for i, b in enumerate(blocks):
         lab = b.get("label")
@@ -112,7 +145,6 @@ def topological_sort(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         for r in refs:
             if r in label_to_idx:
                 src = label_to_idx[r]
-                # src -> i (i depende de src)
                 adj[src].append(i)
                 indeg[i] += 1
 
@@ -198,8 +230,8 @@ def _render_task_md(
         f"1. (HARD mode only) Read `docs/prompts/avid_common.md` and "
         f"`docs/prompts/avid_sketch_agent.md`.\n"
         f"2. Open `{target_rel}` and add your declaration(s).\n"
-        f"3. Verify with `lean_diagnostic_messages(file_path=\"{target_rel}\")`.\n"
-        f"4. Iterate until there are no severity-1 errors and no `sorry`.\n"
+        f"3. Verify with the Lean compiler.\n"
+        f"4. Iterate until there are no errors and no `sorry`.\n"
         f"5. End your response with `END_REASON:COMPLETE` (success) or "
         f"`END_REASON:LIMIT`.\n"
     )
@@ -212,8 +244,8 @@ def _render_stub_lean(
 ) -> str:
     """Stub inicial para Blocks/<lean_name>.lean.
 
-    Claude edita este archivo. El stub contiene solo imports y un comentario
-    con metadatos; el Sketch Agent escribe la declaracion formalizada.
+    El modelo edita este archivo. El stub contiene solo imports y un comentario
+    con metadatos.
 
     Args:
         paper_module: nombre Lean completo del modulo del paper, p.ej.
@@ -264,6 +296,8 @@ def _lake_build_paper_module(
     Returns:
         True si `lake build` completo sin error.
     """
+    import subprocess
+
     print(f"[avid] lake build {paper_module}  (cachear olean tras: {label})")
     try:
         result = subprocess.run(
@@ -282,9 +316,6 @@ def _lake_build_paper_module(
         return False
 
     if result.returncode != 0:
-        # Esto NO es fatal: si falla aqui es probable que Paper.lean tenga
-        # un bloque previo roto. El bloque actual podra fallar la verificacion
-        # tambien, pero el orchestrator debe seguir y registrarlo.
         tail = (result.stderr or result.stdout or "").splitlines()[-15:]
         print(f"[avid] [WARN] lake build fallo (rc={result.returncode}):")
         for line in tail:
@@ -296,58 +327,57 @@ def _lake_build_paper_module(
 
 
 # ─────────────────────────────────────────────────────────────
-# Ejecucion de Claude Code sobre un bloque
+# Ejecucion del modelo sobre un bloque
 # ─────────────────────────────────────────────────────────────
 
-def _run_claude_on_target(
+def _run_model_on_target(
     target_abs: Path,
     cwd: Path,
     prompt_file: Path,
     max_rounds: int,
+    provider: ModelProvider,
+    task_md_path: Path,
     dry_run: bool = False,
 ) -> Tuple[bool, str]:
-    """Invoca `run_claude.py run` como subprocess.
+    """Invoca al proveedor de modelo para formalizar el bloque.
+
+    Construye el prompt completo (archivo de prompt + TASK.md) y lo pasa
+    al provider. El provider es responsable de ejecutar el modelo y escribir
+    el codigo Lean en `target_abs`.
+
+    Args:
+        target_abs: path absoluto al archivo .lean que el modelo debe editar.
+        cwd: directorio de trabajo (proyecto Lean del paper).
+        prompt_file: archivo de prompt especifico del modo (SIMPLE/MEDIUM/HARD).
+        max_rounds: presupuesto maximo de rondas.
+        provider: instancia de ModelProvider a usar.
+        task_md_path: path al archivo TASK.md generado.
+        dry_run: si True, no se invoca ningun modelo.
 
     Returns:
-        (success, end_reason_or_error_message)
+        (success, info) donde success es bool e info es un string descriptivo
+        ("COMPLETE", "LIMIT", "RATE_LIMITED", o mensaje de error).
     """
     if dry_run:
         return True, "DRY_RUN"
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "src.formalization.scripts.run_claude",
-        "run",
-        str(target_abs),
-        "--prompt-file",
-        str(prompt_file),
-        "--cwd",
-        str(cwd),
-        "--max-rounds",
-        str(max_rounds),
-        "--task-type",
-        "file",
-    ]
+    # Construir prompt completo: system prompt + TASK.md
+    system_prompt = prompt_file.read_text(encoding="utf-8")
+    task_content = task_md_path.read_text(encoding="utf-8")
+    full_prompt = f"{system_prompt}\n\n---\n\n{task_content}"
 
-    print(f"[avid] Lanzando Claude: {' '.join(cmd)}")
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(AVID_REPO_ROOT),
-            capture_output=False,
-            check=False,
-        )
-        # AViD: exit code 99 from run_claude indicates Anthropic rate-limit /
-        # quota exhausted. We bubble this up via a sentinel info string the
-        # caller (`_run_block`) can match.
-        if result.returncode == 99:
-            return False, "RATE_LIMITED"
-        return result.returncode == 0, f"returncode={result.returncode}"
-    except FileNotFoundError as e:
-        return False, f"Claude CLI not found: {e}"
-    except Exception as e:
-        return False, f"subprocess error: {e}"
+    print(f"[avid] Ejecutando modelo ({provider.__class__.__name__})...")
+    result = provider.formalize(
+        target_path=target_abs,
+        prompt=full_prompt,
+        max_rounds=max_rounds,
+        cwd=cwd,
+    )
+
+    if result.info == "RATE_LIMITED":
+        return False, "RATE_LIMITED"
+
+    return result.success, result.info
 
 
 # ─────────────────────────────────────────────────────────────
@@ -381,9 +411,7 @@ def _extract_declarations(target_path: Path) -> str:
     return result + "\n" if result else ""
 
 
-# Tipos de bloque LaTeX que se intentan formalizar. Los que no estan en este
-# conjunto (e.g. `remark`, `example`) se omiten silenciosamente: rara vez son
-# enunciados formales y suelen romper el orden topologico al referenciarse.
+# Tipos de bloque LaTeX que se intentan formalizar.
 FORMALIZABLE_TYPES = frozenset({
     "definition",
     "theorem",
@@ -396,9 +424,6 @@ FORMALIZABLE_TYPES = frozenset({
 def _parse_blocks_range(spec: str, total: int) -> List[int]:
     """Convierte un spec ("1-13", "5,7-9", "10") en una lista de indices
     1-based dentro de [1, total]. Indices fuera de rango se silencian.
-
-    Returns:
-        Lista ordenada y sin duplicados de indices 1-based.
     """
     if not spec or not spec.strip():
         return list(range(1, total + 1))
@@ -427,9 +452,7 @@ def _parse_blocks_range(spec: str, total: int) -> List[int]:
     return sorted(selected)
 
 
-# Palabras clave que abren una declaracion Lean de nivel superior.
-# Si ninguna aparece tras `_extract_declarations`, asumimos que Claude no
-# escribio nada util (typico cuando la sesion fallo silenciosamente).
+# Keywords que abren una declaracion Lean de nivel superior.
 _LEAN_DECL_KEYWORDS = (
     "def", "theorem", "lemma", "axiom", "abbrev", "instance",
     "structure", "inductive", "class", "example", "notation",
@@ -444,7 +467,7 @@ _LEAN_DECL_RE = re.compile(
 def _has_real_declaration(extracted_code: str) -> bool:
     """True si el codigo extraido contiene al menos una declaracion Lean real.
 
-    Filtra el caso en que Claude no edita el archivo (deja solo banner +
+    Filtra el caso en que el modelo no edita el archivo (deja solo banner +
     `import`) pero el verificador de compilacion lo da por bueno trivialmente.
     """
     if not extracted_code or not extracted_code.strip():
@@ -481,7 +504,6 @@ def _handle_external(
     result = mathlib_search.lookup(statement, context={"type": block.get("type")})
 
     if result.found and result.mathlib_name:
-        # Caso v2: reexportar el nombre desde Mathlib
         code = (
             f"-- (external) found in Mathlib as `{result.mathlib_name}`\n"
             f"-- source: Mathlib\n"
@@ -490,8 +512,6 @@ def _handle_external(
         status = "✅ verified"
         source = "Mathlib"
     else:
-        # Axioma con placeholder de firma. El paper NO provee prueba y
-        # Mathlib no lo contiene; queda como supuesto declarado.
         title = block.get("title") or ""
         lean_signature = "True  -- TODO: signature placeholder; refine manually"
         source = title or "external result (paper without proof)"
@@ -524,7 +544,7 @@ def _handle_external(
 
 
 # ─────────────────────────────────────────────────────────────
-# Ejecucion de un bloque con Claude Code
+# Ejecucion de un bloque con el modelo
 # ─────────────────────────────────────────────────────────────
 
 def _run_block(
@@ -532,10 +552,11 @@ def _run_block(
     lean_name: str,
     mode: Mode,
     manager: LeanProjectManager,
+    provider: ModelProvider,
     processed: List[Dict[str, Any]],
     dry_run: bool = False,
 ) -> Dict[str, Any]:
-    """Ejecuta el pipeline para un bloque no-externo."""
+    """Ejecuta el pipeline para un bloque no-externo usando el provider dado."""
     project_dir = manager.project_dir
     blocks_dir = project_dir / "Blocks"
     blocks_dir.mkdir(parents=True, exist_ok=True)
@@ -557,15 +578,14 @@ def _run_block(
     task_md = _render_task_md(
         block, lean_name, target_rel, manager.lean_module, satisfied_deps,
     )
-    (project_dir / "TASK.md").write_text(task_md, encoding="utf-8")
+    task_md_path = project_dir / "TASK.md"
+    task_md_path.write_text(task_md, encoding="utf-8")
 
-    # 3) Invocar Claude Code
+    # 3) Invocar el modelo
     prompt_file = PROMPTS_DIR / prompt_file_for(mode)
     max_rounds = max_rounds_for(mode)
 
     if dry_run:
-        # En dry-run no se invoca Claude: solo se simula exito para
-        # probar el resto del pipeline (stubs, TASK.md, PAPER_INDEX).
         success, info = True, "DRY_RUN"
     elif not prompt_file.exists():
         print(
@@ -574,17 +594,17 @@ def _run_block(
         )
         success, info = False, f"missing prompt: {prompt_file.name}"
     else:
-        success, info = _run_claude_on_target(
+        success, info = _run_model_on_target(
             target_abs=target_path,
             cwd=project_dir,
             prompt_file=prompt_file,
             max_rounds=max_rounds,
+            provider=provider,
+            task_md_path=task_md_path,
             dry_run=dry_run,
         )
 
-    # AViD: rate-limit early-exit. Don't pollute PAPER_INDEX.md with a
-    # "failed" entry, don't run the verify step (the file is just a stub).
-    # Surface a special status so formalize_paper can abort the loop.
+    # Rate-limit early-exit
     if not success and info == "RATE_LIMITED":
         return {
             "label": block.get("label"),
@@ -592,7 +612,7 @@ def _run_block(
             "status": "⏸️ rate_limited",
             "mode": mode.value,
             "line": 0,
-            "error": "Anthropic rate limit / quota exhausted",
+            "error": "Model provider rate limit / quota exhausted",
         }
 
     # 4) Verificar compilacion del archivo objetivo
@@ -605,20 +625,15 @@ def _run_block(
                 f"verify failed (has_error={has_error}, has_sorry={has_sorry})"
             )
         else:
-            # Defensa contra falso positivo: si Claude no escribio nada
-            # (p.ej. la sesion se cayo silenciosamente), el archivo stub
-            # con solo banner + `import` compila trivialmente. Exigimos
-            # que haya al menos una declaracion Lean real.
             extracted_code = _extract_declarations(target_path)
             if not _has_real_declaration(extracted_code):
                 success = False
                 info = (
-                    "claude did not produce a Lean declaration "
+                    "model did not produce a Lean declaration "
                     "(file has only banner/import; likely silent failure)"
                 )
 
     if not success:
-        # Registrar como failed y continuar
         line_number = manager.append_block(
             f"-- FAILED block: {block.get('label')}\n"
             f"-- reason: {info}\n"
@@ -643,9 +658,6 @@ def _run_block(
         }
 
     # 5) Extraer codigo y acumular en Paper.lean
-    # AViD: en dry_run NO escribimos en Paper.lean / PAPER_INDEX.md (eso
-    # corromperia los datos persistentes que despues los runs reales
-    # consultan via el modo resume). Solo simulamos el resultado.
     if dry_run:
         return {
             "label": block.get("label"),
@@ -656,7 +668,7 @@ def _run_block(
             "info": "DRY_RUN",
         }
 
-    code = extracted_code  # ya extraido en el paso 4
+    code = extracted_code
     line_number = manager.append_block(code)
     manager.register_block(
         label=block.get("label") or lean_name,
@@ -668,9 +680,7 @@ def _run_block(
         dependencies=block.get("references"),
     )
 
-    # 6) Refrescar olean del modulo Paper para que el proximo bloque lo
-    # encuentre cacheado (evita retypechear Paper.lean entero cada vez).
-    # Solo aplica en modo compartido y fuera de dry-run.
+    # 6) Refrescar olean del modulo Paper
     if not dry_run and manager.parent_project is not None:
         _lake_build_paper_module(
             parent_project=manager.parent_project,
@@ -700,6 +710,7 @@ def formalize_paper(
     parent_project: Optional[Path | str] = "<default>",
     blocks_range: Optional[str] = None,
     resume: bool = True,
+    model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Orquesta la formalizacion de un paper LaTeX completo.
 
@@ -709,7 +720,7 @@ def formalize_paper(
                         Si es None, se deriva del basename del archivo.
         base_dir:       directorio donde se crea el proyecto Lean (modo standalone)
         setup_mathlib:  si True, ejecuta `lake update` + `lake exe cache get`
-        dry_run:        si True, NO invoca Claude (util para tests)
+        dry_run:        si True, NO invoca ningun modelo (util para tests)
         parent_project: directorio del proyecto Lean compartido (con Mathlib
                         pre-compilado). Por defecto usa `<repo>/lean_project`.
                         Pasa `None` explicitamente para forzar modo standalone.
@@ -723,8 +734,11 @@ def formalize_paper(
                           - None       -> todos
         resume:         si True (default), si el paper ya existe en disco se
                         saltan los bloques marcados como verified/axiom en
-                        PAPER_INDEX.md. Permite continuar tras interrupciones
-                        sin re-gastar Claude.
+                        PAPER_INDEX.md.
+        model:          nombre del proveedor de modelo a usar
+                        ("claude", "deepseek", etc.). Si es None, se resuelve
+                        desde la variable de entorno AVID_MODEL_PROVIDER.
+                        Default: "claude".
 
     Returns:
         dict con un resumen: project_dir, results[], summary{verified,axioms,failed}
@@ -734,6 +748,14 @@ def formalize_paper(
         raise FileNotFoundError(f"No existe el .tex: {tex_abs}")
 
     title = paper_title or tex_abs.stem.replace("_", " ").title()
+
+    # Resolver el proveedor de modelo (solo si no es dry-run)
+    if dry_run:
+        provider = None
+        print("[avid] Usando proveedor: (dry-run, ningun modelo)")
+    else:
+        provider = resolve_provider(model)
+        print(f"[avid] Usando proveedor: {provider.__class__.__name__}")
 
     # Resuelve parent_project (centinela "<default>" -> usar el del repo)
     if parent_project == "<default>":
@@ -752,9 +774,7 @@ def formalize_paper(
     raw_blocks = parser.parse_file(str(tex_abs))
     print(f"[avid] {len(raw_blocks)} bloques extraidos del .tex.")
 
-    # Filtrar tipos no formalizables. `remark`/`example` suelen ser narrativos
-    # (anecdotas, casos ilustrativos), no enunciados formales. Los registramos
-    # como skipped en stdout para que el usuario los vea.
+    # Filtrar tipos no formalizables
     blocks = []
     skipped_by_type: Dict[str, int] = {}
     for b in raw_blocks:
@@ -770,7 +790,7 @@ def formalize_paper(
         print(f"[avid] {sum(skipped_by_type.values())} bloques no-formalizables omitidos ({skipped_summary}).")
     print(f"[avid] {len(blocks)} bloques formalizables a procesar.")
 
-    # 2) Crear proyecto Lean (modo compartido o standalone)
+    # 2) Crear proyecto Lean
     print(f"[avid] Creando proyecto Lean para: {title}")
     manager = create_paper_project(
         paper_title=title,
@@ -779,12 +799,7 @@ def formalize_paper(
         parent_project=parent_project,
     )
 
-    # 2b) Pre-build del modulo Paper (vacio aun) en modo compartido.
-    # Esto:
-    #  - Calienta el FS cache de oleans Mathlib (un coste fijo: ~2 min en
-    #    cold start, despues los bloques verifican rapido).
-    #  - Crea el `.olean` de Papers.<Slug>.Paper, necesario para que los
-    #    Blocks lo importen sin retypechecar todo el paper en cada bloque.
+    # 2b) Pre-build del modulo Paper
     if not dry_run and manager.parent_project is not None:
         print(
             f"[avid] Pre-buildeando {manager.lean_module} (calentando "
@@ -801,7 +816,7 @@ def formalize_paper(
     total_in_paper = len(ordered)
     print(f"[avid] Orden topologico: {total_in_paper} bloques.")
 
-    # 3b) Aplicar filtro por rango (si fue especificado).
+    # 3b) Aplicar filtro por rango
     if blocks_range:
         sel = _parse_blocks_range(blocks_range, total_in_paper)
         if not sel:
@@ -811,9 +826,7 @@ def formalize_paper(
     else:
         ordered_view = list(enumerate(ordered, 1))
 
-    # 3c) Modo resume: leer bloques ya verified/axiom en PAPER_INDEX.md
-    # y saltarlos. Los `failed` se reintentan (puede que el problema haya
-    # sido transitorio o que el usuario haya mejorado prompts).
+    # 3c) Modo resume
     already_processed: Dict[str, Dict[str, str]] = {}
     if resume and not dry_run:
         already_processed = manager.get_processed_blocks()
@@ -834,7 +847,7 @@ def formalize_paper(
         lean_name = lean_ident_for(block.get("label"), fallback=f"block_{i}")
         mode = classify(block)
 
-        # Skip si ya esta verified/axiom en PAPER_INDEX.md (modo resume)
+        # Skip si ya esta verified/axiom (modo resume)
         prev = already_processed.get(label)
         if prev and prev["status"] in ("verified", "axiom"):
             print(
@@ -869,6 +882,7 @@ def formalize_paper(
                 lean_name=lean_name,
                 mode=mode,
                 manager=manager,
+                provider=provider,
                 processed=results,
                 dry_run=dry_run,
             )
@@ -879,13 +893,10 @@ def formalize_paper(
         })
         results.append(res)
 
-        # AViD: si Claude se quedo sin cuota, abortar el run completo en
-        # vez de seguir desperdiciando rondas inutilmente. El bloque actual
-        # NO se registra en PAPER_INDEX.md, asi que un proximo run lo
-        # reintenta limpiamente cuando la cuota se restablezca.
+        # Rate-limit: abortar run completo
         if "rate_limited" in (res.get("status") or ""):
             print(
-                f"\n[avid] [ABORT] Anthropic rate limit detectado en bloque "
+                f"\n[avid] [ABORT] Rate limit detectado en bloque "
                 f"{i} ({label}). Abortando el run.\n"
                 f"[avid]         Los bloques 1..{i - 1} que se hayan procesado "
                 f"quedan persistidos en PAPER_INDEX.md.\n"
@@ -894,7 +905,7 @@ def formalize_paper(
             )
             break
 
-        # Pequeno respiro entre bloques para evitar rate limits
+        # Pequeno respiro entre bloques
         if not dry_run:
             time.sleep(0.2)
 
@@ -923,10 +934,12 @@ def formalize_paper(
         "total_blocks": len(results),
         "counts": counts,
         "results": results,
+        "model_provider": provider.__class__.__name__ if provider else "dry-run",
     }
 
     print("\n[avid] ============ RESUMEN ============")
     print(f"[avid] Proyecto: {summary['project_dir']}")
+    print(f"[avid] Modelo:   {summary['model_provider']}")
     rl_str = f" rate_limited={counts['rate_limited']}" if counts.get("rate_limited") else ""
     print(
         f"[avid] Total: {summary['total_blocks']}  "
@@ -954,7 +967,7 @@ def _main():
     ap.add_argument("--base-dir", default="lean_papers")
     ap.add_argument("--setup-mathlib", action="store_true")
     ap.add_argument("--dry-run", action="store_true",
-                    help="No invoca Claude Code (util para tests)")
+                    help="No invoca ningun modelo (util para tests)")
     ap.add_argument("--standalone", action="store_true",
                     help="No usar el lean_project compartido; crea un proyecto "
                          "aislado en --base-dir (modo legacy).")
@@ -968,6 +981,9 @@ def _main():
     ap.add_argument("--no-resume", action="store_true",
                     help="Desactiva el modo resume: re-procesa bloques que ya "
                          "estaban verified/axiom en PAPER_INDEX.md.")
+    ap.add_argument("--model", default=None,
+                    help="Proveedor de modelo a usar (claude, deepseek, etc.). "
+                         "Default: valor de AVID_MODEL_PROVIDER o 'claude'.")
     ap.add_argument("--json", action="store_true",
                     help="Imprime el resumen final como JSON")
     args = ap.parse_args()
@@ -988,6 +1004,7 @@ def _main():
         parent_project=parent,
         blocks_range=args.blocks_range,
         resume=not args.no_resume,
+        model=args.model,
     )
 
     if args.json:
