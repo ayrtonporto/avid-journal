@@ -43,6 +43,9 @@ LANDING_HTML = Path(os.environ.get(
 # FastAPI app
 # ═══════════════════════════════════════════════════════════════════════════
 
+from collections import defaultdict
+import time as time_module
+
 app = FastAPI(title="AViD Journal", version="1.0")
 
 app.add_middleware(
@@ -168,6 +171,38 @@ async def journal_stats():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Health check
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/health")
+async def health():
+    return JSONResponse({"status": "ok", "version": "1.0"})
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rate limiter (simple in-memory, per-IP)
+# ═══════════════════════════════════════════════════════════════════════════
+
+_rate_window = 60  # seconds
+_rate_limit = 5     # max requests per window per IP
+_rate_buckets: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate(ip: str) -> bool:
+    """Return True if the request is within the rate limit."""
+    now = time_module.time()
+    window = now - _rate_window
+    _rate_buckets[ip] = [t for t in _rate_buckets[ip] if t > window]
+    if len(_rate_buckets[ip]) >= _rate_limit:
+        return False
+    _rate_buckets[ip].append(now)
+    # Cleanup old entries periodically
+    if len(_rate_buckets) > 10000:
+        _rate_buckets.clear()
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Analysis endpoint (delegates to app.py pipeline)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -185,6 +220,11 @@ async def api_analyze(request: Request):
     session = get_session(token)
     if session is None:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    # Rate limit (per-user)
+    ip = request.client.host if request.client else "unknown"
+    if not _check_rate(ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait before uploading again.")
 
     # Read uploaded file
     form = await request.form()

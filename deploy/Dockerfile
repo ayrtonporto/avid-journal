@@ -53,7 +53,6 @@ RUN mkdir -p /app/src/publication/submissions
 
 # ── Runtime ───────────────────────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1
-ENV GRADIO_SERVER_NAME=0.0.0.0
 ENV LEAN_PROJECT_DIR=/app/lean_project
 ENV AVID_FORMALIZATION_ENABLED=1
 ENV AVID_D2_ENABLED=1
@@ -61,6 +60,6 @@ ENV AVID_D2_ENABLED=1
 EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:7860/ || exit 1
+    CMD curl -f http://localhost:7860/api/health || exit 1
 
-CMD ["python", "app.py"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7860"]
