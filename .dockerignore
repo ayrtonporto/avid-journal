@@ -1,4 +1,4 @@
-# Docker build context — exclude everything not needed for the demo
+# Docker build context — exclude only what's not needed for the full pipeline
 
 # Python
 .venv/
@@ -10,8 +10,7 @@ __pycache__/
 .git/
 .gitignore
 
-# Not needed for D1-only demo
-lean_project/
+# Not needed for the demo
 vendor/
 tests/
 scripts/
@@ -23,10 +22,7 @@ audit/
 .claude/
 .claire/
 
-# Configs (only D3 configs needed, but src/ imports from config/)
-# Keep config/ in the image for import compatibility
-
-# Local env
+# Local env files (use .env mount instead)
 .env
 .env.*
 
@@ -34,10 +30,10 @@ audit/
 .DS_Store
 Thumbs.db
 
-# Docker itself
+# Docker self-reference
 Dockerfile
 docker-compose.yaml
 .dockerignore
 
-# Large caches (MiniLM is pre-downloaded in the build)
+# Large caches (will be rebuilt/generated in container)
 cache/

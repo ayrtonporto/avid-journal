@@ -67,3 +67,4 @@ lean_dojo_cache/
 *.olean
 # (los .olean del lean_project/ están cubiertos por lean_project/.gitignore)
 TestLemmas.lean
+.hermes/

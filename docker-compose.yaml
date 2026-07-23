@@ -1,7 +1,7 @@
-# AViD Journal — Demo deployment
+# AViD Journal — Full pipeline deployment
 #
 # Usage:
-#   docker compose up -d          # start detached
+#   docker compose up -d          # start detached (builds first time)
 #   docker compose logs -f        # follow logs
 #   docker compose down           # stop
 #
@@ -22,15 +22,21 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - GRADIO_SERVER_NAME=0.0.0.0
-    # Mount cache dir to persist MiniLM downloads across restarts
+      - LEAN_PROJECT_DIR=/app/lean_project
+      - AVID_FORMALIZATION_ENABLED=1
+      - AVID_D2_ENABLED=1
     volumes:
+      # Persist caches across restarts
       - avid_cache:/app/cache
+      # Persist Mathlib oleans (avoid re-download on rebuild)
+      - avid_lean:/app/lean_project/.lake
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 120s
 
 volumes:
   avid_cache:
+  avid_lean:
