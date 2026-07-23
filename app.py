@@ -485,11 +485,7 @@ CSS = """
 footer { display: none !important; }
 """
 
-with gr.Blocks(
-    title="AViD Journal — Demo",
-    theme=gr.themes.Soft(primary_hue="red", secondary_hue="gray"),
-    css=CSS,
-) as demo:
+with gr.Blocks(title="AViD Journal — Demo") as demo:
     status_msg = ""
     if not FORMALIZATION_ENABLED:
         status_msg += "\n\n⚠️ Formalization disabled (`AVID_FORMALIZATION_ENABLED=0`)."
@@ -589,4 +585,9 @@ with gr.Blocks(
     )
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        theme=gr.themes.Soft(primary_hue="red", secondary_hue="gray"),
+        css=CSS,
+    )
