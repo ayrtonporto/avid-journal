@@ -212,8 +212,7 @@ def _check_rate(ip: str) -> bool:
 @app.post("/api/analyze")
 async def api_analyze(request: Request):
     """Run the full novelty pipeline on an uploaded .tex file.
-
-    Requires authentication. Tracks the action in the activity log.
+    Streams progress as JSON Lines, ending with the final result.
     """
     # Auth check (skipped in dev mode — uses anonymous user)
     google_id = "dev-user"
@@ -226,10 +225,10 @@ async def api_analyze(request: Request):
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         google_id = session.user.google_id
 
-    # Rate limit (per-user)
+    # Rate limit
     ip = request.client.host if request.client else "unknown"
     if not _check_rate(ip):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait before uploading again.")
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
     # Read uploaded file
     form = await request.form()
@@ -237,38 +236,61 @@ async def api_analyze(request: Request):
     if uploaded is None:
         raise HTTPException(status_code=400, detail="No file uploaded")
 
-    # Save to temp file and process
-    import tempfile
+    import tempfile, json as _json
     with tempfile.NamedTemporaryFile(suffix=".tex", delete=False) as tmp:
-        tmp.write(await uploaded.read())
+        content = await uploaded.read()
+        tmp.write(content)
         tex_path = tmp.name
 
-    try:
-        # Import here to avoid circular deps
-        from app import process_tex
-        # process_tex expects a Gradio file-like object — wrap the path
-        class FakeFile:
-            name = tex_path
-        summary, results, lean_path, pub_html = process_tex(FakeFile())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    from app import process_tex
 
-    # Log the action (create dev user if needed)
+    async def stream():
+        progress_msgs = []
+        def send(step, msg, pct=0):
+            progress_msgs.append({"step": step, "msg": msg, "pct": pct})
+            return _json.dumps({"type": "progress", "step": step, "msg": msg, "pct": pct}) + "\n"
+
+        yield send("parse", f"Parsing LaTeX ({uploaded.filename})...", 5)
+
+        try:
+            # Run pipeline — process_tex returns (summary, results, lean_path, pub_html)
+            # We wrap it to track progress
+            class FakeFile:
+                name = tex_path
+
+            # Call process_tex — it handles its own progress internally
+            # We send pre/post messages
+            yield send("pipeline", "Running novelty pipeline (formalization + D2 + D1)...", 10)
+
+            summary, results, lean_path, pub_html = process_tex(FakeFile())
+
+            n = summary.get("total", 0)
+            formalized = summary.get("formalized", 0)
+            yield send("done", f"Analysis complete: {n} theorems, {formalized} formalized", 100)
+
+            # Return final result
+            final = _json.dumps({
+                "type": "result",
+                "summary": summary,
+                "results": results,
+                "lean_path": lean_path,
+                "publication_html": pub_html,
+            }) + "\n"
+            yield final
+
+        except Exception as e:
+            yield _json.dumps({"type": "error", "msg": str(e)}) + "\n"
+
+    # Log the action
     if DEV_MODE:
         from src.users import upsert_user as _upsert
         _upsert("dev-user", "dev@localhost", "Dev Mode")
     log_action(google_id, "analyze", {
         "filename": uploaded.filename,
-        "n_blocks": summary.get("n_blocks", 0),
-        "n_errors": summary.get("n_errors", 0),
     })
 
-    return JSONResponse({
-        "summary": summary,
-        "results": results,
-        "publication_html": pub_html,
-    })
-
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Mount Gradio UI at /app (for direct browser use)
