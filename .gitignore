@@ -71,3 +71,4 @@ src/publication/submissions/
 src/publication/submissions.json
 TestLemmas.lean
 .hermes/
+src/users/users.db
