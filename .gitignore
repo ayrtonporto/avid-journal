@@ -73,3 +73,5 @@ TestLemmas.lean
 .hermes/
 src/users/users.db
 avid_journal.tex
+*.db-shm
+*.db-wal
