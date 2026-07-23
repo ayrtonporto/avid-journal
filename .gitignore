@@ -43,10 +43,8 @@ IDEA.md
 cache/
 audit/
 
-# Claude Code: worktrees y configuración local (pero NO los docs)
-.claude/worktrees/
-.claude/settings.local.json
-.claude/scheduled_tasks.lock
+# Claude Code: configuracion local completa
+.claude/
 
 # Carpeta huérfana de Claude Code (typo histórico)
 .claire/
