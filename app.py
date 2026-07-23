@@ -349,10 +349,40 @@ def process_tex(
     if progress:
         progress(1.0, desc="Done.")
 
+    # Build downloadable Lean file
+    lean_path = _build_lean_file(results, tex_path)
+
     summary = _build_summary(results, formalized_count)
     pub_html = _build_publication_section(results, tex_path)
 
-    return (summary, results, pub_html)
+    return (summary, results, lean_path, pub_html)
+
+
+def _build_lean_file(results: List[dict], tex_path: str) -> str | None:
+    """Build a .lean file from all successfully formalized blocks.
+
+    Returns the path to the generated file, or None if no blocks were formalized.
+    """
+    lean_blocks = [
+        r["lean_statement"]
+        for r in results
+        if r.get("lean_statement") and r.get("formalized")
+    ]
+    if not lean_blocks:
+        return None
+
+    import tempfile
+    base = Path(tex_path).stem
+    content = "import Mathlib\n\n"
+    content += "\n\n".join(lean_blocks)
+    content += "\n"
+
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".lean", prefix=f"{base}_", delete=False, encoding="utf-8"
+    )
+    tmp.write(content)
+    tmp.close()
+    return tmp.name
 
 
 def _build_summary(results: List[dict], formalized: int) -> dict:
@@ -474,13 +504,28 @@ def publish_paper(
             llm_model=llm_model.strip(),
             llm_strategy=llm_strategy.strip(),
         )
+
+        # Send confirmation email
+        from src.notifications import send_submission_confirmation
+        if author_email.strip():
+            send_submission_confirmation(
+                email=author_email.strip(),
+                name=author_name.strip(),
+                title=paper_title.strip(),
+                submission_id=record["id"],
+                llm_model=llm_model.strip(),
+                n_theorems=verdicts.get("total", 0),
+                verdict_summary=str(verdicts.get("counts", {})),
+            )
+
         return (
             f"✅ **Submitted!** Your paper has been received.\n\n"
             f"**ID:** `{record['id']}`\n"
             f"**Title:** {record['title']}\n"
             f"**LLM:** {record.get('llm_model', 'N/A')}\n"
             f"**Status:** {record['status']}\n\n"
-            f"You'll be notified at `{record['email']}` after editorial review.\n"
+            f"📧 A confirmation email has been sent to `{record['email']}`.\n"
+            f"Your paper is now under editorial review.\n"
             f"Thank you for contributing to AViD Journal."
         )
     except Exception as e:
@@ -689,7 +734,7 @@ with gr.Blocks(title="AViD Journal — Demo") as demo:
             f"\n\n⚠️ D2 disabled — Mathlib not found at `{LEAN_PROJECT_DIR}`."
         )
     if SERVER_API_KEY:
-        status_msg += "\n\n🔑 Server API key configured — bring your own key for priority."
+        status_msg += "\n\n🔑 Server provides DeepSeek V4 Pro (formalization) + V4 Flash (LLM judge). Bring your own key for higher limits."
 
     gr.Markdown(
         f"""
@@ -713,7 +758,7 @@ with gr.Blocks(title="AViD Journal — Demo") as demo:
         with gr.Column(scale=1):
             api_key_input = gr.Textbox(
                 label="Your OpenCode Go API Key (optional)",
-                placeholder="sk-... (leave empty to use server key)",
+                placeholder="sk-... — leave empty to use server DeepSeek V4 Pro + Flash",
                 type="password",
             )
 
@@ -731,6 +776,9 @@ with gr.Blocks(title="AViD Journal — Demo") as demo:
 
     with gr.Row():
         results_table = gr.JSON(label="Per-Theorem Results", value=[], scale=2)
+
+    with gr.Row():
+        lean_download = gr.File(label="📥 Download Formalized Lean Code", visible=True)
 
     # Publication section
     publication_html = gr.HTML(
@@ -777,7 +825,7 @@ with gr.Blocks(title="AViD Journal — Demo") as demo:
     submit_btn.click(
         fn=process_tex,
         inputs=[file_input, api_key_input],
-        outputs=[summary_box, results_table, publication_html],
+        outputs=[summary_box, results_table, lean_download, publication_html],
         api_name="analyze",
     )
 

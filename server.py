@@ -204,7 +204,7 @@ async def api_analyze(request: Request):
         # process_tex expects a Gradio file-like object — wrap the path
         class FakeFile:
             name = tex_path
-        summary, results, pub_html = process_tex(FakeFile())
+        summary, results, lean_path, pub_html = process_tex(FakeFile())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
