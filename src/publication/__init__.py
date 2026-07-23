@@ -55,6 +55,8 @@ def submit(
     abstract: str = "",
     email: str = "",
     verdicts: Optional[Dict[str, Any]] = None,
+    llm_model: str = "",
+    llm_strategy: str = "",
 ) -> Dict[str, Any]:
     """Submit a paper to AViD Journal.
 
@@ -90,6 +92,8 @@ def submit(
         "submitted_at": datetime.now(timezone.utc).isoformat(),
         "status": "pending_review",
         "verdicts": verdicts or {},
+        "llm_model": llm_model,
+        "llm_strategy": llm_strategy,
     }
 
     # Update manifest
