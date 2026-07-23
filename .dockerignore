@@ -1,0 +1,43 @@
+# Docker build context — exclude everything not needed for the demo
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# Not needed for D1-only demo
+lean_project/
+vendor/
+tests/
+scripts/
+docs/
+examples/
+Numina Lean Agent/
+lean_papers/
+audit/
+.claude/
+.claire/
+
+# Configs (only D3 configs needed, but src/ imports from config/)
+# Keep config/ in the image for import compatibility
+
+# Local env
+.env
+.env.*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Docker itself
+Dockerfile
+docker-compose.yaml
+.dockerignore
+
+# Large caches (MiniLM is pre-downloaded in the build)
+cache/
