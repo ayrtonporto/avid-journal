@@ -253,7 +253,10 @@ async def api_analyze(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Log the action
+    # Log the action (create dev user if needed)
+    if DEV_MODE:
+        from src.users import upsert_user as _upsert
+        _upsert("dev-user", "dev@localhost", "Dev Mode")
     log_action(google_id, "analyze", {
         "filename": uploaded.filename,
         "n_blocks": summary.get("n_blocks", 0),
