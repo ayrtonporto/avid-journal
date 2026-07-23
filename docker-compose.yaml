@@ -11,7 +11,9 @@ version: "3.9"
 
 services:
   avid-demo:
-    build: .
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
     image: avid-journal:latest
     container_name: avid-demo
     restart: unless-stopped
