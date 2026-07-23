@@ -49,6 +49,7 @@ COPY config/ ./config/
 COPY prompts/ ./prompts/
 COPY lean_project/ ./lean_project/
 COPY app.py .
+RUN mkdir -p /app/src/publication/submissions
 
 # ── Runtime ───────────────────────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1

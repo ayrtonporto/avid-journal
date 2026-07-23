@@ -66,5 +66,8 @@ Numina Lean Agent/
 lean_dojo_cache/
 *.olean
 # (los .olean del lean_project/ están cubiertos por lean_project/.gitignore)
+# Publication submissions (generated at runtime)
+src/publication/submissions/
+src/publication/submissions.json
 TestLemmas.lean
 .hermes/

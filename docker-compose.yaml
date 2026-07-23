@@ -30,6 +30,8 @@ services:
       - avid_cache:/app/cache
       # Persist Mathlib oleans (avoid re-download on rebuild)
       - avid_lean:/app/lean_project/.lake
+      # Persist paper submissions
+      - avid_submissions:/app/src/publication/submissions
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/"]
       interval: 30s
@@ -40,3 +42,4 @@ services:
 volumes:
   avid_cache:
   avid_lean:
+  avid_submissions:

@@ -1,5 +1,5 @@
 """
-AViD Journal — Demo backend (full pipeline: formalization + D2 + D1).
+AViD Journal — Demo backend (full pipeline: formalization + D2 + D1 + publication).
 Deploy via Docker with Mathlib included.
 
 Usage:
@@ -29,22 +29,37 @@ from src.novelty_v2.dimensions.d1_existence import check_d1, CI_SIMILARITY_THRES
 from src.novelty_v2.dimensions.d2_triviality import check_triviality, LEAN_STARTUP_OVERHEAD_S
 from src.novelty_v2.types import D1Result, D2Result, Verdict
 from src.parser.latex_parser import parse_latex
+from src.publication import submit, list_submissions
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("avid-demo")
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Config
+# Config (server defaults — user can override via API key input)
 # ═══════════════════════════════════════════════════════════════════════════
 
 LEAN_PROJECT_DIR = Path(os.environ.get("LEAN_PROJECT_DIR", REPO_ROOT / "lean_project"))
-OPENCODE_GO_API_KEY = os.environ.get("OPENCODE_GO_API_KEY", "")
+SERVER_API_KEY = os.environ.get("OPENCODE_GO_API_KEY", "")
 OPENCODE_GO_BASE_URL = os.environ.get(
     "OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1"
 )
 FORMALIZATION_MODEL = os.environ.get("AVID_FORMALIZATION_MODEL", "deepseek-v4-pro")
+JUDGE_MODEL = os.environ.get("AVID_JUDGE_MODEL", "deepseek-v4-flash")
 FORMALIZATION_ENABLED = os.environ.get("AVID_FORMALIZATION_ENABLED", "1") == "1"
 D2_ENABLED = os.environ.get("AVID_D2_ENABLED", "1") == "1" and LEAN_PROJECT_DIR.exists()
+PUBLICATION_ENABLED = True  # always on
+
+# ═══════════════════════════════════════════════════════════════════════════
+# API key resolution
+# ═══════════════════════════════════════════════════════════════════════════
+
+def resolve_api_key(user_key: str = "") -> str:
+    """Use user-provided key if given, otherwise fall back to server key."""
+    key = (user_key or "").strip()
+    if key:
+        return key
+    return SERVER_API_KEY
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Formalization: LaTeX → Lean 4
@@ -65,17 +80,19 @@ LaTeX statement:
 {latex}"""
 
 
-def formalize_statement(latex: str) -> Optional[str]:
-    """Translate a LaTeX statement to Lean 4 using DeepSeek via OpenCode Go.
+def formalize_statement(latex: str, api_key: str = "") -> Optional[str]:
+    """Translate LaTeX → Lean 4 via DeepSeek V4 Pro (OpenCode Go).
 
     Args:
-        latex: LaTeX content of the theorem statement.
+        latex: LaTeX statement content.
+        api_key: User-provided API key (uses server key if empty).
 
     Returns:
-        Lean 4 code string, or None if formalization failed.
+        Lean 4 code, or None if formalization failed.
     """
-    if not OPENCODE_GO_API_KEY:
-        logger.warning("OPENCODE_GO_API_KEY not set — skipping formalization")
+    key = resolve_api_key(api_key)
+    if not key:
+        logger.warning("No API key available — skipping formalization")
         return None
 
     prompt = FORMALIZE_PROMPT.format(latex=latex[:3000])
@@ -84,7 +101,7 @@ def formalize_statement(latex: str) -> Optional[str]:
         resp = requests.post(
             f"{OPENCODE_GO_BASE_URL}/chat/completions",
             headers={
-                "Authorization": f"Bearer {OPENCODE_GO_API_KEY}",
+                "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -101,19 +118,14 @@ def formalize_statement(latex: str) -> Optional[str]:
 
         data = resp.json()
         content = data["choices"][0]["message"].get("content", "") or ""
-        # DeepSeek v4: reasoning_content fallback
         if not content.strip():
             content = data["choices"][0]["message"].get("reasoning_content", "") or ""
-
         if not content.strip():
             return None
 
-        # Extract Lean code from markdown fences
         m = re.search(r"```(?:lean4?)?\s*\n?(.*?)\n?```", content, re.DOTALL)
         if m:
             return m.group(1).strip()
-
-        # No fences — return raw content if it looks like Lean
         if "theorem " in content or "lemma " in content or "import " in content:
             return content.strip()
 
@@ -135,51 +147,43 @@ def map_verdict(d1: D1Result, d2: Optional[D2Result] = None) -> dict:
     status = "novel"
     detail_parts = []
 
-    # D2 first (cheapest)
     if d2 and d2.trivial:
         verdict = Verdict.NO_NOVEDOSO_trivial
         status = "trivial"
         detail_parts.append(
             f"Closed by `{d2.tactica}` in {d2.tiempo_segundos:.1f}s. "
-            f"No mathematical novelty — statement is trivial with current automation."
+            f"No mathematical novelty."
         )
         return _build_dict(verdict, status, " ".join(detail_parts), d1, d2)
 
     if d2:
-        detail_parts.append(
-            f"D2: not trivial (tried {len(d2.all_attempts)} tactics)."
-        )
+        detail_parts.append(f"D2: not trivial ({len(d2.all_attempts)} tactics tried).")
 
-    # D1 C_F
     if d1.existe_en_C_F:
         verdict = Verdict.MATCH_ENCONTRADO_PENDIENTE_D3
         status = "known_formal"
         match = d1.match_C_F or {}
         detail_parts.append(
             f"Found in Mathlib: **{match.get('lean_name', 'unknown')}**. "
-            f"Proof distance (D3) requires local LeanDojo install."
+            f"Proof distance (D3) requires local LeanDojo."
         )
         return _build_dict(verdict, status, " ".join(detail_parts), d1, d2)
 
-    # D1 C_I
     if d1.existe_en_C_I:
         if d1.llm_judge_verdict in ("generalization", "specialization"):
             verdict = Verdict.ZONA_GRIS
             status = "gray"
             detail_parts.append(
-                f"Related result found (judge: **{d1.llm_judge_verdict}**). "
+                f"Related result (judge: **{d1.llm_judge_verdict}**). "
                 f"Human review recommended."
             )
         else:
             verdict = Verdict.CONOCIDO_LITERATURA
             status = "known_informal"
             match = d1.match_C_I or {}
-            detail_parts.append(
-                f"Found in literature: **{match.get('title', 'unknown')}**."
-            )
+            detail_parts.append(f"Found in literature: **{match.get('title', 'unknown')}**.")
         return _build_dict(verdict, status, " ".join(detail_parts), d1, d2)
 
-    # No matches at all
     detail_parts.append("No matches in Mathlib or arXiv. Likely original.")
     return _build_dict(verdict, status, " ".join(detail_parts), d1, d2)
 
@@ -199,7 +203,6 @@ def _build_dict(
                 for t, s, r, _ in d2.all_attempts
             ],
         }
-
     return {
         "veredicto": verdict.value,
         "status": status,
@@ -214,24 +217,43 @@ def _build_dict(
     }
 
 
+def _is_publishable(results: List[dict]) -> bool:
+    """A paper is publishable if ALL blocks are novel (no matches, no trivial, no errors)."""
+    if not results:
+        return False
+    publishable_verdicts = {
+        Verdict.NOVEDAD_ENUNCIADO.value,
+    }
+    for r in results:
+        if r.get("veredicto") not in publishable_verdicts:
+            return False
+    return True
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Core pipeline
 # ═══════════════════════════════════════════════════════════════════════════
 
-def process_tex(file_obj: Any, progress: gr.Progress = None) -> dict:
+def process_tex(
+    file_obj: Any,
+    api_key_input: str = "",
+    progress: gr.Progress = None,
+) -> tuple:
     """Full pipeline: .tex → parse → formalize → D2 → D1 → verdicts.
 
-    Args:
-        file_obj: uploaded .tex file (str path or Gradio file object).
-
     Returns:
-        dict with summary + per-theorem results.
+        (summary_dict, results_list, publication_html)
     """
     if file_obj is None:
-        return {"error": "No file uploaded", "results": []}
+        return (
+            {"error": "No file uploaded"},
+            [],
+            "<p style='color:#9a988f'>Upload a .tex file to begin.</p>",
+        )
 
     tex_path = file_obj.name if hasattr(file_obj, "name") else str(file_obj)
-    logger.info(f"Processing: {tex_path}")
+    api_key = resolve_api_key(api_key_input)
+    logger.info(f"Processing: {tex_path} (api_key={'user' if api_key_input.strip() else 'server'})")
 
     # ── 1. Parse ──────────────────────────────────────────────────────────
     try:
@@ -241,58 +263,62 @@ def process_tex(file_obj: Any, progress: gr.Progress = None) -> dict:
         logger.info(f"Parsed {len(blocks)} blocks")
     except Exception as e:
         logger.exception("Parser failed")
-        return {"error": f"Parser error: {e}", "results": []}
+        return (
+            {"error": f"Parser error: {e}"},
+            [],
+            "<p style='color:#d98c95'>Parser error.</p>",
+        )
 
     if not blocks:
-        return {"error": "No mathematical blocks found in .tex", "results": []}
+        return (
+            {"error": "No mathematical blocks found"},
+            [],
+            "<p style='color:#9a988f'>No theorems found in file.</p>",
+        )
 
     # ── 2. Per-block pipeline ─────────────────────────────────────────────
     results: List[dict] = []
     n = len(blocks)
     errors = 0
     formalized_count = 0
-    d2_skipped = not D2_ENABLED
 
     for i, block in enumerate(blocks):
         label = block.get("label") or f"block_{i}"
         title = block.get("title") or label
         latex = block.get("content_latex", "")
-        pct = 0.05 + 0.95 * (i / n)
+        pct = 0.05 + 0.85 * (i / n)
 
-        # --- 2a. Formalization: LaTeX → Lean ---
+        # --- 2a. Formalization ---
         lean_stmt = None
         formalized = False
-        if FORMALIZATION_ENABLED and latex.strip():
+        if FORMALIZATION_ENABLED and latex.strip() and api_key:
             if progress:
                 progress(pct, desc=f"Formalizing: {title}")
-            lean_stmt = formalize_statement(latex)
+            lean_stmt = formalize_statement(latex, api_key)
             formalized = lean_stmt is not None
             if formalized:
                 formalized_count += 1
-            else:
-                logger.warning(f"Formalization failed for {label}")
 
-        # --- 2b. D2: Triviality ---
+        # --- 2b. D2 ---
         d2_result = None
         if D2_ENABLED and lean_stmt:
             if progress:
-                progress(pct + 0.02, desc=f"D2 (triviality): {title}")
+                progress(pct + 0.02, desc=f"D2: {title}")
             try:
-                d2_result = check_triviality(
-                    lean_stmt,
-                    lean_project_dir=str(LEAN_PROJECT_DIR),
-                )
+                d2_result = check_triviality(lean_stmt, lean_project_dir=str(LEAN_PROJECT_DIR))
             except Exception as e:
                 logger.warning(f"D2 failed for {label}: {e}")
 
-        # --- 2c. D1: Existence ---
+        # --- 2c. D1 ---
         if progress:
-            progress(pct + 0.04, desc=f"D1 (existence): {title}")
+            progress(pct + 0.04, desc=f"D1: {title}")
         try:
-            # Use Lean statement as query if available (more precise for Leandex)
             d1_block = dict(block)
             if lean_stmt:
                 d1_block["lean_statement"] = lean_stmt
+            # Pass api_key so LLM judge uses it
+            if api_key:
+                os.environ["OPENCODE_GO_API_KEY"] = api_key
             d1_result = check_d1(d1_block)
         except Exception as e:
             logger.exception(f"D1 failed for {label}")
@@ -302,8 +328,7 @@ def process_tex(file_obj: Any, progress: gr.Progress = None) -> dict:
                 "veredicto": "ERROR", "status": "error",
                 "detail": str(e)[:500],
                 "content_preview": latex[:200].strip(),
-                "lean_statement": lean_stmt,
-                "formalized": formalized,
+                "lean_statement": lean_stmt, "formalized": formalized,
             })
             continue
 
@@ -317,31 +342,29 @@ def process_tex(file_obj: Any, progress: gr.Progress = None) -> dict:
         results.append(mapped)
         logger.info(f"  {label}: {mapped['veredicto']} (formalized={formalized})")
 
+    # Restore server key after pipeline (in case user key was set)
+    if SERVER_API_KEY:
+        os.environ["OPENCODE_GO_API_KEY"] = SERVER_API_KEY
+
     if progress:
         progress(1.0, desc="Done.")
 
-    summary = _build_summary(results, formalized_count, d2_skipped)
+    summary = _build_summary(results, formalized_count)
+    pub_html = _build_publication_section(results, tex_path)
 
-    return {
-        "summary": summary,
-        "results": results,
-        "n_blocks": n,
-        "n_errors": errors,
-    }
+    return (summary, results, pub_html)
 
 
-def _build_summary(results: List[dict], formalized: int, d2_skipped: bool) -> dict:
+def _build_summary(results: List[dict], formalized: int) -> dict:
     counts: Dict[str, int] = {}
     for r in results:
         v = r.get("veredicto", "ERROR")
         counts[v] = counts.get(v, 0) + 1
-
     notes = []
-    if formalized < len(results):
-        notes.append(f"{formalized}/{len(results)} blocks formalized successfully")
-    if d2_skipped:
-        notes.append("D2 (triviality) skipped — Mathlib not found")
-
+    if formalized < len([r for r in results if r.get("formalized") is not None]):
+        notes.append(f"{formalized} blocks formalized successfully")
+    if not D2_ENABLED:
+        notes.append("D2 skipped — Mathlib not found")
     return {
         "total": len(results),
         "counts": counts,
@@ -349,6 +372,108 @@ def _build_summary(results: List[dict], formalized: int, d2_skipped: bool) -> di
         "d2_enabled": D2_ENABLED,
         "notes": notes,
     }
+
+
+def _build_publication_section(results: List[dict], tex_path: str) -> str:
+    """Build HTML for the publication section."""
+    if not results:
+        return ""
+
+    publishable = _is_publishable(results)
+    if publishable:
+        return f"""
+        <div style="border:1px solid #7a1f2b;padding:24px;margin-top:28px;
+                    background:rgba(122,31,43,0.06);max-width:720px">
+          <h3 style="color:#7a1f2b;margin-top:0">📰 Publish in AViD Journal</h3>
+          <p style="color:#3a3a37;font-size:15px">
+            All theorems passed novelty checks. Submit this paper for publication
+            in AViD Journal — the first fully automated mathematics journal.
+          </p>
+          <p style="color:#73726c;font-size:13px;margin-top:12px">
+            ⚠️ Publication is subject to editorial review. Your .tex will be
+            stored securely and reviewed by the AViD editorial board.
+          </p>
+          <p style="color:#73726c;font-size:13px;margin-top:4px">
+            📄 File: <code>{Path(tex_path).name}</code>
+          </p>
+        </div>
+        """
+    else:
+        # Show which blocks failed
+        failed = [r for r in results if r.get("veredicto") != Verdict.NOVEDAD_ENUNCIADO.value]
+        failed_list = "".join(
+            f"<li><b>{r['title']}</b>: {r['veredicto']}</li>"
+            for r in failed[:5]
+        )
+        return f"""
+        <div style="border:1px solid #e3e2dd;padding:24px;margin-top:28px;
+                    background:#faf9f6;max-width:720px">
+          <h3 style="color:#73726c;margin-top:0">📰 Publication not available</h3>
+          <p style="color:#73726c;font-size:15px">
+            Some theorems didn't pass all novelty checks. Publication requires
+            ALL theorems to be genuinely novel.
+          </p>
+          <ul style="color:#3a3a37;font-size:14px">{failed_list}</ul>
+        </div>
+        """
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Publication handler
+# ═══════════════════════════════════════════════════════════════════════════
+
+def publish_paper(
+    file_obj: Any,
+    results: Any,
+    author_name: str,
+    paper_title: str,
+    paper_abstract: str,
+    author_email: str,
+) -> str:
+    """Submit a paper to AViD Journal."""
+    if file_obj is None:
+        return "❌ No file to publish."
+
+    if not author_name.strip():
+        return "❌ Author name is required."
+
+    if not paper_title.strip():
+        return "❌ Paper title is required."
+
+    tex_path = file_obj.name if hasattr(file_obj, "name") else str(file_obj)
+
+    # Parse verdicts from results
+    verdicts = {}
+    if isinstance(results, list):
+        verdicts = {
+            "total": len(results),
+            "counts": {},
+        }
+        for r in results:
+            if isinstance(r, dict):
+                v = r.get("veredicto", "UNKNOWN")
+                verdicts["counts"][v] = verdicts["counts"].get(v, 0) + 1
+
+    try:
+        record = submit(
+            tex_path=tex_path,
+            title=paper_title.strip(),
+            authors=author_name.strip(),
+            abstract=paper_abstract.strip(),
+            email=author_email.strip(),
+            verdicts=verdicts,
+        )
+        return (
+            f"✅ **Submitted!** Your paper has been received.\n\n"
+            f"**ID:** `{record['id']}`\n"
+            f"**Title:** {record['title']}\n"
+            f"**Status:** {record['status']}\n\n"
+            f"You'll be notified at `{record['email']}` after editorial review.\n"
+            f"Thank you for contributing to AViD Journal."
+        )
+    except Exception as e:
+        logger.exception("Publication failed")
+        return f"❌ Publication error: {e}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -370,9 +495,10 @@ with gr.Blocks(
         status_msg += "\n\n⚠️ Formalization disabled (`AVID_FORMALIZATION_ENABLED=0`)."
     if not D2_ENABLED:
         status_msg += (
-            f"\n\n⚠️ D2 disabled — Mathlib not found at `{LEAN_PROJECT_DIR}`. "
-            f"Install with: `lake exe cache get`"
+            f"\n\n⚠️ D2 disabled — Mathlib not found at `{LEAN_PROJECT_DIR}`."
         )
+    if SERVER_API_KEY:
+        status_msg += "\n\n🔑 Server API key configured — bring your own key for priority."
 
     gr.Markdown(
         f"""
@@ -382,13 +508,25 @@ with gr.Blocks(
         Upload a `.tex` file and get a novelty verdict for each theorem.
         {status_msg}
 
-        **Pipeline:** Parse → Formalize (LaTeX→Lean) → D2 (triviality) → D1 (existence).
-        D3 (proof distance) requires LeanDojo and runs offline.
+        **Pipeline:** Parse → Formalize (DeepSeek V4 Pro) → D2 (triviality) → D1 (existence).
         """
     )
 
     with gr.Row():
-        file_input = gr.File(label="Upload .tex file", file_types=[".tex"], height=80)
+        with gr.Column(scale=2):
+            file_input = gr.File(
+                label="Upload .tex file",
+                file_types=[".tex"],
+                height=80,
+            )
+        with gr.Column(scale=1):
+            api_key_input = gr.Textbox(
+                label="Your OpenCode Go API Key (optional)",
+                placeholder="sk-... (leave empty to use server key)",
+                type="password",
+            )
+
+    with gr.Row():
         submit_btn = gr.Button("🔍 Analyze", variant="primary", size="lg")
 
     progress_bar = gr.Progress()
@@ -403,11 +541,42 @@ with gr.Blocks(
     with gr.Row():
         results_table = gr.JSON(label="Per-Theorem Results", value=[], scale=2)
 
+    # Publication section
+    publication_html = gr.HTML(
+        value="<p style='color:#9a988f'>Results will appear here after analysis.</p>"
+    )
+
+    with gr.Accordion("📰 Publish to AViD Journal", open=False) as pub_accordion:
+        with gr.Row():
+            with gr.Column():
+                pub_author = gr.Textbox(label="Author name(s)", placeholder="A. Smith, B. Jones")
+                pub_title = gr.Textbox(label="Paper title", placeholder="On the Novelty of...")
+            with gr.Column():
+                pub_abstract = gr.Textbox(
+                    label="Abstract (optional)",
+                    placeholder="We prove that...",
+                    lines=3,
+                )
+                pub_email = gr.Textbox(
+                    label="Contact email (optional)",
+                    placeholder="author@example.com",
+                )
+        pub_btn = gr.Button("📬 Submit for Publication", variant="primary")
+        pub_result = gr.Markdown("")
+
+    # Wire pipeline
     submit_btn.click(
         fn=process_tex,
-        inputs=[file_input],
-        outputs=[summary_box, results_table],
+        inputs=[file_input, api_key_input],
+        outputs=[summary_box, results_table, publication_html],
         api_name="analyze",
+    )
+
+    # Wire publication
+    pub_btn.click(
+        fn=publish_paper,
+        inputs=[file_input, results_table, pub_author, pub_title, pub_abstract, pub_email],
+        outputs=[pub_result],
     )
 
     gr.Markdown(
