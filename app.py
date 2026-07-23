@@ -489,12 +489,195 @@ def publish_paper(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Gradio UI
+# Gradio UI — Custom theme matching avid-journal.github.io
 # ═══════════════════════════════════════════════════════════════════════════
 
 CSS = """
-.gradio-container { max-width: 960px !important; margin: 0 auto; }
+/* ── Import landing page fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+/* ── Root variables (matching landing page) ── */
+:root {
+  --maroon: #7a1f2b;
+  --maroon-soft: #9c3b46;
+  --maroon-lite: #d98c95;
+  --ink: #111110;
+  --ink-2: #3a3a37;
+  --ink-3: #73726c;
+  --bg: #ffffff;
+  --wash: #faf9f6;
+  --rule: #e3e2dd;
+  --rule-2: #cfcec8;
+}
+
+/* ── Base ── */
+.gradio-container {
+  max-width: 960px !important;
+  margin: 0 auto;
+  font-family: "Crimson Pro", Georgia, serif !important;
+  font-size: 18px;
+  line-height: 1.62;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Headings ── */
+.gradio-container h1, .gradio-container h2, .gradio-container h3,
+.gradio-container .md h1, .gradio-container .md h2, .gradio-container .md h3 {
+  font-family: "Crimson Pro", Georgia, serif !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--ink) !important;
+}
+.gradio-container h1 { font-size: 42px !important; line-height: 1.1 !important; }
+.gradio-container h2 { font-size: 30px !important; }
+.gradio-container h3 { font-size: 22px !important; }
+.gradio-container .md h1 em, .gradio-container h1 em {
+  font-style: italic;
+  color: var(--maroon);
+}
+
+/* ── Links ── */
+.gradio-container a, .gradio-container .md a {
+  color: var(--maroon) !important;
+  text-decoration: none;
+}
+.gradio-container a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── Labels ── */
+.gradio-container label, .gradio-container .label-text {
+  font-family: "IBM Plex Mono", monospace !important;
+  font-size: 12px !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  color: var(--maroon) !important;
+  font-weight: 500 !important;
+}
+
+/* ── Text inputs ── */
+.gradio-container textarea, .gradio-container input[type="text"],
+.gradio-container input[type="email"], .gradio-container input[type="password"] {
+  font-family: "IBM Plex Mono", monospace !important;
+  font-size: 14px !important;
+  border: 1px solid var(--rule-2) !important;
+  border-radius: 0 !important;
+  background: var(--bg) !important;
+  color: var(--ink) !important;
+  padding: 10px 14px !important;
+  transition: border-color .15s !important;
+}
+.gradio-container textarea:focus, .gradio-container input:focus {
+  border-color: var(--maroon) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(122,31,43,0.12) !important;
+}
+
+/* ── Buttons: match landing page .btn ── */
+.gradio-container button, .gradio-container .btn,
+.gradio-container .gr-button {
+  font-family: "Inter", system-ui, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  padding: 11px 22px !important;
+  border-radius: 0 !important;
+  text-transform: none !important;
+  transition: background .15s, color .15s, border-color .15s !important;
+}
+.gradio-container button.primary, .gradio-container .gr-button-primary {
+  background: var(--ink) !important;
+  color: var(--bg) !important;
+  border: 1px solid var(--ink) !important;
+}
+.gradio-container button.primary:hover, .gradio-container .gr-button-primary:hover {
+  background: var(--maroon) !important;
+  border-color: var(--maroon) !important;
+}
+.gradio-container button.secondary {
+  background: transparent !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--ink) !important;
+}
+.gradio-container button.secondary:hover {
+  border-color: var(--maroon) !important;
+  color: var(--maroon) !important;
+}
+
+/* ── File upload: match landing page .upload ── */
+.gradio-container .file-preview, .gradio-container .upload-container {
+  border: 1.5px dashed var(--rule-2) !important;
+  border-radius: 0 !important;
+  background: var(--wash) !important;
+  padding: 24px !important;
+  text-align: center !important;
+  font-family: "Inter", sans-serif !important;
+  transition: border-color .2s !important;
+}
+.gradio-container .file-preview:hover {
+  border-color: var(--maroon-soft) !important;
+}
+
+/* ── JSON output: terminal-style ── */
+.gradio-container .json-container, .gradio-container .gr-json {
+  font-family: "IBM Plex Mono", monospace !important;
+  font-size: 12.5px !important;
+  background: var(--ink) !important;
+  color: #d9d6cc !important;
+  border: 1px solid #2b2a26 !important;
+  border-radius: 0 !important;
+  padding: 18px !important;
+  line-height: 1.7 !important;
+}
+
+/* ── Accordion: match landing page .spectrum ── */
+.gradio-container .accordion {
+  border: 1px solid var(--rule-2) !important;
+  background: var(--wash) !important;
+  border-radius: 0 !important;
+}
+.gradio-container .accordion > .label-wrap {
+  font-family: "IBM Plex Mono", monospace !important;
+  font-size: 12px !important;
+  letter-spacing: .1em !important;
+  text-transform: uppercase !important;
+  color: var(--maroon) !important;
+}
+
+/* ── Checkbox ── */
+.gradio-container .checkbox-group label, .gradio-container input[type="checkbox"] + span {
+  font-family: "Inter", sans-serif !important;
+  font-size: 14px !important;
+  color: var(--ink-2) !important;
+}
+
+/* ── Progress bar ── */
+.gradio-container .progress-bar {
+  background: var(--rule) !important;
+  border-radius: 0 !important;
+}
+.gradio-container .progress-bar .progress-fill {
+  background: var(--maroon) !important;
+}
+
+/* ── Footer: hide Gradio branding ── */
 footer { display: none !important; }
+
+/* ── Markdown paragraphs ── */
+.gradio-container .md p { color: var(--ink-2); max-width: 62ch; }
+.gradio-container .md code {
+  font-family: "IBM Plex Mono", monospace !important;
+  background: var(--wash);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: .85em;
+}
+.gradio-container .md blockquote {
+  border-left: 2px solid var(--maroon);
+  padding-left: 16px;
+  color: var(--ink-3);
+  font-style: italic;
+  margin: 16px 0;
+}
 """
 
 with gr.Blocks(title="AViD Journal — Demo") as demo:
@@ -622,6 +805,5 @@ if __name__ == "__main__":
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
-        theme=gr.themes.Soft(primary_hue="red", secondary_hue="gray"),
         css=CSS,
     )
