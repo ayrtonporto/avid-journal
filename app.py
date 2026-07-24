@@ -90,7 +90,7 @@ def formalize_block_with_provider(
     provider,
     context_lean: str = "",
     lean_project_dir: Optional[str] = None,
-    max_rounds: int = 3,
+    max_rounds: int = 10,
 ) -> Optional[str]:
     """Formalize a single block (statement + proof) using the model provider.
 
@@ -313,7 +313,7 @@ def process_tex(
                 block, provider,
                 context_lean=context,
                 lean_project_dir=lean_dir,
-                max_rounds=2,
+                max_rounds=10,
             )
             formalized = lean_stmt is not None
             if formalized:
