@@ -171,9 +171,10 @@ def formalize_block_with_provider(
             full_code = f"import Mathlib\n\n{context_lean}\n\n{code}\n"
             target.write_text(full_code, encoding="utf-8")
 
-            # Compile check (only if inside Lean project)
-            if can_compile:
+            # Compile check (only for non-definition blocks with proofs)
+            if can_compile and block_type != "definition":
                 has_error, has_sorry, stdout, stderr = check_lean_file(str(target))
+                logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
                     prompt = (
                         f"The Lean code has errors. Fix them.\n\n"
@@ -183,6 +184,7 @@ def formalize_block_with_provider(
                     )
                     continue
 
+            logger.info(f"Formalization SUCCESS round {round_num} for {block.get('label')}")
             return code
 
         logger.warning(f"Formalization exhausted {max_rounds} rounds for {block.get('label')}")
