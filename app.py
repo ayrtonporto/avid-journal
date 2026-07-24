@@ -117,24 +117,38 @@ def formalize_block_with_provider(
     )
 
     import tempfile
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".lean", delete=False, encoding="utf-8"
-    )
+    # Create temp file inside lean project if available (so lake env lean can find it)
+    if lean_project_dir and Path(lean_project_dir).exists():
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lean", delete=False, encoding="utf-8",
+            dir=str(lean_project_dir),
+        )
+    else:
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lean", delete=False, encoding="utf-8",
+        )
     target = Path(tmp.name)
     stub = f"import Mathlib\n\n{context_lean}\n\n"
     tmp.write(stub)
     tmp.close()
 
+    # Only attempt compilation if inside a Lean project
+    can_compile = lean_project_dir and Path(lean_project_dir).exists()
+
     try:
         for round_num in range(1, max_rounds + 1):
             response = provider.generate([{"role": "user", "content": prompt}])
             if not response:
+                logger.warning(f"Formalization round {round_num}: provider returned empty for {block.get('label')}")
                 continue
 
             m = re.search(r"```(?:lean4?)?\s*\n?(.*?)\n?```", response, re.DOTALL)
             code = m.group(1).strip() if m else ""
             if not code:
                 code = response.strip()
+
+            logger.info(f"Formalization round {round_num} for {block.get('label')}: "
+                       f"got {len(code)} chars, starts with: {code[:80]}")
 
             # Quality check: reject sorry, missing declaration, too short
             if re.search(r":=\s*(by\s+)?sorry\b", code):
@@ -157,8 +171,8 @@ def formalize_block_with_provider(
             full_code = f"import Mathlib\n\n{context_lean}\n\n{code}\n"
             target.write_text(full_code, encoding="utf-8")
 
-            # Compile check (only if Mathlib is available)
-            if lean_project_dir and Path(lean_project_dir).exists():
+            # Compile check (only if inside Lean project)
+            if can_compile:
                 has_error, has_sorry, stdout, stderr = check_lean_file(str(target))
                 if has_error or has_sorry:
                     prompt = (
