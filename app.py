@@ -138,6 +138,7 @@ def formalize_block_with_provider(
 
             # Quality check: reject sorry, missing declaration, too short
             if re.search(r":=\s*(by\s+)?sorry\b", code):
+                logger.info(f"Formalization round {round_num}: got sorry, retrying for {block.get('label')}")
                 prompt = (
                     f"Your output contains `sorry`. This is unacceptable. "
                     f"Provide a COMPLETE proof without any sorry.\n\n"
@@ -145,6 +146,7 @@ def formalize_block_with_provider(
                 )
                 continue
             if not any(kw in code for kw in ["theorem ", "lemma ", "def ", "example "]):
+                logger.info(f"Formalization round {round_num}: no declaration keyword, retrying for {block.get('label')}")
                 prompt = (
                     f"Your output does not contain a valid Lean declaration "
                     f"(missing `{keyword}`, `theorem`, `lemma`, or `def`). Fix it.\n\n"
@@ -169,6 +171,7 @@ def formalize_block_with_provider(
 
             return code
 
+        logger.warning(f"Formalization exhausted {max_rounds} rounds for {block.get('label')}")
         return None
 
     finally:
@@ -256,8 +259,12 @@ def process_tex(
     ordered = topological_sort(blocks)
     logger.info(f"Ordered {len(ordered)} blocks (topological sort)")
 
-    # Resolve provider (OpenCode Go / DeepSeek V4 Pro)
-    provider = resolve_provider()
+    # Resolve provider
+    try:
+        provider = resolve_provider()
+    except Exception as e:
+        logger.warning(f"Provider not available: {e}")
+        provider = None
     lean_dir = str(LEAN_PROJECT_DIR) if LEAN_PROJECT_DIR.exists() else None
 
     results: List[dict] = []
@@ -279,7 +286,7 @@ def process_tex(
         # --- Formalization ---
         lean_stmt = None
         formalized = False
-        if FORMALIZATION_ENABLED and (latex.strip() or block.get("proof_latex")):
+        if FORMALIZATION_ENABLED and provider is not None and (latex.strip() or block.get("proof_latex")):
             if progress:
                 progress(pct / 100.0, desc=f"Formalizing [{i+1}/{n}]: {title}")
             if on_progress:
