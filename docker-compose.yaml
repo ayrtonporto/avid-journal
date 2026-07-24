@@ -1,13 +1,16 @@
-# AViD Journal — Full pipeline deployment
+# AViD Journal — deployment (full pipeline: formalize → D2 → D1 → publish)
 #
-# Usage:
-#   docker compose up -d          # start detached (builds first time)
-#   docker compose logs -f        # follow logs
-#   docker compose down           # stop
+# Quick start on the server:
+#   1. cp .env.example .env      # then edit .env and set OPENCODE_GO_API_KEY
+#   2. docker compose up -d --build
+#      (first build downloads a precompiled Mathlib — image is ~4.5 GB, slow)
+#   3. docker compose logs -f    # watch startup; wait for "[prewarm] cache warm"
+#      Open  http://<server-ip>:7860/
 #
-# Secrets: copy .env.example to .env and fill in OPENCODE_GO_API_KEY
-
-version: "3.9"
+#   docker compose down          # stop
+#
+# Data (submissions, caches, compiled Mathlib) survives restarts via the named
+# volumes at the bottom.
 
 services:
   avid-demo:
@@ -23,19 +26,25 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-      - GRADIO_SERVER_NAME=0.0.0.0
       - LEAN_PROJECT_DIR=/app/lean_project
       - AVID_FORMALIZATION_ENABLED=1
       - AVID_D2_ENABLED=1
+      # Pre-warm the Mathlib olean cache at startup so the first analysis is fast.
+      - AVID_PREWARM=1
+      # ⚠️  AUTH IS NOT FINISHED YET. DEV mode keeps the demo OPEN — no Google
+      #     login, anyone who can reach port 7860 can run analyses (rate-limited
+      #     per IP). Fine for a private/test server. When auth lands, set this to
+      #     0 and put a real GOOGLE_CLIENT_ID in .env.
+      - AVID_DEV_MODE=1
     volumes:
-      # Persist caches across restarts
+      # Persist D1/arXiv/judge caches across restarts.
       - avid_cache:/app/cache
-      # Persist Mathlib oleans (avoid re-download on rebuild)
+      # Persist compiled Mathlib oleans (avoid re-downloading ~2 GB on rebuild).
       - avid_lean:/app/lean_project/.lake
-      # Persist paper submissions
+      # Persist the submissions database + archived .tex/.lean files.
       - avid_submissions:/app/src/publication/submissions
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      test: ["CMD", "curl", "-f", "http://localhost:7860/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
