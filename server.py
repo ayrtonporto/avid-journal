@@ -243,45 +243,70 @@ async def api_analyze(request: Request):
         tex_path = tmp.name
 
     from app import process_tex
+    import asyncio, threading
+
+    progress_queue = asyncio.Queue()
+
+    def on_progress_cb(step, msg, pct):
+        # Called from thread — put on async queue
+        try:
+            loop = asyncio.get_event_loop()
+            loop.call_soon_threadsafe(
+                progress_queue.put_nowait,
+                {"type": "progress", "step": step, "msg": msg, "pct": pct},
+            )
+        except Exception:
+            pass
 
     async def stream():
-        progress_msgs = []
-        def send(step, msg, pct=0):
-            progress_msgs.append({"step": step, "msg": msg, "pct": pct})
-            return _json.dumps({"type": "progress", "step": step, "msg": msg, "pct": pct}) + "\n"
+        yield _json.dumps({"type": "progress", "step": "start", "msg": f"Starting pipeline for {uploaded.filename}...", "pct": 0}) + "\n"
 
-        yield send("parse", f"Parsing LaTeX ({uploaded.filename})...", 5)
+        # Run process_tex in a thread (it's synchronous and blocks)
+        result_holder = {"summary": None, "results": None, "lean_path": None, "pub_html": None, "error": None}
 
-        try:
-            # Run pipeline — process_tex returns (summary, results, lean_path, pub_html)
-            # We wrap it to track progress
-            class FakeFile:
-                name = tex_path
+        def run_pipeline():
+            try:
+                class FakeFile:
+                    name = tex_path
+                summary, results, lean_path, pub_html = process_tex(FakeFile(), on_progress=on_progress_cb)
+                result_holder["summary"] = summary
+                result_holder["results"] = results
+                result_holder["lean_path"] = lean_path
+                result_holder["pub_html"] = pub_html
+            except Exception as e:
+                result_holder["error"] = str(e)
 
-            # Call process_tex — it handles its own progress internally
-            # We send pre/post messages
-            yield send("pipeline", "Running novelty pipeline (formalization + D2 + D1)...", 10)
+        thread = threading.Thread(target=run_pipeline)
+        thread.start()
 
-            summary, results, lean_path, pub_html = process_tex(FakeFile())
+        # Stream progress events while the thread is running
+        while thread.is_alive():
+            try:
+                msg = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                yield _json.dumps(msg) + "\n"
+            except asyncio.TimeoutError:
+                pass
 
-            n = summary.get("total", 0)
-            formalized = summary.get("formalized", 0)
-            yield send("done", f"Analysis complete: {n} theorems, {formalized} formalized", 100)
+        # Drain any remaining messages
+        while not progress_queue.empty():
+            msg = progress_queue.get_nowait()
+            yield _json.dumps(msg) + "\n"
 
-            # Return final result
-            final = _json.dumps({
+        thread.join()
+
+        if result_holder["error"]:
+            yield _json.dumps({"type": "error", "msg": result_holder["error"]}) + "\n"
+        else:
+            yield _json.dumps({"type": "done", "msg": "Analysis complete"}) + "\n"
+            yield _json.dumps({
                 "type": "result",
-                "summary": summary,
-                "results": results,
-                "lean_path": lean_path,
-                "publication_html": pub_html,
+                "summary": result_holder["summary"],
+                "results": result_holder["results"],
+                "lean_path": result_holder["lean_path"],
+                "publication_html": result_holder["pub_html"],
             }) + "\n"
-            yield final
 
-        except Exception as e:
-            yield _json.dumps({"type": "error", "msg": str(e)}) + "\n"
-
-    # Log the action
+    # Log the action (fire and forget — don't block the stream)
     if DEV_MODE:
         from src.users import upsert_user as _upsert
         _upsert("dev-user", "dev@localhost", "Dev Mode")

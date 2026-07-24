@@ -238,6 +238,7 @@ def process_tex(
     file_obj: Any,
     api_key_input: str = "",
     progress: gr.Progress = None,
+    on_progress = None,
 ) -> tuple:
     """Full pipeline: .tex → parse → formalize → D2 → D1 → verdicts.
 
@@ -259,6 +260,7 @@ def process_tex(
     try:
         if progress:
             progress(0.05, desc="Parsing LaTeX...")
+        if on_progress: on_progress("parse", f"Parsing {Path(tex_path).name}...", 5)
         blocks = parse_latex(tex_path)
         logger.info(f"Parsed {len(blocks)} blocks")
     except Exception as e:
@@ -294,6 +296,7 @@ def process_tex(
         if FORMALIZATION_ENABLED and latex.strip() and api_key:
             if progress:
                 progress(pct, desc=f"Formalizing: {title}")
+            if on_progress: on_progress("formalize", f"Formalizing [{i+1}/{n}]: {title}", int(pct*100))
             lean_stmt = formalize_statement(latex, api_key)
             formalized = lean_stmt is not None
             if formalized:
@@ -304,6 +307,7 @@ def process_tex(
         if D2_ENABLED and lean_stmt:
             if progress:
                 progress(pct + 0.02, desc=f"D2: {title}")
+            if on_progress: on_progress("d2", f"D2 (triviality) [{i+1}/{n}]: {title}", int(pct*100)+2)
             try:
                 d2_result = check_triviality(lean_stmt, lean_project_dir=str(LEAN_PROJECT_DIR))
             except Exception as e:
@@ -312,6 +316,7 @@ def process_tex(
         # --- 2c. D1 ---
         if progress:
             progress(pct + 0.04, desc=f"D1: {title}")
+        if on_progress: on_progress("d1", f"D1 (existence) [{i+1}/{n}]: {title}", int(pct*100)+4)
         try:
             d1_block = dict(block)
             if lean_stmt:
