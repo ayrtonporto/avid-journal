@@ -71,37 +71,43 @@ statement into Lean 4 code using Mathlib 4.
 Rules:
 - Output ONLY the Lean 4 code, no explanations.
 - Use `import Mathlib` at the top.
-- Define the theorem using `theorem` or `lemma`.
 - Use proper Mathlib 4 notation (Real, Nat, Finset, etc.).
-- Do NOT include a proof — only the statement.
+- Do NOT include a proof — only the statement. Never use `sorry`.
+- Use `{keyword}` for the declaration.
 - Wrap your response in ```lean ... ```.
 
 LaTeX statement:
 {latex}"""
 
+FORMALIZE_RETRY_PROMPT = """Your previous translation was incomplete or contained `sorry`.
+Translate this LaTeX statement to Lean 4 again. This time:
+- Output ONLY valid Lean 4 code.
+- Use `{keyword}` for the declaration.
+- Do NOT use `sorry`, `:=`, `:= by`, or include any proof.
+- Just the type signature, nothing more.
+- Wrap in ```lean ... ```.
 
-def formalize_statement(latex: str, api_key: str = "") -> Optional[str]:
-    """Translate LaTeX → Lean 4 via DeepSeek V4 Pro (OpenCode Go).
+LaTeX statement:
+{latex}"""
 
-    Args:
-        latex: LaTeX statement content.
-        api_key: User-provided API key (uses server key if empty).
 
-    Returns:
-        Lean 4 code, or None if formalization failed.
-    """
-    key = resolve_api_key(api_key)
-    if not key:
-        logger.warning("No API key available — skipping formalization")
-        return None
+def _is_good_lean(code: str) -> bool:
+    """Check if Lean code looks valid: has a declaration, no sorry, not too short."""
+    if not code or len(code.strip()) < 10:
+        return False
+    if re.search(r":=\s*(by\s+)?sorry\b", code):
+        return False
+    has_decl = any(kw in code for kw in ["theorem ", "lemma ", "def ", "example "])
+    return has_decl
 
-    prompt = FORMALIZE_PROMPT.format(latex=latex[:3000])
 
+def _call_deepseek(prompt: str, api_key: str) -> Optional[str]:
+    """Make a single API call to DeepSeek and extract Lean code."""
     try:
         resp = requests.post(
             f"{OPENCODE_GO_BASE_URL}/chat/completions",
             headers={
-                "Authorization": f"Bearer {key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -113,28 +119,58 @@ def formalize_statement(latex: str, api_key: str = "") -> Optional[str]:
             timeout=120,
         )
         if resp.status_code != 200:
-            logger.warning(f"Formalization API error: HTTP {resp.status_code}")
             return None
-
         data = resp.json()
         content = data["choices"][0]["message"].get("content", "") or ""
         if not content.strip():
             content = data["choices"][0]["message"].get("reasoning_content", "") or ""
         if not content.strip():
             return None
-
         m = re.search(r"```(?:lean4?)?\s*\n?(.*?)\n?```", content, re.DOTALL)
         if m:
             return m.group(1).strip()
-        if "theorem " in content or "lemma " in content or "import " in content:
+        kw = ["theorem ", "lemma ", "def ", "example ", "import "]
+        if any(k in content for k in kw):
             return content.strip()
-
-        logger.warning("Formalization response didn't contain Lean code")
         return None
-
     except Exception as e:
-        logger.warning(f"Formalization failed: {e}")
+        logger.warning(f"DeepSeek call failed: {e}")
         return None
+
+
+def formalize_statement(latex: str, api_key: str = "", block_type: str = "theorem") -> Optional[str]:
+    """Translate LaTeX → Lean 4 via DeepSeek V4 Pro, with quality retry.
+
+    Args:
+        latex: LaTeX statement content.
+        api_key: User-provided API key (uses server key if empty).
+        block_type: 'definition', 'theorem', 'lemma', 'proposition', 'corollary'.
+
+    Returns:
+        Lean 4 code, or None if formalization failed after retries.
+    """
+    key = resolve_api_key(api_key)
+    if not key:
+        return None
+
+    # Map block type to Lean keyword
+    lean_keyword = "def" if block_type == "definition" else "theorem"
+
+    # Attempt 1: normal prompt
+    prompt = FORMALIZE_PROMPT.format(keyword=lean_keyword, latex=latex[:3000])
+    code = _call_deepseek(prompt, key)
+    if code and _is_good_lean(code):
+        return code
+
+    # Attempt 2: stricter retry prompt
+    logger.info(f"Retrying formalization (block_type={block_type})")
+    retry_prompt = FORMALIZE_RETRY_PROMPT.format(keyword=lean_keyword, latex=latex[:3000])
+    code = _call_deepseek(retry_prompt, key)
+    if code and _is_good_lean(code):
+        return code
+
+    # Return whatever we got on last attempt (even if imperfect)
+    return code
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -297,7 +333,7 @@ def process_tex(
             if progress:
                 progress(pct, desc=f"Formalizing: {title}")
             if on_progress: on_progress("formalize", f"Formalizing [{i+1}/{n}]: {title}", int(pct*100))
-            lean_stmt = formalize_statement(latex, api_key)
+            lean_stmt = formalize_statement(latex, api_key, block_type=block.get("type", "theorem"))
             formalized = lean_stmt is not None
             if formalized:
                 formalized_count += 1
