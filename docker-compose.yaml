@@ -31,11 +31,9 @@ services:
       - AVID_D2_ENABLED=1
       # Pre-warm the Mathlib olean cache at startup so the first analysis is fast.
       - AVID_PREWARM=1
-      # ⚠️  AUTH IS NOT FINISHED YET. DEV mode keeps the demo OPEN — no Google
-      #     login, anyone who can reach port 7860 can run analyses (rate-limited
-      #     per IP). Fine for a private/test server. When auth lands, set this to
-      #     0 and put a real GOOGLE_CLIENT_ID in .env.
-      - AVID_DEV_MODE=1
+      # Auth (Google sign-in) is controlled from .env: AVID_DEV_MODE + GOOGLE_CLIENT_ID.
+      # Default enforces sign-in. Requires the site be served over HTTPS on a real
+      # domain (Google Sign-In does not work over plain http on a bare IP).
     volumes:
       # Persist D1/arXiv/judge caches across restarts.
       - avid_cache:/app/cache
