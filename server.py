@@ -247,18 +247,16 @@ async def api_analyze(request: Request):
 
     progress_queue = asyncio.Queue()
 
-    def on_progress_cb(step, msg, pct):
-        # Called from thread — put on async queue
-        try:
-            loop = asyncio.get_event_loop()
+    async def stream():
+        loop = asyncio.get_running_loop()  # capture in main async context
+
+        def on_progress_cb(step, msg, pct):
+            # Called from thread — use captured loop
             loop.call_soon_threadsafe(
                 progress_queue.put_nowait,
                 {"type": "progress", "step": step, "msg": msg, "pct": pct},
             )
-        except Exception:
-            pass
 
-    async def stream():
         yield _json.dumps({"type": "progress", "step": "start", "msg": f"Starting pipeline for {uploaded.filename}...", "pct": 0}) + "\n"
 
         # Run process_tex in a thread (it's synchronous and blocks)
@@ -316,6 +314,45 @@ async def api_analyze(request: Request):
 
     from fastapi.responses import StreamingResponse
     return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Publication endpoint
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/publish")
+async def api_publish(request: Request):
+    """Handle paper publication submission from the landing page."""
+    from src.publication import submit as pub_submit
+    from src.users import increment_papers
+
+    body = await request.json()
+    author = (body.get("author") or "").strip()
+    email = (body.get("email") or "").strip()
+    llm = (body.get("llm") or "").strip()
+    filename = (body.get("filename") or "unknown.tex")
+
+    if not author:
+        return JSONResponse({"status": "error", "detail": "Author name is required"}, status_code=400)
+    if not llm:
+        return JSONResponse({"status": "error", "detail": "LLM model is required"}, status_code=400)
+
+    try:
+        record = pub_submit(
+            tex_path=filename,
+            title=f"Submission by {author}",
+            authors=author,
+            email=email,
+            llm_model=llm,
+        )
+        # Update user stats if logged in
+        if not DEV_MODE:
+            increment_papers(request.headers.get("Authorization", "").replace("Bearer ", ""))
+
+        return JSONResponse({"status": "ok", "id": record["id"]})
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Mount Gradio UI at /app (for direct browser use)
