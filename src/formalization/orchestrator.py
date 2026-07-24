@@ -32,7 +32,26 @@ import sys
 import time
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+# Tipo del callback de progreso: (step, msg, pct) -> None. Lo consume la demo
+# web (app.py) para reenviar eventos SSE al front-end. Es opcional en todos
+# lados: si es None, el orchestrator se comporta igual que antes.
+ProgressCB = Optional[Callable[[str, str, int], None]]
+
+
+def _emit(cb: ProgressCB, step: str, msg: str, pct: int) -> None:
+    """Invoca el callback de progreso de forma segura.
+
+    Un error en el callback (p.ej. el cliente HTTP se desconectó) nunca debe
+    tumbar la formalización, así que se traga cualquier excepción.
+    """
+    if cb is None:
+        return
+    try:
+        cb(step, msg, int(pct))
+    except Exception:
+        pass
 
 # AViD: force UTF-8 with errors="backslashreplace" para que prints de
 # salida con caracteres unicode (∃, ∀, ñ, á...) no rompan la consola
@@ -711,6 +730,7 @@ def formalize_paper(
     blocks_range: Optional[str] = None,
     resume: bool = True,
     model: Optional[str] = None,
+    on_progress: ProgressCB = None,
 ) -> Dict[str, Any]:
     """Orquesta la formalizacion de un paper LaTeX completo.
 
@@ -739,6 +759,9 @@ def formalize_paper(
                         ("claude", "deepseek", etc.). Si es None, se resuelve
                         desde la variable de entorno AVID_MODEL_PROVIDER.
                         Default: "claude".
+        on_progress:    callback opcional (step, msg, pct) que se invoca al
+                        pre-buildear y al empezar/terminar cada bloque. Lo usa
+                        la demo web para streamear progreso al navegador.
 
     Returns:
         dict con un resumen: project_dir, results[], summary{verified,axioms,failed}
@@ -801,6 +824,8 @@ def formalize_paper(
 
     # 2b) Pre-build del modulo Paper
     if not dry_run and manager.parent_project is not None:
+        _emit(on_progress, "formalize",
+              "Warming Mathlib cache (pre-build; first time ~2 min)…", 3)
         print(
             f"[avid] Pre-buildeando {manager.lean_module} (calentando "
             f"cache de Mathlib; primera vez puede tardar ~2 min)..."
@@ -854,6 +879,9 @@ def formalize_paper(
                 f"\n[avid] ----- Bloque {i}/{total_in_paper} [{label}] "
                 f"SKIPPED (already {prev['status']} en PAPER_INDEX.md) -----"
             )
+            _emit(on_progress, "formalize",
+                  f"↺ {i}/{total_in_paper}: {label} — reusing cached proof",
+                  int(100 * i / max(1, total_in_paper)))
             results.append({
                 "label": label,
                 "lean_name": lean_name,
@@ -870,6 +898,12 @@ def formalize_paper(
             f"\n[avid] ----- Bloque {i}/{total_in_paper} "
             f"[{label}] type={block.get('type')} mode={mode.value} -----"
         )
+
+        title_str = block.get("title") or label
+        _emit(on_progress, "formalize",
+              f"Formalizing {i}/{total_in_paper}: {title_str} "
+              f"({block.get('type')}, {mode.value} mode)…",
+              int(100 * (i - 1) / max(1, total_in_paper)))
 
         block_meta = dict(block)
         block_meta["lean_name"] = lean_name
@@ -892,6 +926,15 @@ def formalize_paper(
             "title": block.get("title"),
         })
         results.append(res)
+
+        _status = res.get("status", "")
+        _mark = ("✓" if "verified" in _status
+                 else "⚠" if "axiom" in _status
+                 else "⏸" if "rate_limited" in _status
+                 else "✗")
+        _emit(on_progress, "formalize",
+              f"{_mark} {i}/{total_in_paper}: {title_str} — {_status}",
+              int(100 * i / max(1, total_in_paper)))
 
         # Rate-limit: abortar run completo
         if "rate_limited" in (res.get("status") or ""):

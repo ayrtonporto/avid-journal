@@ -1,0 +1,25 @@
+# AViD Journal — Web/demo runtime dependencies.
+# Used by deploy/Dockerfile (pip install -r requirements_web.txt).
+# Runtime-only subset of requirements.txt (no black/flake8/mypy/pytest).
+
+# ── Core ────────────────────────────────────────────────────────────────
+requests>=2.31.0
+python-dotenv>=1.0.0
+numpy>=1.24.0
+
+# ── ML / embeddings (D1 similarity, MiniLM) ─────────────────────────────
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+
+# ── PDF + arXiv (D1 existence) ──────────────────────────────────────────
+PyMuPDF>=1.23.0
+arxiv>=2.0.0
+
+# ── LLM API (Anthropic provider) ────────────────────────────────────────
+anthropic>=0.18.0
+
+# ── Web server + demo UI ────────────────────────────────────────────────
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+gradio>=4.0.0
+python-multipart>=0.0.9
