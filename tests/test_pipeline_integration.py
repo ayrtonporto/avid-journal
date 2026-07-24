@@ -19,7 +19,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from unittest.mock import Mock, patch
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT.parent))
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -79,6 +82,28 @@ def _mock_d2_result_not_trivial() -> D2Result:
     return r
 
 
+def _mock_novelty_verdict_novel():
+    """Return a NoveltyVerdict for NOVEDAD_ENUNCIADO."""
+    from src.novelty_v2.types import NoveltyVerdict
+    return NoveltyVerdict(
+        veredicto=Verdict.NOVEDAD_ENUNCIADO,
+        razonamiento="No matches in Mathlib or arXiv.",
+        d1=_mock_d1_result_novel(),
+        d2=_mock_d2_result_not_trivial(),
+    )
+
+
+def _mock_novelty_verdict_trivial():
+    """Return a NoveltyVerdict for NO_NOVEDOSO_trivial."""
+    from src.novelty_v2.types import NoveltyVerdict
+    return NoveltyVerdict(
+        veredicto=Verdict.NO_NOVEDOSO_trivial,
+        razonamiento="Closed by `norm_num`.",
+        d1=None,
+        d2=_mock_d2_result_trivial(),
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Tests
 # ═══════════════════════════════════════════════════════════════════════════
@@ -135,37 +160,57 @@ Done."""
 
 
 class TestVerdictMapping:
-    """Test verdict mapping logic with mocked D1/D2 results."""
+    """Test verdict mapping via orchestrator's check_novelty."""
 
-    def test_novel_enunciado(self):
-        d1 = _mock_d1_result_novel()
-        d2 = _mock_d2_result_not_trivial()
-        mapped = avid_app.map_verdict(d1, d2)
-        assert mapped["veredicto"] == Verdict.NOVEDAD_ENUNCIADO.value
-        assert mapped["status"] == "novel"
+    @patch("src.novelty_v2.orchestrator._check_cf")
+    @patch("src.novelty_v2.orchestrator.check_triviality")
+    def test_novel_enunciado(self, mock_d2, mock_cf):
+        from src.novelty_v2.orchestrator import check_novelty
+        mock_d2.return_value = _mock_d2_result_not_trivial()
+        mock_cf.return_value = _mock_d1_result_novel()
+        verdict = check_novelty(
+            block={"title": "Test", "content_latex": "∀n, n=n"},
+            lean_statement="theorem t : ∀ n : ℕ, n = n",
+        )
+        assert verdict.veredicto == Verdict.NOVEDAD_ENUNCIADO
 
-    def test_trivial(self):
-        d1 = _mock_d1_result_novel()
-        d2 = _mock_d2_result_trivial()
-        mapped = avid_app.map_verdict(d1, d2)
-        assert mapped["veredicto"] == Verdict.NO_NOVEDOSO_trivial.value
-        assert mapped["status"] == "trivial"
+    @patch("src.novelty_v2.orchestrator._check_cf")
+    @patch("src.novelty_v2.orchestrator.check_triviality")
+    def test_trivial(self, mock_d2, mock_cf):
+        from src.novelty_v2.orchestrator import check_novelty
+        mock_d2.return_value = _mock_d2_result_trivial()
+        mock_cf.return_value = _mock_d1_result_novel()
+        verdict = check_novelty(
+            block={"title": "Test", "content_latex": "1+1=2"},
+            lean_statement="theorem t : 1 + 1 = 2",
+        )
+        assert verdict.veredicto == Verdict.NO_NOVEDOSO_trivial
 
-    def test_match_mathlib(self):
-        d1 = _mock_d1_result_found()
-        d2 = _mock_d2_result_not_trivial()
-        mapped = avid_app.map_verdict(d1, d2)
-        assert mapped["veredicto"] == Verdict.MATCH_ENCONTRADO_PENDIENTE_D3.value
-        assert mapped["status"] == "known_formal"
+    @patch("src.novelty_v2.orchestrator._check_cf")
+    @patch("src.novelty_v2.orchestrator.check_triviality")
+    def test_match_mathlib(self, mock_d2, mock_cf):
+        from src.novelty_v2.orchestrator import check_novelty
+        mock_d2.return_value = _mock_d2_result_not_trivial()
+        mock_cf.return_value = _mock_d1_result_found()
+        verdict = check_novelty(
+            block={"title": "Test", "content_latex": "sqrt 2 irrational"},
+            lean_statement="theorem t : Irrational (Real.sqrt 2)",
+        )
+        assert verdict.veredicto == Verdict.MATCH_ENCONTRADO_PENDIENTE_D3
 
-    def test_all_fields_present(self):
-        d1 = _mock_d1_result_novel()
-        d2 = _mock_d2_result_trivial()
-        mapped = avid_app.map_verdict(d1, d2)
-        required = ["veredicto", "status", "detail", "existe_en_C_F",
-                     "existe_en_C_I", "match_C_F", "match_C_I", "d2"]
-        for key in required:
-            assert key in mapped, f"Missing key: {key}"
+    @patch("src.novelty_v2.orchestrator._check_cf")
+    @patch("src.novelty_v2.orchestrator.check_triviality")
+    def test_all_fields_present(self, mock_d2, mock_cf):
+        from src.novelty_v2.orchestrator import check_novelty
+        mock_d2.return_value = _mock_d2_result_not_trivial()
+        mock_cf.return_value = _mock_d1_result_novel()
+        verdict = check_novelty(
+            block={"title": "Test", "content_latex": "∀n, n=n"},
+            lean_statement="theorem t : ∀ n : ℕ, n = n",
+        )
+        assert verdict.veredicto is not None
+        assert isinstance(verdict.razonamiento, str)
+        assert verdict.d1 is not None
 
 
 class TestPublishability:
@@ -291,15 +336,13 @@ class TestPipelineEndToEnd:
     """Full pipeline simulation with mocked external calls."""
 
     @patch("app.formalize_block_with_provider")
-    @patch("src.novelty_v2.dimensions.d1_existence.check_d1")
-    @patch("src.novelty_v2.dimensions.d2_triviality.check_triviality")
+    @patch("app.check_novelty")
     def test_pipeline_all_novel(
-        self, mock_d2, mock_d1, mock_formalize,
+        self, mock_novelty, mock_formalize,
     ):
         """Simulate a paper where all blocks are novel."""
         mock_formalize.return_value = _mock_lean_stmt()
-        mock_d2.return_value = _mock_d2_result_not_trivial()
-        mock_d1.return_value = _mock_d1_result_novel()
+        mock_novelty.return_value = _mock_novelty_verdict_novel()
 
         blocks = parse_latex(str(FIXTURE_TEX))
         ordered = topological_sort(blocks)
@@ -307,14 +350,13 @@ class TestPipelineEndToEnd:
 
         results = []
         for block in ordered:
-            latex = block.get("content_latex", "")
             lean = mock_formalize(block, None)
             assert lean is not None
-
-            d2 = mock_d2(lean, lean_project_dir=".")
-            d1 = mock_d1(block)
-
-            mapped = avid_app.map_verdict(d1, d2)
+            verdict = mock_novelty(block=block, lean_statement=lean)
+            mapped = {
+                "veredicto": verdict.veredicto.value,
+                "detail": verdict.razonamiento or "",
+            }
             results.append(mapped)
 
         assert len(results) == 3
@@ -324,33 +366,33 @@ class TestPipelineEndToEnd:
         assert avid_app._is_publishable(results) is True
 
     @patch("app.formalize_block_with_provider")
-    @patch("src.novelty_v2.dimensions.d1_existence.check_d1")
-    @patch("src.novelty_v2.dimensions.d2_triviality.check_triviality")
+    @patch("app.check_novelty")
     def test_pipeline_one_trivial(
-        self, mock_d2, mock_d1, mock_formalize,
+        self, mock_novelty, mock_formalize,
     ):
         """First block trivial, rest novel."""
         mock_formalize.return_value = _mock_lean_stmt()
 
         call_count = [0]
 
-        def d2_side_effect(*args, **kwargs):
+        def novelty_side_effect(**kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
-                return _mock_d2_result_trivial()
-            return _mock_d2_result_not_trivial()
+                return _mock_novelty_verdict_trivial()
+            return _mock_novelty_verdict_novel()
 
-        mock_d2.side_effect = d2_side_effect
-        mock_d1.return_value = _mock_d1_result_novel()
+        mock_novelty.side_effect = novelty_side_effect
 
         blocks = parse_latex(str(FIXTURE_TEX))
         ordered = topological_sort(blocks)
         results = []
         for block in ordered:
             lean = mock_formalize(block, None)
-            d2 = mock_d2(lean, lean_project_dir=".")
-            d1 = mock_d1(block)
-            mapped = avid_app.map_verdict(d1, d2)
+            verdict = mock_novelty(block=block, lean_statement=lean)
+            mapped = {
+                "veredicto": verdict.veredicto.value,
+                "detail": verdict.razonamiento or "",
+            }
             results.append(mapped)
 
         assert results[0]["veredicto"] == Verdict.NO_NOVEDOSO_trivial.value

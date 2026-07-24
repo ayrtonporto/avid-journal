@@ -25,9 +25,8 @@ if str(REPO_ROOT) not in sys.path:
 import gradio as gr
 import requests
 
-from src.novelty_v2.dimensions.d1_existence import check_d1, CI_SIMILARITY_THRESHOLD_A
-from src.novelty_v2.dimensions.d2_triviality import check_triviality, LEAN_STARTUP_OVERHEAD_S
-from src.novelty_v2.types import D1Result, D2Result, Verdict
+from src.novelty_v2.orchestrator import check_novelty
+from src.novelty_v2.types import Verdict
 from src.parser.latex_parser import parse_latex
 from src.formalization.orchestrator import topological_sort
 from src.formalization.providers.config import resolve_provider
@@ -176,84 +175,8 @@ def _build_context_lean(formalized: list[tuple[str, str]]) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Verdict mapping
+# Publishability check
 # ═══════════════════════════════════════════════════════════════════════════
-
-def map_verdict(d1: D1Result, d2: Optional[D2Result] = None) -> dict:
-    """Map D1 + D2 results to a UI-friendly verdict dict."""
-    verdict = Verdict.NOVEDAD_ENUNCIADO
-    status = "novel"
-    detail_parts = []
-
-    if d2 and d2.trivial:
-        verdict = Verdict.NO_NOVEDOSO_trivial
-        status = "trivial"
-        detail_parts.append(
-            f"Closed by `{d2.tactica}` in {d2.tiempo_segundos:.1f}s. "
-            f"No mathematical novelty."
-        )
-        return _build_dict(verdict, status, " ".join(detail_parts), d1, d2)
-
-    if d2:
-        detail_parts.append(f"D2: not trivial ({len(d2.all_attempts)} tactics tried).")
-
-    if d1.existe_en_C_F:
-        verdict = Verdict.MATCH_ENCONTRADO_PENDIENTE_D3
-        status = "known_formal"
-        match = d1.match_C_F or {}
-        detail_parts.append(
-            f"Found in Mathlib: **{match.get('lean_name', 'unknown')}**. "
-            f"Proof distance (D3) requires local LeanDojo."
-        )
-        return _build_dict(verdict, status, " ".join(detail_parts), d1, d2)
-
-    if d1.existe_en_C_I:
-        if d1.llm_judge_verdict in ("generalization", "specialization"):
-            verdict = Verdict.ZONA_GRIS
-            status = "gray"
-            detail_parts.append(
-                f"Related result (judge: **{d1.llm_judge_verdict}**). "
-                f"Human review recommended."
-            )
-        else:
-            verdict = Verdict.CONOCIDO_LITERATURA
-            status = "known_informal"
-            match = d1.match_C_I or {}
-            detail_parts.append(f"Found in literature: **{match.get('title', 'unknown')}**.")
-        return _build_dict(verdict, status, " ".join(detail_parts), d1, d2)
-
-    detail_parts.append("No matches in Mathlib or arXiv. Likely original.")
-    return _build_dict(verdict, status, " ".join(detail_parts), d1, d2)
-
-
-def _build_dict(
-    verdict: Verdict, status: str, detail: str,
-    d1: D1Result, d2: Optional[D2Result] = None,
-) -> dict:
-    d2_info = {}
-    if d2:
-        d2_info = {
-            "trivial": d2.trivial,
-            "tactica": d2.tactica,
-            "tiempo_segundos": d2.tiempo_segundos,
-            "attempts": [
-                {"tactic": t, "success": s, "runtime": r}
-                for t, s, r, _ in d2.all_attempts
-            ],
-        }
-    return {
-        "veredicto": verdict.value,
-        "status": status,
-        "detail": detail,
-        "existe_en_C_F": d1.existe_en_C_F,
-        "existe_en_C_I": d1.existe_en_C_I,
-        "match_C_F": {k: str(v) for k, v in (d1.match_C_F or {}).items()},
-        "match_C_I": {k: str(v) for k, v in (d1.match_C_I or {}).items()},
-        "llm_judge_verdict": d1.llm_judge_verdict,
-        "traduccion_incierta": d1.traduccion_incierta,
-        "d2": d2_info,
-    }
-
 
 def _is_publishable(results: List[dict]) -> bool:
     """A paper is publishable if ALL blocks are novel (no matches, no trivial, no errors)."""
@@ -365,38 +288,47 @@ def process_tex(
                 formalized_count += 1
                 formalized_context.append((label, lean_stmt))
 
-        # --- D2 ---
-        d2_result = None
-        if D2_ENABLED and lean_stmt:
-            if on_progress: on_progress("d2", f"D2 (triviality) [{i+1}/{n}]: {title}", int(pct)+2)
-            try:
-                d2_result = check_triviality(lean_stmt, lean_project_dir=str(LEAN_PROJECT_DIR))
-            except Exception as e:
-                logger.warning(f"D2 failed for {label}: {e}")
-
-        # --- D1 ---
-        if on_progress: on_progress("d1", f"D1 (existence) [{i+1}/{n}]: {title}", int(pct)+4)
+        # --- D2 + D1 via orchestrator ---
+        if on_progress: on_progress("novelty", f"Checking novelty [{i+1}/{n}]: {title}", int(pct)+5)
         try:
-            d1_block = dict(block)
-            if lean_stmt:
-                d1_block["lean_statement"] = lean_stmt
-            d1_result = check_d1(d1_block)
+            verdict = check_novelty(
+                block=block,
+                lean_statement=lean_stmt or latex[:2000],
+                lean_project_dir=str(LEAN_PROJECT_DIR) if LEAN_PROJECT_DIR.exists() else None,
+                use_cache=True,
+            )
+            mapped = {
+                "block_id": i,
+                "label": label,
+                "title": title,
+                "type": block.get("type", ""),
+                "content_preview": (block.get("content_latex") or "")[:300],
+                "veredicto": verdict.veredicto.value,
+                "detail": verdict.razonamiento or "",
+                "lean_statement": lean_stmt,
+                "formalized": formalized,
+                "match_C_F": verdict.d1.match_C_F if verdict.d1 else None,
+                "match_C_I": verdict.d1.match_C_I if verdict.d1 else None,
+            }
         except Exception as e:
-            logger.exception(f"D1 failed for {label}")
+            logger.exception(f"Novelty check failed for {label}")
+            mapped = {
+                "block_id": i,
+                "label": label,
+                "title": title,
+                "type": block.get("type", ""),
+                "content_preview": (block.get("content_latex") or "")[:300],
+                "veredicto": "ERROR",
+                "detail": str(e),
+                "lean_statement": lean_stmt,
+                "formalized": formalized,
+                "match_C_F": None,
+                "match_C_I": None,
+            }
             errors += 1
-            results.append({
-                "label": label, "title": title,
-                "veredicto": "ERROR", "status": "error",
-                "detail": str(e)[:500],
-                "content_preview": latex[:200].strip(),
-                "lean_statement": lean_stmt, "formalized": formalized,
-            })
-            continue
 
-        # --- 2d. Map to verdict ---
-        mapped = map_verdict(d1_result, d2_result)
-        mapped["label"] = label
-        mapped["title"] = title
+        results.append(mapped)
+        logger.info(f"  {label}: {mapped['veredicto']} (formalized={formalized})")
         mapped["content_preview"] = latex[:200].strip()
         mapped["lean_statement"] = lean_stmt
         mapped["formalized"] = formalized
