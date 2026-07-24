@@ -28,10 +28,15 @@ import requests
 from src.novelty_v2.orchestrator import check_novelty
 from src.novelty_v2.types import Verdict
 from src.parser.latex_parser import parse_latex
-from src.formalization.orchestrator import topological_sort
+from src.formalization.orchestrator import (
+    topological_sort,
+    formalize_paper,
+    _extract_declarations,
+)
 from src.formalization.providers.config import resolve_provider
+from src.formalization.providers.base import AgenticProvider
 from src.formalization.scripts.lean_checker import check_lean_file
-from src.publication import submit, list_submissions
+from src.publication import submit, list_submissions, record_novel_run
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("avid-demo")
@@ -50,6 +55,36 @@ JUDGE_MODEL = os.environ.get("AVID_JUDGE_MODEL", "deepseek-v4-flash")
 FORMALIZATION_ENABLED = os.environ.get("AVID_FORMALIZATION_ENABLED", "1") == "1"
 D2_ENABLED = os.environ.get("AVID_D2_ENABLED", "1") == "1" and LEAN_PROJECT_DIR.exists()
 PUBLICATION_ENABLED = True  # always on
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Ephemeral scratch project (agentic formalization)
+# ═══════════════════════════════════════════════════════════════════════════
+# Each agentic run formalizes into a UNIQUE, throwaway Lean project that is
+# deleted (sources + compiled oleans) as soon as the run finishes. Nothing is
+# cached between runs and no Papers/<name> leftovers accumulate. The output
+# .lean is rebuilt from the in-memory results, so deleting the scratch loses
+# nothing. Unique-per-run names also avoid concurrent clients clobbering each
+# other's scratch.
+
+def _scratch_module_name(title: str) -> str:
+    """Lean module name that create_paper_project derives from a paper title."""
+    from src.formalization.lean_project import slugify
+    return "".join(w.capitalize() for w in slugify(title).split("_") if w)
+
+
+def _wipe_scratch(lean_project_dir: Path, title: str) -> None:
+    """Delete a scratch project's sources and compiled oleans (best-effort)."""
+    import shutil as _shutil
+    module = _scratch_module_name(title)
+    if not module:
+        return
+    base = Path(lean_project_dir)
+    for p in (
+        base / "Papers" / module,
+        base / ".lake" / "build" / "lib" / "Papers" / module,
+    ):
+        _shutil.rmtree(p, ignore_errors=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # API key resolution
@@ -116,7 +151,6 @@ def formalize_block_with_provider(
         latex=latex[:4000],
     )
 
-    import tempfile
     # Create temp file inside lean project if available (so lake env lean can find it)
     if lean_project_dir and Path(lean_project_dir).exists():
         tmp = tempfile.NamedTemporaryFile(
@@ -212,6 +246,7 @@ def _is_publishable(results: List[dict]) -> bool:
         return False
     publishable_verdicts = {
         Verdict.NOVEDAD_ENUNCIADO.value,
+        Verdict.NOVEDAD_DEMOSTRACION.value,
     }
     for r in results:
         if r.get("veredicto") not in publishable_verdicts:
@@ -232,7 +267,7 @@ def process_tex(
     """Full pipeline: .tex → parse → formalize → D2 → D1 → verdicts.
 
     Returns:
-        (summary_dict, results_list, publication_html)
+        (summary_dict, results_list, lean_file_path, publication_html)
     """
     if file_obj is None:
         return (
@@ -281,6 +316,7 @@ def process_tex(
     except Exception as e:
         logger.warning(f"Provider not available: {e}")
         provider = None
+    is_agentic = isinstance(provider, AgenticProvider)
     lean_dir = str(LEAN_PROJECT_DIR) if LEAN_PROJECT_DIR.exists() else None
 
     results: List[dict] = []
@@ -289,11 +325,67 @@ def process_tex(
     formalized_count = 0
     formalized_context: list[tuple[str, str]] = []  # (label, lean_code)
 
+    # Agentic providers (Claude Code, OpenCode) run their own read-error/retry
+    # loop against a Lean project. Instead of the chat-style per-block loop
+    # (formalize_block_with_provider, which needs provider.generate()), we
+    # delegate the whole paper to the orchestrator once, then map each verified
+    # block's Lean back into the per-block novelty pass below.
+    agentic_formalized: dict[str, str] = {}
+    if FORMALIZATION_ENABLED and is_agentic:
+        # Remap the orchestrator's own 0-100 progress into the demo's 12-58%
+        # band, so per-block events stream live to the page without the bar
+        # jumping around.
+        fp_progress = None
+        if on_progress:
+            on_progress("formalize", "Starting agentic formalization…", 12)
+
+            def fp_progress(step, msg, pct):
+                on_progress(step, msg, 12 + int(0.46 * pct))
+
+        # Unique, throwaway project name for this run — deleted in `finally`.
+        import uuid as _uuid
+        scratch_title = f"Run {_uuid.uuid4().hex[:12]}"
+        try:
+            fp_summary = formalize_paper(
+                tex_path=tex_path,
+                paper_title=scratch_title,
+                parent_project=str(LEAN_PROJECT_DIR) if LEAN_PROJECT_DIR.exists() else None,
+                resume=False,
+                on_progress=fp_progress,
+            )
+            blocks_dir = Path(fp_summary["project_dir"]) / "Blocks"
+            for r in fp_summary.get("results", []):
+                if "verified" not in (r.get("status") or ""):
+                    continue
+                bf = blocks_dir / f"{r.get('lean_name', '')}.lean"
+                if bf.exists():
+                    code = _extract_declarations(bf).strip()
+                    if code and r.get("label"):
+                        agentic_formalized[r["label"]] = code
+            logger.info(
+                f"Agentic formalization: {len(agentic_formalized)} verified block(s)"
+            )
+        except Exception as e:
+            logger.exception("Agentic formalization failed")
+            if on_progress:
+                on_progress("formalize", f"Agentic formalization error: {e}", 12)
+        finally:
+            # Ephemeral: remove the scratch project so nothing accumulates.
+            _wipe_scratch(LEAN_PROJECT_DIR, scratch_title)
+
+    # Progress band for the novelty phase: if we ran up-front agentic
+    # formalization (which occupies ~12-58%), novelty lives in 60-95%.
+    # Otherwise (API path, which formalizes inline) keep the original band.
+    if FORMALIZATION_ENABLED and is_agentic:
+        nov_base, nov_span = 60, 35
+    else:
+        nov_base, nov_span = 10, 75
+
     for i, block in enumerate(ordered):
         label = block.get("label") or f"block_{i}"
         title = block.get("title") or label
         latex = block.get("content_latex", "")
-        pct = 10 + 75 * (i / n)
+        pct = nov_base + nov_span * (i / n)
         deps = block.get("references") or []
 
         # Build context from previously formalized blocks that this one depends on
@@ -303,20 +395,28 @@ def process_tex(
         lean_stmt = None
         formalized = False
         if FORMALIZATION_ENABLED and provider is not None and (latex.strip() or block.get("proof_latex")):
-            if progress:
-                progress(pct / 100.0, desc=f"Formalizing [{i+1}/{n}]: {title}")
-            if on_progress:
-                dep_str = f" (depends on: {', '.join(deps)})" if deps else ""
-                on_progress("formalize", f"Formalizing [{i+1}/{n}]: {title}{dep_str}", int(pct))
+            if is_agentic:
+                # Formalized up-front by the orchestrator; pick up the result.
+                lean_stmt = agentic_formalized.get(label)
+                if on_progress:
+                    state = "formalized" if lean_stmt else "not formalized"
+                    on_progress("formalize", f"[{i+1}/{n}] {title}: {state} (agentic)", int(pct))
+            else:
+                if progress:
+                    progress(pct / 100.0, desc=f"Formalizing [{i+1}/{n}]: {title}")
+                if on_progress:
+                    dep_str = f" (depends on: {', '.join(deps)})" if deps else ""
+                    on_progress("formalize", f"Formalizing [{i+1}/{n}]: {title}{dep_str}", int(pct))
 
-            lean_stmt = formalize_block_with_provider(
-                block, provider,
-                context_lean=context,
-                lean_project_dir=lean_dir,
-                max_rounds=10,
-            )
-            formalized = lean_stmt is not None
-            if formalized:
+                lean_stmt = formalize_block_with_provider(
+                    block, provider,
+                    context_lean=context,
+                    lean_project_dir=lean_dir,
+                    max_rounds=10,
+                )
+
+            if lean_stmt is not None:
+                formalized = True
                 formalized_count += 1
                 formalized_context.append((label, lean_stmt))
 
@@ -368,8 +468,33 @@ def process_tex(
     # Build downloadable Lean file
     lean_path = _build_lean_file(results, tex_path)
 
+    # Auto-persist the journal's authoritative record IF the paper passed and
+    # was verified novel. Personal data stays empty here; the publish form
+    # enriches this same record later (by submission_id). We never lose a novel
+    # result, even if the author walks away without submitting.
+    submission_id = None
+    if _is_publishable(results):
+        try:
+            counts: Dict[str, int] = {}
+            for r in results:
+                v = r.get("veredicto", "ERROR")
+                counts[v] = counts.get(v, 0) + 1
+            rec = record_novel_run(
+                tex_path=tex_path,
+                lean_path=lean_path,
+                verdicts={"total": len(results), "counts": counts},
+                n_theorems=len(results),
+                title=Path(tex_path).stem,
+            )
+            submission_id = rec["id"]
+            logger.info(f"Novel run auto-recorded as {submission_id}")
+        except Exception:
+            logger.exception("Failed to auto-record novel run")
+
     summary = _build_summary(results, formalized_count)
-    pub_html = _build_publication_section(results, tex_path)
+    if submission_id:
+        summary["submission_id"] = submission_id
+    pub_html = _build_publication_section(results, tex_path, submission_id)
 
     return (summary, results, lean_path, pub_html)
 
@@ -380,8 +505,6 @@ def _build_lean_file(results: List[dict], tex_path: str) -> str | None:
     Cleans up: removes sorry, duplicate imports, incomplete statements.
     Returns the path to the generated file, or None if no blocks were formalized.
     """
-    import re as _re
-
     clean_blocks = []
     seen_imports = set()
 
@@ -391,15 +514,15 @@ def _build_lean_file(results: List[dict], tex_path: str) -> str | None:
             continue
 
         # Extract import lines
-        imports = _re.findall(r"^import\s+.*$", code, _re.MULTILINE)
+        imports = re.findall(r"^import\s+.*$", code, re.MULTILINE)
         for imp in imports:
             seen_imports.add(imp.strip())
 
         # Remove import lines from body
-        body = _re.sub(r"^import\s+.*\n?", "", code, flags=_re.MULTILINE).strip()
+        body = re.sub(r"^import\s+.*\n?", "", code, flags=re.MULTILINE).strip()
 
         # Strip `:= sorry`, `:= by sorry`
-        body = _re.sub(r":=\s*(by\s+)?sorry\b.*", "", body, flags=_re.MULTILINE).strip()
+        body = re.sub(r":=\s*(by\s+)?sorry\b.*", "", body, flags=re.MULTILINE).strip()
 
         if body:
             clean_blocks.append(body)
@@ -407,7 +530,6 @@ def _build_lean_file(results: List[dict], tex_path: str) -> str | None:
     if not clean_blocks:
         return None
 
-    import tempfile
     base = Path(tex_path).stem
 
     lines = ["import Mathlib"] + sorted(seen_imports - {"import Mathlib"})
@@ -440,13 +562,21 @@ def _build_summary(results: List[dict], formalized: int) -> dict:
     }
 
 
-def _build_publication_section(results: List[dict], tex_path: str) -> str:
-    """Build interactive publication form HTML."""
+def _build_publication_section(
+    results: List[dict], tex_path: str, submission_id: Optional[str] = None
+) -> str:
+    """Build interactive publication form HTML.
+
+    `submission_id` links the publish form back to the auto-recorded novel run
+    so the author's data enriches that same DB row instead of creating a
+    duplicate.
+    """
     if not results:
         return ""
 
     publishable = _is_publishable(results)
     filename = Path(tex_path).name
+    sid = submission_id or ""
 
     if publishable:
         return f"""
@@ -482,7 +612,7 @@ def _build_publication_section(results: List[dict], tex_path: str) -> str:
             </label>
           </div>
           <div style="margin-top:16px;display:flex;gap:12px">
-            <button onclick="submitPublication('{filename}')" style="font-family:Inter,sans-serif;font-size:14px;font-weight:500;padding:10px 20px;background:#111110;color:#fff;border:1px solid #111110;cursor:pointer">&#x1F4EC; Submit for Publication</button>
+            <button onclick="submitPublication('{filename}', '{sid}')" style="font-family:Inter,sans-serif;font-size:14px;font-weight:500;padding:10px 20px;background:#111110;color:#fff;border:1px solid #111110;cursor:pointer">&#x1F4EC; Submit for Publication</button>
             <button onclick="this.closest('.pub-section').remove()" style="font-family:Inter,sans-serif;font-size:13px;padding:10px 16px;background:transparent;color:#73726c;border:1px solid #cfcec8;cursor:pointer">Not now</button>
           </div>
           <div id="pub-result" style="margin-top:12px;font-family:Inter,sans-serif;font-size:13px"></div>

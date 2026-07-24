@@ -35,9 +35,12 @@ logger = logging.getLogger("avid-server")
 # ── Config ─────────────────────────────────────────────────────────────────
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 DEV_MODE = os.environ.get("AVID_DEV_MODE", "0") == "1"
+# Default to the copy vendored into the repo (deploy/landing.html) so the app
+# is self-contained (Docker, Linux, CI). Override with LANDING_HTML to point at
+# an external source (e.g. the avid-journal.github.io working copy).
 LANDING_HTML = Path(os.environ.get(
     "LANDING_HTML",
-    "D:/Mis documentos/Documentos/avid-journal.github.io/AViD Journal - Landing.html",
+    str(REPO_ROOT / "deploy" / "landing.html"),
 ))
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -49,13 +52,87 @@ import time as time_module
 
 app = FastAPI(title="AViD Journal", version="1.0")
 
+# CORS. The spec forbids wildcard origins together with credentials, and
+# browsers reject such responses. Auth here uses a Bearer token in the
+# Authorization header (not cookies), so credentials aren't required for the
+# default public config. Set AVID_ALLOWED_ORIGINS (comma-separated) to lock
+# down origins; doing so re-enables credentialed requests.
+_origins_env = os.environ.get("AVID_ALLOWED_ORIGINS", "").strip()
+if _origins_env:
+    _allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
+    _allow_credentials = True
+else:
+    _allowed_origins = ["*"]
+    _allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_allowed_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Static assets (images referenced by the landing page)
+# ═══════════════════════════════════════════════════════════════════════════
+STATIC_DIR = REPO_ROOT / "deploy" / "assets"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Pre-warm Mathlib olean cache on startup
+# ═══════════════════════════════════════════════════════════════════════════
+# The first `lake`/`lean` invocation after boot must deserialize ~2 GB of
+# Mathlib oleans from disk (the "cold load", several minutes). We pay that ONCE
+# in a background thread at startup so the first client's analysis is fast.
+# Disable with AVID_PREWARM=0.
+
+def _prewarm_mathlib() -> None:
+    import shutil
+    import subprocess
+    import time as _t
+    import uuid
+
+    import app as _appmod
+
+    lean_dir = _appmod.LEAN_PROJECT_DIR
+    if not lean_dir or not Path(lean_dir).exists():
+        logger.info("[prewarm] skipped — LEAN_PROJECT_DIR not found")
+        return
+    lake = shutil.which("lake")
+    if not lake:
+        logger.info("[prewarm] skipped — lake not on PATH")
+        return
+
+    probe = Path(lean_dir) / f"_prewarm_{uuid.uuid4().hex}.lean"
+    try:
+        probe.write_text("import Mathlib\n", encoding="utf-8")
+        t0 = _t.time()
+        logger.info("[prewarm] loading Mathlib oleans (first time can take minutes)…")
+        subprocess.run(
+            [lake, "env", "lean", str(probe)],
+            cwd=str(lean_dir),
+            capture_output=True, text=True, timeout=1800,
+        )
+        logger.info(f"[prewarm] Mathlib cache warm in {_t.time() - t0:.0f}s")
+    except Exception as e:
+        logger.warning(f"[prewarm] failed: {e}")
+    finally:
+        try:
+            probe.unlink()
+        except OSError:
+            pass
+
+
+@app.on_event("startup")
+async def _on_startup() -> None:
+    if os.environ.get("AVID_PREWARM", "1") == "1":
+        import threading
+        threading.Thread(target=_prewarm_mathlib, daemon=True).start()
+        logger.info("[prewarm] background warm-up started")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Landing page
@@ -199,9 +276,12 @@ def _check_rate(ip: str) -> bool:
     if len(_rate_buckets[ip]) >= _rate_limit:
         return False
     _rate_buckets[ip].append(now)
-    # Cleanup old entries periodically
+    # Cleanup: drop only IPs whose window has fully expired, so we never reset
+    # the limit for currently-active clients.
     if len(_rate_buckets) > 10000:
-        _rate_buckets.clear()
+        for stale_ip in [k for k, v in _rate_buckets.items()
+                         if not v or v[-1] <= window]:
+            del _rate_buckets[stale_ip]
     return True
 
 
@@ -277,13 +357,29 @@ async def api_analyze(request: Request):
         thread = threading.Thread(target=run_pipeline)
         thread.start()
 
-        # Stream progress events while the thread is running
+        # Stream progress events while the thread runs. If a step goes quiet
+        # for a while (cold Mathlib load, a slow proof), emit a heartbeat with
+        # the elapsed time so the page never looks frozen.
+        _start = time_module.time()
+        _last_activity = _start
+        _last_msg = "working…"
+        _HEARTBEAT_S = 10
         while thread.is_alive():
             try:
                 msg = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                _last_activity = time_module.time()
+                _last_msg = msg.get("msg", _last_msg)
                 yield f"data: {_json.dumps(msg)}\n\n"
             except asyncio.TimeoutError:
-                pass
+                now = time_module.time()
+                if now - _last_activity >= _HEARTBEAT_S:
+                    _last_activity = now
+                    elapsed = int(now - _start)
+                    hb = {
+                        "type": "progress", "step": "heartbeat",
+                        "msg": f"{_last_msg} · still working ({elapsed}s)",
+                    }
+                    yield f"data: {_json.dumps(hb)}\n\n"
 
         # Drain any remaining messages
         while not progress_queue.empty():
@@ -329,6 +425,7 @@ async def api_publish(request: Request):
     email = (body.get("email") or "").strip()
     llm = (body.get("llm") or "").strip()
     filename = (body.get("filename") or "unknown.tex")
+    submission_id = (body.get("submission_id") or "").strip() or None
 
     if not author:
         return JSONResponse({"status": "error", "detail": "Author name is required"}, status_code=400)
@@ -336,16 +433,23 @@ async def api_publish(request: Request):
         return JSONResponse({"status": "error", "detail": "LLM model is required"}, status_code=400)
 
     try:
+        # If the analysis auto-recorded a novel run, enrich THAT row (by id)
+        # with the author's data instead of creating a duplicate.
         record = pub_submit(
             tex_path=filename,
             title=f"Submission by {author}",
             authors=author,
             email=email,
             llm_model=llm,
+            submission_id=submission_id,
         )
-        # Update user stats if logged in
+        # Update user stats if logged in. increment_papers expects a google_id,
+        # so resolve the session from the Bearer token first.
         if not DEV_MODE:
-            increment_papers(request.headers.get("Authorization", "").replace("Bearer ", ""))
+            token = request.headers.get("Authorization", "").replace("Bearer ", "")
+            session = get_session(token) if token else None
+            if session is not None:
+                increment_papers(session.user.google_id)
 
         return JSONResponse({"status": "ok", "id": record["id"]})
     except Exception as e:

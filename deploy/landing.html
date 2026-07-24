@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AViD Journal — Automated novelty assessment for formalized mathematics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ffffff;
+    --ink:#111110;
+    --ink-2:#3a3a37;
+    --ink-3:#73726c;
+    --rule:#e3e2dd;
+    --rule-2:#cfcec8;
+    --maroon:#7a1f2b;
+    --maroon-soft:#9c3b46;
+    --maroon-lite:#d98c95;   /* maroon legible on dark ink */
+    --wash:#faf9f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:"Crimson Pro",Georgia,serif;
+    font-size:20px;line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+    font-feature-settings:"liga" 1, "onum" 1;
+  }
+  .sans{font-family:"Inter",system-ui,sans-serif}
+  .mono{font-family:"IBM Plex Mono",monospace}
+  a{color:var(--maroon);text-decoration:none}
+  a:hover{text-decoration:underline;text-underline-offset:3px}
+  ::selection{background:#f1d9dc;color:var(--ink)}
+  em{font-style:italic}
+
+  /* ─── one consistent container everywhere ─── */
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+  @media(max-width:600px){.wrap{padding:0 20px}}
+
+  /* ─── sticky nav (adopted from C, restyled to B) ─── */
+  .runhead{
+    position:sticky;top:0;z-index:30;background:var(--bg);
+    border-bottom:1px solid var(--rule);
+  }
+  .runhead .wrap{display:flex;align-items:center;justify-content:space-between;gap:24px;height:60px}
+  .runhead .t{font-family:"Inter",sans-serif;font-weight:600;color:var(--ink);font-size:16px;letter-spacing:-0.01em}
+  .runhead nav{display:flex;gap:28px;font-family:"Inter",sans-serif;font-size:14px}
+  .runhead nav a{color:var(--ink-3);font-weight:500;transition:color .15s}
+  .runhead nav a:hover{color:var(--maroon);text-decoration:none}
+  .nav-cta{
+    font-family:"Inter",sans-serif;font-size:13.5px;font-weight:500;
+    padding:8px 15px;border:1px solid var(--rule-2);color:var(--ink);
+    white-space:nowrap;transition:border-color .15s,color .15s;
+  }
+  .nav-cta:hover{border-color:var(--maroon);color:var(--maroon);text-decoration:none}
+  @media(max-width:720px){.runhead nav{display:none}}
+
+  /* ─── masthead / hero ─── */
+  .masthead{padding:54px 0 96px}
+  @media(max-width:600px){.masthead{padding:40px 0 60px}}
+  .label{font-family:"Inter",sans-serif;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--maroon);font-weight:600;margin-bottom:22px}
+
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center;margin-top:6px}
+  @media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:40px}}
+
+  h1{font-size:58px;line-height:1.04;font-weight:600;letter-spacing:-0.02em;margin-bottom:16px}
+  h1 .new{font-style:italic;color:var(--maroon);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:7px;text-decoration-color:var(--maroon-soft)}
+  .hero-sub{font-family:"IBM Plex Mono",monospace;font-size:14.5px;color:var(--ink-3);margin-bottom:24px;letter-spacing:-0.01em}
+  .abstract{max-width:52ch;font-size:19px;color:var(--ink-2);line-height:1.55}
+  .byline{font-family:"Inter",sans-serif;font-size:13.5px;color:var(--ink-3);margin-top:28px;display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+  .byline b{color:var(--ink);font-weight:600}
+  .byline .sep{color:var(--rule-2)}
+
+  .actions{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap}
+  .btn{
+    font-family:"Inter",sans-serif;font-size:14.5px;font-weight:500;
+    padding:11px 20px;border:1px solid var(--ink);display:inline-flex;align-items:center;gap:8px;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  .btn:hover{text-decoration:none}
+  .btn .arr{transition:transform .15s}
+  .btn:hover .arr{transform:translateX(3px)}
+  .btn-primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .btn-primary:hover{background:var(--maroon);border-color:var(--maroon)}
+  .btn-secondary{color:var(--ink)}
+  .btn-secondary:hover{border-color:var(--maroon);color:var(--maroon)}
+
+  /* ─── hero terminal (adopted from A, restyled to B's ink palette) ─── */
+  .term{
+    background:var(--ink);border:1px solid #2b2a26;overflow:hidden;
+    box-shadow:0 26px 54px -34px rgba(17,17,16,.6);
+  }
+  .term-head{
+    display:flex;align-items:center;gap:8px;padding:10px 14px;background:#1a1916;
+    border-bottom:1px solid #2b2a26;font-family:"IBM Plex Mono",monospace;font-size:11.5px;
+    color:#8a877d;letter-spacing:.04em;
+  }
+  .term-head .dot{width:8px;height:8px;border-radius:50%;background:#37352f;flex:0 0 auto}
+  .term-head .ttl{margin-left:7px}
+  .term-body{padding:20px 20px 22px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.92;color:#d9d6cc}
+  .term-body .k{color:#8a877d}
+  .term-body .val{color:#efece3}
+  .term-line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .term-verdict{margin-top:12px;padding-top:13px;border-top:1px solid #2b2a26;display:flex;align-items:center;gap:11px}
+  .term-verdict .lbl{color:#8a877d}
+  .term-badge{color:var(--maroon-lite);font-weight:600;letter-spacing:.07em}
+  .cursor{display:inline-block;width:8px;height:14px;background:var(--maroon-lite);vertical-align:-2px;margin-left:2px;animation:blink 1.05s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  @media(prefers-reduced-motion:reduce){.cursor{animation:none}}
+
+  /* ─── nameplate · spectrum · sidenotes · drop cap (B personality) ─── */
+  .nameplate{
+    display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--ink-3);border-top:2px solid var(--ink);border-bottom:1px solid var(--ink);
+    padding:9px 0;margin-bottom:42px;
+  }
+  .nameplate b{color:var(--ink);font-weight:600}
+  .nameplate .mid{color:var(--maroon)}
+  @media(max-width:640px){.nameplate{font-size:10px;letter-spacing:.07em;gap:8px}.nameplate .mid{order:3;flex-basis:100%}}
+
+  .lede::first-letter{
+    font-size:3.5em;line-height:.8;float:left;font-weight:600;color:var(--maroon);
+    margin:7px 12px -4px 0;font-family:"Crimson Pro",serif;
+  }
+
+  .spectrum{margin:54px 0 6px;border:1px solid var(--rule-2);background:var(--wash);padding:26px 30px 22px}
+  .sp-cap{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:32px}
+  .sp-cap .t{color:var(--maroon);font-weight:600}
+  .sp-track{position:relative}
+  .sp-axis{height:2px;background:linear-gradient(90deg,var(--rule-2),var(--maroon))}
+  .sp-ticks{display:grid;grid-template-columns:repeat(5,1fr)}
+  .sp-tick{position:relative;text-align:center;padding-top:15px}
+  .sp-tick::before{content:"";position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:1px;height:11px;background:var(--ink-3)}
+  .sp-tick.is-novel::before{width:2px;height:15px;top:-10px;background:var(--maroon)}
+  .sp-tick .v{display:block;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.02em;color:var(--ink-2);line-height:1.25}
+  .sp-tick .sub{display:block;font-family:"Inter",sans-serif;font-size:10px;color:var(--ink-3);text-transform:none;letter-spacing:.01em}
+  .sp-tick.is-novel .v{color:var(--maroon);font-weight:600}
+  .sp-ends{display:flex;justify-content:space-between;font-family:"Inter",sans-serif;font-size:12px;font-style:italic;color:var(--ink-3);margin-top:20px}
+  .sp-needle{position:absolute;top:-20px;left:90%;transform:translateX(-50%)}
+  .sp-needle .tri{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid var(--maroon)}
+  @media(max-width:600px){.spectrum{padding:20px 14px 16px}.sp-tick .v{font-size:9px}.sp-cap{font-size:9.5px;letter-spacing:.07em}}
+
+  .ref{font-family:"Inter",sans-serif;font-size:.6em;vertical-align:super;line-height:0;color:var(--maroon);font-weight:700;padding-left:1px}
+  .sidenote{font-family:"Inter",sans-serif;font-size:13.5px;line-height:1.52;color:var(--ink-3);border-left:2px solid var(--maroon);padding-left:14px;margin:22px 0}
+  .sidenote .sn-n{font-family:"IBM Plex Mono",monospace;color:var(--maroon);font-weight:600;font-size:11.5px;margin-right:7px}
+  @media(min-width:1180px){
+    .has-notes{position:relative}
+    .has-notes .sidenote{float:right;clear:right;width:184px;margin:6px 0 18px 28px}
+  }
+
+  /* ─── section structure — numbered eyebrows (mono) ─── */
+  section{padding:96px 0;border-top:1px solid var(--rule)}
+  @media(max-width:600px){section{padding:60px 0}}
+  .sec-num{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--maroon);margin-bottom:16px}
+  h2{font-size:36px;line-height:1.15;font-weight:600;letter-spacing:-0.01em;margin-bottom:22px}
+  .body p{max-width:62ch;margin-bottom:18px;text-wrap:pretty}
+  .body p:last-child{margin-bottom:0}
+  code{font-family:"IBM Plex Mono",monospace;font-size:.82em;background:var(--wash);padding:1px 5px;border:1px solid var(--rule);border-radius:3px}
+  @media(max-width:560px){h1{font-size:42px}h2{font-size:29px}}
+
+  /* compare table */
+  .compare{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--ink);margin-top:34px}
+  @media(max-width:640px){.compare{grid-template-columns:1fr}}
+  .compare .ch{font-family:"Inter",sans-serif;font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;padding:14px 22px;border-bottom:1px solid var(--rule-2)}
+  .compare .ch.cur{color:var(--ink-3)}
+  .compare .ch.av{color:var(--maroon);background:var(--wash)}
+  .compare .cell{padding:8px 22px 22px}
+  .compare .cell.av{background:var(--wash);border-left:1px solid var(--rule-2)}
+  @media(max-width:640px){.compare .col2{border-top:1px solid var(--ink)}.compare .cell.av{border-left:none}}
+  .compare ul{list-style:none}
+  .compare li{font-size:18px;line-height:1.45;padding:9px 0;display:flex;gap:11px;color:var(--ink-2)}
+  .compare li::before{content:"—";color:var(--rule-2);flex:0 0 auto;font-family:"Inter",sans-serif}
+  .compare .av li::before{color:var(--maroon-soft)}
+  .marginnote{font-family:"Inter",sans-serif;font-size:14px;color:var(--ink-3);border-left:2px solid var(--maroon);padding:4px 0 4px 18px;margin-top:30px;max-width:58ch;line-height:1.5}
+
+  /* dimensions */
+  .dims{margin-top:30px}
+  .dim{padding:26px 0;border-top:1px solid var(--rule)}
+  .dim:first-child{border-top:1px solid var(--ink)}
+  .dim .dh{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+  .dim .did{font-family:"IBM Plex Mono",monospace;font-size:14px;color:var(--maroon);font-weight:500}
+  .dim .dn{font-size:24px;font-weight:600}
+  .dim p{max-width:62ch;color:var(--ink-2);font-size:18.5px}
+
+  /* pipeline figure */
+  .figure{margin-top:48px;border:1px solid var(--rule-2);background:var(--wash);padding:34px 30px 26px}
+  .figcap{font-family:"Inter",sans-serif;font-size:13px;color:var(--ink-3);margin-top:26px;border-top:1px solid var(--rule);padding-top:14px;line-height:1.5}
+  .figcap b{color:var(--ink);font-weight:600}
+  .pipeline{display:flex;flex-direction:column;gap:0;font-family:"Inter",sans-serif}
+  .pstep{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center}
+  .pbox{background:var(--bg);border:1px solid var(--ink);padding:14px 18px}
+  .pbox .pid{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.06em;color:var(--maroon);font-weight:500}
+  .pbox .pq{font-size:15.5px;color:var(--ink);margin-top:3px}
+  .yes{display:flex;align-items:center;gap:12px;justify-self:end}
+  .yes .lab{font-size:12px;color:var(--ink-3);font-style:normal;font-family:"IBM Plex Mono",monospace}
+  .verdict{font-family:"IBM Plex Mono",monospace;font-size:12.5px;letter-spacing:.04em;padding:7px 13px;border:1px solid var(--rule-2);background:var(--bg);white-space:nowrap}
+  .verdict.term-v{border-color:var(--ink-3);color:var(--ink-2)}
+  .verdict.novel{border-color:var(--maroon);color:var(--maroon);font-weight:600;background:#fff;box-shadow:0 0 0 3px #f6e7e9}
+  .pdown{display:flex;align-items:center;gap:10px;padding:8px 0;color:var(--ink-3);font-size:12px}
+  .pdown .line{width:1px;height:22px;background:var(--ink);margin-left:21px}
+  .pdown .no{font-family:"IBM Plex Mono",monospace;letter-spacing:.04em}
+  .pfork{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;margin-top:4px}
+  .pfork .verdicts{display:flex;flex-direction:column;gap:8px}
+  @media(max-width:600px){
+    .pstep,.pfork{grid-template-columns:1fr;gap:10px}
+    .yes{justify-self:start}
+  }
+
+  /* ─── try it (dark) — 2-col with upload mock (from C) ─── */
+  .tryit{background:var(--ink);color:#f4f3ef;border-top:none}
+  .tryit .sec-num{color:var(--maroon-lite)}
+  .tryit h2{color:#fff}
+  .tryit .body p{color:#c9c7c0}
+  .tryit code{background:#26251f;border-color:#3a3933;color:#e9e7df}
+  .tryit .btn-primary{background:#fff;color:var(--ink);border-color:#fff}
+  .tryit .btn-primary:hover{background:var(--maroon-soft);color:#fff;border-color:var(--maroon-soft)}
+  .tryit .pnote{font-family:"Inter",sans-serif;font-size:14px;color:#9a988f;margin-top:22px;font-style:italic}
+  .try-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:48px;align-items:center}
+  @media(max-width:820px){.try-grid{grid-template-columns:1fr;gap:34px}}
+  .upload{border:1.5px dashed #3a3933;padding:30px 26px;text-align:center;background:rgba(255,255,255,.018)}
+  .upload .ic{width:46px;height:46px;border:1px solid #4a4840;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:21px;color:var(--maroon-lite)}
+  .upload .ut{font-family:"Inter",sans-serif;font-size:15px;color:#f4f3ef;font-weight:500}
+  .upload .uf{font-family:"IBM Plex Mono",monospace;font-size:12px;color:#9a988f;margin-top:6px}
+  .upload .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px}
+  .upload .chip{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#c9c7c0;border:1px solid #3a3933;border-radius:20px;padding:4px 11px}
+  .upload .vis{font-family:"Inter",sans-serif;font-size:11.5px;color:#7a786f;margin-top:18px;font-style:italic;line-height:1.45}
+  .upload-real{cursor:pointer;display:block;transition:border-color .2s,background .2s}
+  .upload-real:hover{border-color:var(--maroon-soft);background:rgba(255,255,255,.04)}
+  .upload-real.has-file{border-style:solid;border-color:var(--maroon-lite)}
+
+  /* --- results cards --- */
+  .result-card{
+    border:1px solid #3a3933;padding:22px 26px;margin-bottom:14px;
+    background:rgba(255,255,255,.024);transition:border-color .2s;
+  }
+  .result-card:hover{border-color:#5a5850}
+  .result-card .rhead{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:10px;flex-wrap:wrap}
+  .result-card .rtitle{font-family:"Crimson Pro",serif;font-size:20px;color:#f4f3ef;font-weight:500}
+  .result-card .rlabel{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:#8a877d}
+  .result-card .rpreview{font-family:"IBM Plex Mono",monospace;font-size:12px;color:#9a988f;margin-bottom:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+  .result-card .rdetail{font-family:"Inter",sans-serif;font-size:13.5px;color:#c9c7c0;line-height:1.5}
+  .result-card .rbadge{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.06em;
+    padding:5px 11px;border:1px solid #3a3933;white-space:nowrap;
+  }
+  .rbadge.novel{border-color:var(--maroon-soft);color:var(--maroon-lite);font-weight:600}
+  .rbadge.known-formal{border-color:#b08014;color:#e0b830}
+  .rbadge.known-informal{border-color:#b08014;color:#e0b830}
+  .rbadge.gray{border-color:#5a5850;color:#8a877d}
+  .rbadge.error{border-color:#6b2020;color:#d98c95}
+  .result-card .rmatch{font-family:"IBM Plex Mono",monospace;font-size:12px;color:#9a988f;margin:4px 0}
+  .result-card .rmatch code{color:var(--maroon-lite);background:transparent}
+  .result-card details pre{font-family:"IBM Plex Mono",monospace;font-size:11px;background:#1a1916;color:#d9d6cc;padding:12px;overflow-x:auto;margin-top:6px;line-height:1.55}
+
+  /* loading spinner */
+  .spinner{display:inline-block;width:10px;height:10px;border:1.5px solid #5a5850;border-top-color:var(--maroon-lite);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:-1px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Google Sign-In */
+  #nav-auth { display: flex; align-items: center; gap: 12px; font-family: "Inter", sans-serif; font-size: 14px; }
+  #nav-auth a { color: var(--ink-3); }
+  #nav-auth a:hover { color: var(--maroon); text-decoration: none; }
+  #g_id_signin { display: inline-block; }
+
+  /* questions */
+  .ql{margin-top:32px}
+  .qrow{display:grid;grid-template-columns:90px 1fr;gap:26px;padding:26px 0;border-top:1px solid var(--rule)}
+  .qrow:first-child{border-top:1px solid var(--ink)}
+  @media(max-width:560px){.qrow{grid-template-columns:1fr;gap:8px}}
+  .qrow .qid{font-family:"IBM Plex Mono",monospace;font-size:15px;font-weight:500;color:var(--maroon)}
+  .qrow h3{font-size:22px;font-weight:600;margin-bottom:8px}
+  .qrow p{font-size:18.5px;color:var(--ink-2);max-width:60ch;font-style:italic}
+
+  /* about */
+  .about p{font-size:20px;color:var(--ink-2);max-width:60ch}
+  .about .contact{font-family:"Inter",sans-serif;font-size:14.5px;margin-top:24px;color:var(--ink-3)}
+
+  footer{border-top:1px solid var(--ink);padding:34px 0 50px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:baseline;gap:20px;flex-wrap:wrap;font-family:"Inter",sans-serif;font-size:14px}
+  footer .flinks{display:flex;gap:24px}
+  footer .flinks a{color:var(--ink)}
+  footer .cc{color:var(--ink-3)}
+  footer .signoff{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.18em;text-transform:lowercase;color:var(--maroon-soft);opacity:.75;flex-basis:100%;text-align:right}
+  @media(max-width:600px){footer .signoff{text-align:left}}
+</style>
+</head>
+<body>
+
+<!-- STICKY NAV -->
+<div class="runhead">
+  <div class="wrap">
+    <span class="t">AViD Journal</span>
+    <nav>
+      <a href="#problem">Problem</a>
+      <a href="#method">Method</a>
+      <a href="#try">Demo</a>
+      <a href="#questions">Research</a>
+      <a href="#about">About</a>
+    </nav>
+    <span id="nav-auth"><div id="g_id_signin"></div></span>
+  </div>
+</div>
+
+<!-- MASTHEAD -->
+<header class="masthead">
+  <div class="wrap">
+    <div class="nameplate">
+      <span><b>AViD Journal</b></span>
+      <span class="mid">A measuring instrument for mathematical novelty</span>
+      <span>Vol.&nbsp;0 · Preprint · MMXXVI</span>
+    </div>
+
+    <div class="hero-grid">
+      <div>
+        <div class="label">Research project · Formal theorem proving</div>
+        <h1>Is this Math actually <span class="new">new?</span></h1>
+        <div class="hero-sub">// Automated novelty assessment for formalized mathematics.</div>
+        <p class="abstract">We measure whether a mathematical contribution is genuinely new — distinguishing trivial automation from rediscovery from real novelty. Built on Lean&nbsp;4 and the contemporary state of mathlib.</p>
+        <div class="byline">
+          <span><b>Ayrton Porto</b> · UNICEN, Argentina</span>
+          <span class="sep">·</span>
+          <span>Preprint forthcoming on arXiv</span>
+        </div>
+        <div class="actions">
+          <a class="btn btn-primary" href="#try">Try the demo <span class="arr">↓</span></a>
+          <a class="btn btn-secondary" href="https://github.com/avid-journal" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+
+      <!-- TERMINAL VERDICT BLOCK (from A, restyled to B) -->
+      <div class="term" aria-hidden="true">
+        <div class="term-head">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="ttl">avid — assess theorem.lean</span>
+        </div>
+        <div class="term-body">
+          <div class="term-line"><span class="k">$</span> avid assess theorem.lean</div>
+          <div class="term-line"><span class="k">[ ok ]</span> elaborating proof term <span class="val">✓</span></div>
+          <div class="term-line"><span class="k">[ d2 ]</span> triviality budget … <span class="val">not closed</span></div>
+          <div class="term-line"><span class="k">[ d1 ]</span> Leandex (C_F) … <span class="val">0 matches</span></div>
+          <div class="term-line"><span class="k">[ d1 ]</span> TheoremSearch (C_I) … <span class="val">no prior</span></div>
+          <div class="term-line"><span class="k">[ d3 ]</span> premise Jaccard … <span class="val">0.71</span></div>
+          <div class="term-verdict">
+            <span class="lbl">verdict:</span><span class="term-badge">NOVEL</span><span class="cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- novelty spectrum -->
+    <div class="spectrum" id="spectrum">
+      <div class="sp-cap"><span class="t">The novelty spectrum</span><span>five verdicts · one axis</span></div>
+      <div class="sp-track">
+        <div class="sp-needle"><div class="tri"></div></div>
+        <div class="sp-axis"></div>
+        <div class="sp-ticks">
+          <div class="sp-tick"><span class="v">TRIVIAL</span></div>
+          <div class="sp-tick"><span class="v">REDISCOVERY</span><span class="sub">formal</span></div>
+          <div class="sp-tick"><span class="v">REDISCOVERY</span><span class="sub">informal</span></div>
+          <div class="sp-tick"><span class="v">INCREMENTAL</span></div>
+          <div class="sp-tick is-novel"><span class="v">NOVEL</span></div>
+        </div>
+      </div>
+      <div class="sp-ends"><span>automatable · already known</span><span>genuinely new</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- PROBLEM -->
+<!-- TRY IT -->
+<section id="try" class="tryit">
+  <div class="wrap">
+    <div class="try-grid">
+      <div>
+        <div class="sec-num">01 · Try it</div>
+        <h2>Try the prototype</h2>
+        <div class="body">
+          <p>Upload a LaTeX file with mathematical theorems. AViD will parse each block and report a novelty verdict against Mathlib and arXiv — together with all the evidence collected along the way.</p>
+        </div>
+        <div class="actions" style="margin-bottom:12px">
+          <a class="btn btn-primary" href="#try-upload">Analyze a file <span class="arr">↓</span></a>
+          <a class="btn btn-secondary" href="https://github.com/ayrtonporto/avid-journal" target="_blank" rel="noopener">Full pipeline on GitHub</a>
+        </div>
+        <p class="pnote">D1 (existence check) runs in the cloud. D2 (triviality) and D3 (proof distance) require local Lean&nbsp;4 install. <a href="https://github.com/ayrtonporto/avid-journal#readme" style="color:var(--maroon-lite)">Learn more.</a></p>
+      </div>
+
+      <!-- REAL UPLOAD (auth-gated) -->
+      <div id="try-upload">
+        <div id="upload-gate">
+          <div class="upload"><div class="ic">🔒</div><div class="ut">Sign in with <b>Google</b> to analyze</div><div class="uf">your papers are private until published</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS (hidden until analysis runs) -->
+    <div id="results-area" style="display:none; margin-top: 42px;">
+      <div id="results-status" class="term" style="margin-bottom:28px">
+        <div class="term-head">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="ttl" id="status-title">avid — analyzing</span>
+        </div>
+        <div class="term-body" id="status-body">
+          <div class="term-line"><span class="k">$</span> avid assess <span class="val" id="status-file">—</span></div>
+          <div class="term-line"><span class="k">[ d1 ]</span> <span id="status-msg">Waiting for file...</span></div>
+        </div>
+      </div>
+      <div id="results-cards"></div>
+    </div>
+  </div>
+</section>
+
+<section id="problem">
+  <div class="wrap has-notes">
+    <div class="sec-num">02 · The problem</div>
+    <h2>Why this matters</h2>
+    <div class="body">
+      <p class="lede">Every day, more mathematical results are posted to arXiv and other preprint servers with no peer review — and the volume keeps growing. Telling a genuinely new contribution apart from a rediscovery or a repackaged known result is an increasingly real problem.<sup class="ref">1</sup> Current AI systems for mathematics measure <em>correctness</em> — they do not measure <em>novelty</em>. AViD Journal closes that gap.</p>
+    </div>
+    <aside class="sidenote"><span class="sn-n">1</span>As unreviewed output grows, results presented as new that an adequate prior-work search would have flagged become more common — exactly the failure mode novelty assessment is meant to catch.</aside>
+
+    <div class="compare">
+      <div class="col1">
+        <div class="ch cur">Current systems</div>
+        <div class="cell cur">
+          <ul>
+            <li>Verify that a proof type-checks</li>
+            <li>Optimize for correctness and pass-rate</li>
+            <li>Blind to prior formal and informal work</li>
+            <li>Cannot separate automation from discovery</li>
+          </ul>
+        </div>
+      </div>
+      <div class="col2">
+        <div class="ch av">AViD Journal</div>
+        <div class="cell av">
+          <ul>
+            <li>Check correctness, measures novelty</li>
+            <li>Searches formal libraries and literature</li>
+            <li>Scores triviality against today's tactics</li>
+            <li>Returns a verdict with full evidence</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="marginnote">A result that type-checks is not the same as a result that is new. The distance between those two statements is exactly where misrepresentation lives.</div>
+  </div>
+</section>
+
+<!-- METHOD -->
+<section id="method">
+  <div class="wrap has-notes">
+    <div class="sec-num">03 · The method</div>
+    <h2>Three dimensions of novelty</h2>
+    <div class="body"><p>Each theorem submitted to AViD is evaluated across three independent dimensions, applied in sequence.</p></div>
+
+    <div class="dims">
+      <div class="dim">
+        <div class="dh"><span class="did">D1</span><span class="dn">Existence</span></div>
+        <p>Does this theorem already exist in formal libraries (mathlib) or in informal literature (arXiv)? We query <code>Leandex</code> for formal matches and <code>TheoremSearch</code> for informal prior work.</p>
+      </div>
+      <div class="dim">
+        <div class="dh"><span class="did">D2</span><span class="dn">Triviality</span></div>
+        <p>Can the statement be closed by standard tactics — <code>decide</code>, <code>omega</code>, <code>simp</code>, <code>norm_num</code>, <code>aesop</code>, <code>tauto</code>, <code>exact?</code> — within a fixed budget? Triviality is relative to the current state of mathlib automation. A result trivial today may not have been trivial a year ago.<sup class="ref">2</sup></p>
+        <aside class="sidenote"><span class="sn-n">2</span>Triviality is not a property of a statement alone, but of a statement paired with an automation frontier. Every D2 verdict is implicitly stamped with the mathlib revision it ran against.</aside>
+      </div>
+      <div class="dim">
+        <div class="dh"><span class="did">D3</span><span class="dn">Proof distance</span></div>
+        <p>When the statement exists but proofs differ, we measure Jaccard distance over the set of premises extracted from the elaborated Lean&nbsp;4 proof term — a proof-object-level signal, not a syntactic one.<sup class="ref">3</sup></p>
+        <aside class="sidenote"><span class="sn-n">3</span>Operating on the proof object means two proofs that read very differently in source but invoke the same lemmas register as close — and a genuinely different argument registers as far.</aside>
+      </div>
+    </div>
+
+    <!-- FIGURE: pipeline -->
+    <div class="figure">
+      <div class="pipeline">
+        <div class="pstep">
+          <div class="pbox"><div class="pid">D2 · TRIVIALITY</div><div class="pq">Closed by standard tactics within budget?</div></div>
+          <div class="yes"><span class="lab">yes →</span><span class="verdict term-v">TRIVIAL</span></div>
+        </div>
+        <div class="pdown"><span class="line"></span><span class="no">no ↓</span></div>
+        <div class="pstep">
+          <div class="pbox"><div class="pid">D1 · EXISTENCE — C_F (formal)</div><div class="pq">Match in formal libraries?</div></div>
+          <div class="yes"><span class="lab">yes →</span><span class="verdict term-v">REDISCOVERY · formal</span></div>
+        </div>
+        <div class="pdown"><span class="line"></span><span class="no">no ↓</span></div>
+        <div class="pstep">
+          <div class="pbox"><div class="pid">D1 · EXISTENCE — C_I (informal)</div><div class="pq">Match in informal literature?</div></div>
+          <div class="yes"><span class="lab">yes →</span><span class="verdict term-v">REDISCOVERY · informal</span></div>
+        </div>
+        <div class="pdown"><span class="line"></span><span class="no">no ↓</span></div>
+        <div class="pfork">
+          <div class="pbox"><div class="pid">D3 · PROOF DISTANCE</div><div class="pq">Premise Jaccard distance vs nearest neighbour</div></div>
+          <div class="verdicts">
+            <div class="yes" style="justify-self:start"><span class="lab">low →</span><span class="verdict term-v">INCREMENTAL</span></div>
+            <div class="yes" style="justify-self:start"><span class="lab">high →</span><span class="verdict novel">NOVEL</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="figcap"><b>Figure 1.</b> Order of application. The cheapest filter (D2) runs first; each negative answer passes the statement to the next dimension. <b>C_F</b> is the formal corpus, <b>C_I</b> the informal corpus. Five terminal verdicts are possible; <b>NOVEL</b> is reached only by statements that survive every filter.</div>
+    </div>
+  </div>
+</section>
+
+<!-- QUESTIONS -->
+<section id="questions">
+  <div class="wrap">
+    <div class="sec-num">04 · Open research</div>
+    <h2>What we're investigating</h2>
+    <div class="body"><p>AViD is a working system, but the underlying questions remain open. These are the directions we're actively exploring.</p></div>
+
+    <div class="ql">
+      <div class="qrow">
+        <div class="qid">Q.01</div>
+        <div>
+          <h3>Proof representation</h3>
+          <p>How to construct proof representations that are robust to formalization variation and capture the mathematical distinction between alternative proofs, generalization, specialization, and statement-level novelty?</p>
+        </div>
+      </div>
+      <div class="qrow">
+        <div class="qid">Q.02</div>
+        <div>
+          <h3>Generalization vs novelty</h3>
+          <p>How to distinguish formally between "generalization of A" and "novel result related to A" — beyond what current LLM judges can reliably do?</p>
+        </div>
+      </div>
+      <div class="qrow">
+        <div class="qid">Q.03</div>
+        <div>
+          <h3>Autoformalization fidelity</h3>
+          <p>How to measure semantic fidelity of autoformalization? Statements that type-check but misrepresent the original paper's claim are a critical bottleneck — and currently undetectable without human review.</p>
+        </div>
+      </div>
+      <div class="qrow">
+        <div class="qid">Q.04</div>
+        <div>
+          <h3>Impact measurement</h3>
+          <p>How to quantify the impact of a mathematical contribution beyond binary novelty? Can we measure whether a result opens new directions, connects previously separate areas, or enables proofs that were previously out of reach?</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section id="about" class="about">
+  <div class="wrap">
+    <div class="sec-num">05 · About</div>
+    <h2>About</h2>
+    <img class="about-photo" src="/static/ayrton-poster.jpg"
+         alt="Ayrton Porto presenting AViD Journal at UNICEN"
+         style="max-width:340px;width:100%;height:auto;border:1px solid var(--rule);margin:6px 0 20px" />
+    <p>AViD Journal is a research project by Ayrton Porto at UNICEN — Universidad Nacional del Centro de la Provincia de Buenos Aires, Argentina. A preprint is forthcoming on arXiv.</p>
+    <div class="contact">Contact — <a href="mailto:ayrporto@gmail.com">ayrporto@gmail.com</a></div>
+    <div class="about-links" style="margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:13px">
+      <a href="https://x.com/AyrPorto" target="_blank" rel="noopener">X / Twitter</a>
+      <a href="https://www.linkedin.com/in/ayrporto/" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="https://ayrtonporto.github.io/" target="_blank" rel="noopener">Personal site</a>
+      <a href="mailto:ayrporto@gmail.com">Email</a>
+    </div>
+  </div>
+</section>
+
+<!-- ACKNOWLEDGMENTS -->
+<section id="thanks">
+  <div class="wrap">
+    <div class="sec-num">06 · Acknowledgments</div>
+    <h2>Thanks</h2>
+    <div class="body">
+      <p>This project was supported by <b>Nodo Serrano</b>, <b>Hack Tandil</b>, and <b>BAISH</b> — communities that make independent research possible in Argentina.</p>
+      <div class="thanks-logos" style="margin-top:24px;display:flex;gap:36px;align-items:center;flex-wrap:wrap">
+        <img src="/static/nodo-serrano.png" alt="Nodo Serrano" style="height:46px;width:auto" />
+        <img src="/static/hacktandil.png" alt="Hack Tandil" style="height:46px;width:auto;background:#000;padding:6px;border-radius:4px" />
+        <!-- TODO: agregar <img src="/static/baish.png" alt="BAISH" …> cuando llegue el logo -->
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="flinks">
+      <a href="https://github.com/ayrtonporto/avid-journal" target="_blank" rel="noopener">GitHub</a>
+      <a href="#about">arXiv (forthcoming)</a>
+      <a href="mailto:ayrporto@gmail.com">Contact</a>
+    </div>
+    <div class="cc">AViD Journal — open research, MIT license</div>
+    <div class="signoff">where no proof has gone before</div>
+  </div>
+</footer>
+
+<!-- AViD Demo JS -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// GOOGLE AUTH
+// ═══════════════════════════════════════════════════════════════════
+const API_BASE = window.AVID_API_BASE || "";
+const DEV_MODE = window.AVID_DEV_MODE === true;
+let AUTH_TOKEN = localStorage.getItem("avid_token") || "";
+let AUTH_USER = null;
+try { AUTH_USER = JSON.parse(localStorage.getItem("avid_user") || "null"); } catch(e) {}
+
+function isLoggedIn() { return DEV_MODE || (!!AUTH_TOKEN && !!AUTH_USER); }
+
+function googleSignIn(response) {
+  fetch(API_BASE + "/api/auth/google", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credential: response.credential }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    AUTH_TOKEN = data.token;
+    AUTH_USER = data.user;
+    localStorage.setItem("avid_token", AUTH_TOKEN);
+    localStorage.setItem("avid_user", JSON.stringify(AUTH_USER));
+    updateAuthUI();
+  })
+  .catch(err => console.error("Auth failed:", err));
+}
+
+function logout() {
+  fetch(API_BASE + "/api/auth/logout", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + AUTH_TOKEN },
+  }).finally(() => {
+    AUTH_TOKEN = "";
+    AUTH_USER = null;
+    localStorage.removeItem("avid_token");
+    localStorage.removeItem("avid_user");
+    updateAuthUI();
+  });
+}
+
+function updateAuthUI() {
+  const navAuth = document.getElementById("nav-auth");
+  const uploadGate = document.getElementById("upload-gate");
+  if (!navAuth || !uploadGate) return;
+
+  if (isLoggedIn()) {
+    const userName = DEV_MODE ? "Dev Mode" : AUTH_USER.name;
+    navAuth.innerHTML = '<span style="color:var(--maroon);font-weight:500">' + userName + '</span>' + (DEV_MODE ? '' : ' · <a href="#" onclick="logout();return false">Sign out</a>');
+    uploadGate.innerHTML = '<label class="upload upload-real" for="tex-input"><div class="ic">↥</div><div class="ut">Select a <b>.tex</b> file</div><div class="uf">analyze as ' + userName + '</div><div class="chips"><span class="chip">parse</span><span class="chip">D1 · Leandex</span><span class="chip">D1 · arXiv</span><span class="chip">verdict</span></div></label><input type="file" id="tex-input" accept=".tex" style="display:none">';
+    // Re-bind file input
+    const fi = document.getElementById("tex-input");
+    if (fi) fi.addEventListener("change", onFileSelected);
+  } else {
+    navAuth.innerHTML = '<div id="g_id_signin"></div>';
+    uploadGate.innerHTML = '<div class="upload"><div class="ic">🔒</div><div class="ut">Sign in with <b>Google</b> to analyze</div><div class="uf">your papers are private until published</div></div>';
+    // Init Google button
+    if (window.google && window.AVID_GOOGLE_CLIENT_ID) {
+      google.accounts.id.initialize({
+        client_id: window.AVID_GOOGLE_CLIENT_ID,
+        callback: googleSignIn,
+      });
+      google.accounts.id.renderButton(
+        document.getElementById("g_id_signin"),
+        { theme: "outline", size: "medium", text: "signin_with", shape: "rectangular" }
+      );
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════════
+const API_URL = API_BASE + "/api/analyze";
+
+// ═══════════════════════════════════════════════════════════════════
+// STATUS BADGE MAPPING
+// ═══════════════════════════════════════════════════════════════════
+const STATUS_BADGES = {
+  "NOVEDAD_ENUNCIADO":          ["novel",       "NOVEL"],
+  "NOVEDAD_DEMOSTRACION":       ["novel",       "NOVEL · proof"],
+  "CONOCIDO_LITERATURA":        ["known-informal","KNOWN · lit"],
+  "NO_NOVEDOSO_redundante":     ["known-formal","REDUNDANT"],
+  "NO_NOVEDOSO_trivial":        ["known-formal","TRIVIAL"],
+  "ZONA_GRIS":                  ["gray",        "GRAY ZONE"],
+  "MATCH_ENCONTRADO_PENDIENTE_D3": ["known-formal","FOUND · D3 pending"],
+  "ERROR":                      ["error",       "ERROR"],
+};
+
+const statusEl   = (id) => document.getElementById(id);
+const statusMsg  = statusEl("status-msg");
+const statusFile = statusEl("status-file");
+const statusTitle = statusEl("status-title");
+const resultsArea = statusEl("results-area");
+const resultsCards = statusEl("results-cards");
+
+// ═══════════════════════════════════════════════════════════════════
+// FILE UPLOAD
+// ═══════════════════════════════════════════════════════════════════
+
+function onFileSelected() {
+  const file = document.getElementById("tex-input").files[0];
+  if (!file) return;
+  // Update label
+  const ut = document.querySelector("#upload-gate .ut");
+  const uf = document.querySelector("#upload-gate .uf");
+  const ic = document.querySelector("#upload-gate .ic");
+  if (ut) ut.innerHTML = file.name;
+  if (uf) uf.textContent = (file.size / 1024).toFixed(1) + " KB";
+  if (ic) ic.textContent = "✓";
+  document.querySelector(".upload-real").classList.add("has-file");
+  analyze(file);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// API CALL (streaming)
+// ═══════════════════════════════════════════════════════════════════
+async function analyze(file) {
+  if (!isLoggedIn()) {
+    statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Please sign in with Google first.</span>';
+    return;
+  }
+  resultsArea.style.display = "block";
+  resultsCards.innerHTML = "";
+  statusTitle.textContent = "avid — analyzing";
+  statusFile.textContent = file.name;
+  statusMsg.innerHTML = '<span class="spinner"></span>Starting pipeline...';
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const headers = {};
+    if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
+
+    const resp = await fetch(API_URL, { method: "POST", body: formData, headers });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let msg;
+        try {
+          // SSE format: "data: {...}"
+          const json = line.startsWith("data: ") ? line.slice(6) : line;
+          msg = JSON.parse(json);
+        } catch(e) { continue; }
+        if (msg.type === "progress") {
+          statusMsg.innerHTML = '<span class="spinner"></span>' + msg.msg;
+        } else if (msg.type === "result") {
+          renderResults(file.name, msg.summary, msg.results, msg.publication_html);
+        } else if (msg.type === "done") {
+          statusMsg.innerHTML = '<span class="val">' + msg.msg + '</span>';
+        } else if (msg.type === "error") {
+          statusTitle.textContent = "avid — error";
+          statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">' + msg.msg + '</span>';
+        }
+      }
+    }
+  } catch (err) {
+    statusTitle.textContent = "avid — error";
+    statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">' + err.message + '</span>';
+    console.error(err);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════════
+function renderResults(filename, summary, results, pubHtml) {
+  const total = results.length;
+  const counts = summary.counts || {};
+  const countStr = Object.entries(counts)
+    .map(([k, v]) => v + " " + k.replace(/_/g, " ").toLowerCase())
+    .join(" · ") || "no theorems found";
+
+  statusTitle.textContent = "avid — verdict";
+  statusFile.textContent = filename;
+  statusMsg.innerHTML =
+    '<span class="val">' + total + " theorems</span> — " + countStr +
+    ' <button onclick="downloadLean()" style="font-family:Inter,sans-serif;font-size:12px;padding:4px 10px;background:transparent;color:var(--maroon-lite);border:1px solid var(--maroon-lite);cursor:pointer;margin-left:12px">📥 Download .lean</button>';
+
+  resultsCards.innerHTML = results.map((r, i) => {
+    const [cssClass, label] = STATUS_BADGES[r.veredicto] || ["error", r.veredicto];
+    const preview = (r.content_preview || "").slice(0, 280);
+    const detail = r.detail || "";
+    const title = r.title || r.label || ("Theorem " + (i + 1));
+    const labelTag = r.label ? '<span class="rlabel">' + r.label + '</span>' : "";
+
+    // Show matches if any
+    let matchHtml = "";
+    if (r.match_C_F && Object.keys(r.match_C_F).length > 0) {
+      matchHtml += '<div class="rmatch">📚 Mathlib: <code>' + (r.match_C_F.lean_name || "match") + '</code></div>';
+    }
+    if (r.match_C_I && Object.keys(r.match_C_I).length > 0) {
+      matchHtml += '<div class="rmatch">📄 arXiv: ' + (r.match_C_I.title || "match") + '</div>';
+    }
+
+    // Show Lean code if available
+    let leanHtml = "";
+    if (r.lean_statement) {
+      leanHtml = '<details style="margin-top:8px"><summary style="color:var(--maroon-lite);cursor:pointer;font-family:Inter,sans-serif;font-size:13px">📥 View formalized Lean code</summary><pre style="background:#1a1916;color:#d9d6cc;padding:12px;font-size:11px;overflow-x:auto;margin-top:6px">' + r.lean_statement + '</pre></details>';
+    }
+
+    return '<div class="result-card">' +
+      '<div class="rhead">' +
+        '<span class="rtitle">' + title + '</span>' +
+        labelTag +
+        '<span class="rbadge ' + cssClass + '">' + label + '</span>' +
+      '</div>' +
+      matchHtml +
+      (preview ? '<div class="rpreview">' + preview + '</div>' : "") +
+      (detail ? '<div class="rdetail">' + detail + '</div>' : "") +
+      leanHtml +
+    '</div>';
+  }).join("");
+
+  // Show publication section if available
+  if (pubHtml) {
+    const pubDiv = document.createElement("div");
+    pubDiv.innerHTML = pubHtml;
+    pubDiv.style.marginTop = "28px";
+    resultsCards.appendChild(pubDiv);
+  }
+
+  // scroll to results
+  resultsArea.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// Init on page load
+updateAuthUI();
+
+// ═══════════════════════════════════════════════════════════════════
+// PUBLICATION
+// ═══════════════════════════════════════════════════════════════════
+async function submitPublication(filename, submissionId) {
+  const author = document.getElementById("pub-author")?.value?.trim();
+  const email = document.getElementById("pub-email")?.value?.trim();
+  const llm = document.getElementById("pub-llm")?.value?.trim();
+  const agreed = document.getElementById("pub-agree")?.checked;
+  const resultEl = document.getElementById("pub-result");
+
+  if (!author) { resultEl.innerHTML = '<span style="color:var(--maroon-lite)">Author name is required.</span>'; return; }
+  if (!llm) { resultEl.innerHTML = '<span style="color:var(--maroon-lite)">LLM model(s) are required.</span>'; return; }
+  if (!agreed) { resultEl.innerHTML = '<span style="color:var(--maroon-lite)">You must agree to the Terms of Publication.</span>'; return; }
+
+  resultEl.innerHTML = '<span class="spinner"></span> Submitting...';
+
+  try {
+    const resp = await fetch(API_BASE + "/api/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ author, email, llm, filename, submission_id: submissionId || "" }),
+    });
+    const data = await resp.json();
+    if (data.status === "ok") {
+      resultEl.innerHTML = '<span style="color:var(--maroon)">&#x2705; Submitted! ID: <code>' + data.id + '</code>. Check your email for confirmation.</span>';
+      // Disable the form
+      document.querySelectorAll("#pub-author, #pub-email, #pub-llm, #pub-agree, .pub-section button").forEach(el => el.disabled = true);
+    } else {
+      resultEl.innerHTML = '<span style="color:var(--maroon-lite)">' + (data.detail || "Error") + '</span>';
+    }
+  } catch(e) {
+    resultEl.innerHTML = '<span style="color:var(--maroon-lite)">Network error. Please try again.</span>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LEAN DOWNLOAD
+// ═══════════════════════════════════════════════════════════════════
+function downloadLean() {
+  const blocks = [];
+  document.querySelectorAll(".result-card pre").forEach(pre => {
+    blocks.push(pre.textContent);
+  });
+  if (!blocks.length) return;
+  const content = "import Mathlib\n\n" + blocks.join("\n\n") + "\n";
+  const blob = new Blob([content], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "avid_formalized.lean";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script></body>
+</html>

@@ -49,11 +49,15 @@ COPY config/ ./config/
 COPY prompts/ ./prompts/
 COPY lean_project/ ./lean_project/
 COPY app.py .
+COPY server.py .
+COPY deploy/landing.html /app/deploy/landing.html
+COPY deploy/assets/ /app/deploy/assets/
 RUN mkdir -p /app/src/publication/submissions
 
 # ── Runtime ───────────────────────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1
 ENV LEAN_PROJECT_DIR=/app/lean_project
+ENV LANDING_HTML=/app/deploy/landing.html
 ENV AVID_FORMALIZATION_ENABLED=1
 ENV AVID_D2_ENABLED=1
 
