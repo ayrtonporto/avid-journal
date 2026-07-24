@@ -29,6 +29,9 @@ from src.novelty_v2.dimensions.d1_existence import check_d1, CI_SIMILARITY_THRES
 from src.novelty_v2.dimensions.d2_triviality import check_triviality, LEAN_STARTUP_OVERHEAD_S
 from src.novelty_v2.types import D1Result, D2Result, Verdict
 from src.parser.latex_parser import parse_latex
+from src.formalization.orchestrator import topological_sort
+from src.formalization.providers.config import resolve_provider
+from src.formalization.scripts.lean_checker import check_lean_file
 from src.publication import submit, list_submissions
 
 logging.basicConfig(level=logging.INFO)
@@ -62,115 +65,114 @@ def resolve_api_key(user_key: str = "") -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Formalization: LaTeX → Lean 4
+# Formalization: LaTeX → Lean 4 (using provider abstraction + topological sort)
 # ═══════════════════════════════════════════════════════════════════════════
 
-FORMALIZE_PROMPT = """You are a Lean 4 expert. Translate the following LaTeX mathematical
-statement into Lean 4 code using Mathlib 4.
+FORMALIZE_BLOCK_PROMPT = """You are a Lean 4 expert using Mathlib 4. Formalize the following
+mathematical block (statement + proof) into Lean 4 code.
 
 Rules:
-- Output ONLY the Lean 4 code, no explanations.
+- Output ONLY valid Lean 4 code. No explanations.
 - Use `import Mathlib` at the top.
-- Use proper Mathlib 4 notation (Real, Nat, Finset, etc.).
-- Do NOT include a proof — only the statement. Never use `sorry`.
-- Use `{keyword}` for the declaration.
+- Write a proper `{keyword}` declaration with the statement and its proof.
+- The proof must be complete — no `sorry`, no placeholders.
+- If the block is a definition, use `def` with `:=`.
+- Reference previously defined theorems by their Lean names.
+- Available context (already formalized above):
+{context}
 - Wrap your response in ```lean ... ```.
 
-LaTeX statement:
-{latex}"""
-
-FORMALIZE_RETRY_PROMPT = """Your previous translation was incomplete or contained `sorry`.
-Translate this LaTeX statement to Lean 4 again. This time:
-- Output ONLY valid Lean 4 code.
-- Use `{keyword}` for the declaration.
-- Do NOT use `sorry`, `:=`, `:= by`, or include any proof.
-- Just the type signature, nothing more.
-- Wrap in ```lean ... ```.
-
-LaTeX statement:
+LaTeX block:
 {latex}"""
 
 
-def _is_good_lean(code: str) -> bool:
-    """Check if Lean code looks valid: has a declaration, no sorry, not too short."""
-    if not code or len(code.strip()) < 10:
-        return False
-    if re.search(r":=\s*(by\s+)?sorry\b", code):
-        return False
-    has_decl = any(kw in code for kw in ["theorem ", "lemma ", "def ", "example "])
-    return has_decl
+def formalize_block_with_provider(
+    block: dict,
+    provider,
+    context_lean: str = "",
+    lean_project_dir: Optional[str] = None,
+    max_rounds: int = 3,
+) -> Optional[str]:
+    """Formalize a single block (statement + proof) using the model provider.
 
-
-def _call_deepseek(prompt: str, api_key: str) -> Optional[str]:
-    """Make a single API call to DeepSeek and extract Lean code."""
-    try:
-        resp = requests.post(
-            f"{OPENCODE_GO_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": FORMALIZATION_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0,
-                "max_tokens": 2048,
-            },
-            timeout=120,
-        )
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        content = data["choices"][0]["message"].get("content", "") or ""
-        if not content.strip():
-            content = data["choices"][0]["message"].get("reasoning_content", "") or ""
-        if not content.strip():
-            return None
-        m = re.search(r"```(?:lean4?)?\s*\n?(.*?)\n?```", content, re.DOTALL)
-        if m:
-            return m.group(1).strip()
-        kw = ["theorem ", "lemma ", "def ", "example ", "import "]
-        if any(k in content for k in kw):
-            return content.strip()
-        return None
-    except Exception as e:
-        logger.warning(f"DeepSeek call failed: {e}")
-        return None
-
-
-def formalize_statement(latex: str, api_key: str = "", block_type: str = "theorem") -> Optional[str]:
-    """Translate LaTeX → Lean 4 via DeepSeek V4 Pro, with quality retry.
+    Uses the verification loop: generate → compile → fix errors → retry.
 
     Args:
-        latex: LaTeX statement content.
-        api_key: User-provided API key (uses server key if empty).
-        block_type: 'definition', 'theorem', 'lemma', 'proposition', 'corollary'.
+        block: parser block dict (type, content_latex, proof_latex).
+        provider: ModelProvider instance.
+        context_lean: previously formalized Lean declarations.
+        lean_project_dir: path to lean_project/ for compilation.
+        max_rounds: max verification rounds.
 
     Returns:
-        Lean 4 code, or None if formalization failed after retries.
+        Lean code string or None.
     """
-    key = resolve_api_key(api_key)
-    if not key:
+    keyword_map = {"definition": "def", "theorem": "theorem", "lemma": "lemma",
+                   "proposition": "theorem", "corollary": "theorem"}
+    keyword = keyword_map.get(block.get("type", "theorem"), "theorem")
+
+    latex = (block.get("content_latex") or "") + "\n\n" + (block.get("proof_latex") or "")
+    prompt = FORMALIZE_BLOCK_PROMPT.format(
+        keyword=keyword,
+        context=context_lean or "(none — this is the first declaration)",
+        latex=latex[:4000],
+    )
+
+    # Write a temporary .lean file for the verification loop
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".lean", delete=False, encoding="utf-8"
+    )
+    target = Path(tmp.name)
+    stub = f"import Mathlib\n\n{context_lean}\n\n-- TODO: formalize {block.get('label', 'unknown')}\n"
+    tmp.write(stub)
+    tmp.close()
+
+    try:
+        for round_num in range(1, max_rounds + 1):
+            # Generate
+            response = provider.generate([{"role": "user", "content": prompt}])
+            if not response:
+                continue
+
+            # Extract Lean code
+            m = re.search(r"```(?:lean4?)?\s*\n?(.*?)\n?```", response, re.DOTALL)
+            code = m.group(1).strip() if m else ""
+            if not code:
+                code = response.strip()
+
+            # Write to file with context
+            full_code = f"import Mathlib\n\n{context_lean}\n\n{code}\n"
+            target.write_text(full_code, encoding="utf-8")
+
+            # Try to compile
+            if lean_project_dir and Path(lean_project_dir).exists():
+                has_error, has_sorry, stdout, stderr = check_lean_file(str(target))
+                if has_error or has_sorry:
+                    prompt = (
+                        f"The Lean code has errors. Fix them.\n\n"
+                        f"Errors:\n{stdout}\n{stderr}\n\n"
+                        f"Current code:\n```lean\n{full_code}\n```\n\n"
+                        f"Rewrite the declaration to compile without errors or sorry."
+                    )
+                    continue
+
+            # Success or skipping compilation
+            return code
+
+        logger.warning(f"Formalization failed after {max_rounds} rounds for {block.get('label')}")
         return None
 
-    # Map block type to Lean keyword
-    lean_keyword = "def" if block_type == "definition" else "theorem"
+    finally:
+        try: target.unlink()
+        except: pass
 
-    # Attempt 1: normal prompt
-    prompt = FORMALIZE_PROMPT.format(keyword=lean_keyword, latex=latex[:3000])
-    code = _call_deepseek(prompt, key)
-    if code and _is_good_lean(code):
-        return code
 
-    # Attempt 2: stricter retry prompt
-    logger.info(f"Retrying formalization (block_type={block_type})")
-    retry_prompt = FORMALIZE_RETRY_PROMPT.format(keyword=lean_keyword, latex=latex[:3000])
-    code = _call_deepseek(retry_prompt, key)
-    if code and _is_good_lean(code):
-        return code
-
-    # Return whatever we got on last attempt (even if imperfect)
-    return code
+def _build_context_lean(formalized: list[tuple[str, str]]) -> str:
+    """Build the context string from previously formalized blocks."""
+    if not formalized:
+        return ""
+    return "\n\n".join(code for _, code in formalized)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -285,6 +287,7 @@ def process_tex(
         return (
             {"error": "No file uploaded"},
             [],
+            None,
             "<p style='color:#9a988f'>Upload a .tex file to begin.</p>",
         )
 
@@ -304,6 +307,7 @@ def process_tex(
         return (
             {"error": f"Parser error: {e}"},
             [],
+            None,
             "<p style='color:#d98c95'>Parser error.</p>",
         )
 
@@ -311,55 +315,71 @@ def process_tex(
         return (
             {"error": "No mathematical blocks found"},
             [],
+            None,
             "<p style='color:#9a988f'>No theorems found in file.</p>",
         )
 
-    # ── 2. Per-block pipeline ─────────────────────────────────────────────
+    # ── 2. Topological sort + formalization ────────────────────────────────
+    if on_progress: on_progress("sort", "Sorting blocks by dependencies...", 10)
+    ordered = topological_sort(blocks)
+    logger.info(f"Ordered {len(ordered)} blocks (topological sort)")
+
+    # Resolve provider (OpenCode Go / DeepSeek V4 Pro)
+    provider = resolve_provider()
+    lean_dir = str(LEAN_PROJECT_DIR) if LEAN_PROJECT_DIR.exists() else None
+
     results: List[dict] = []
-    n = len(blocks)
+    n = len(ordered)
     errors = 0
     formalized_count = 0
+    formalized_context: list[tuple[str, str]] = []  # (label, lean_code)
 
-    for i, block in enumerate(blocks):
+    for i, block in enumerate(ordered):
         label = block.get("label") or f"block_{i}"
         title = block.get("title") or label
         latex = block.get("content_latex", "")
-        pct = 0.05 + 0.85 * (i / n)
+        pct = 10 + 75 * (i / n)
+        deps = block.get("references") or []
 
-        # --- 2a. Formalization ---
+        # Build context from previously formalized blocks that this one depends on
+        context = _build_context_lean(formalized_context)
+
+        # --- Formalization ---
         lean_stmt = None
         formalized = False
-        if FORMALIZATION_ENABLED and latex.strip() and api_key:
+        if FORMALIZATION_ENABLED and (latex.strip() or block.get("proof_latex")):
             if progress:
-                progress(pct, desc=f"Formalizing: {title}")
-            if on_progress: on_progress("formalize", f"Formalizing [{i+1}/{n}]: {title}", int(pct*100))
-            lean_stmt = formalize_statement(latex, api_key, block_type=block.get("type", "theorem"))
+                progress(pct / 100.0, desc=f"Formalizing [{i+1}/{n}]: {title}")
+            if on_progress:
+                dep_str = f" (depends on: {', '.join(deps)})" if deps else ""
+                on_progress("formalize", f"Formalizing [{i+1}/{n}]: {title}{dep_str}", int(pct))
+
+            lean_stmt = formalize_block_with_provider(
+                block, provider,
+                context_lean=context,
+                lean_project_dir=lean_dir,
+                max_rounds=2,
+            )
             formalized = lean_stmt is not None
             if formalized:
                 formalized_count += 1
+                formalized_context.append((label, lean_stmt))
 
-        # --- 2b. D2 ---
+        # --- D2 ---
         d2_result = None
         if D2_ENABLED and lean_stmt:
-            if progress:
-                progress(pct + 0.02, desc=f"D2: {title}")
-            if on_progress: on_progress("d2", f"D2 (triviality) [{i+1}/{n}]: {title}", int(pct*100)+2)
+            if on_progress: on_progress("d2", f"D2 (triviality) [{i+1}/{n}]: {title}", int(pct)+2)
             try:
                 d2_result = check_triviality(lean_stmt, lean_project_dir=str(LEAN_PROJECT_DIR))
             except Exception as e:
                 logger.warning(f"D2 failed for {label}: {e}")
 
-        # --- 2c. D1 ---
-        if progress:
-            progress(pct + 0.04, desc=f"D1: {title}")
-        if on_progress: on_progress("d1", f"D1 (existence) [{i+1}/{n}]: {title}", int(pct*100)+4)
+        # --- D1 ---
+        if on_progress: on_progress("d1", f"D1 (existence) [{i+1}/{n}]: {title}", int(pct)+4)
         try:
             d1_block = dict(block)
             if lean_stmt:
                 d1_block["lean_statement"] = lean_stmt
-            # Pass api_key so LLM judge uses it
-            if api_key:
-                os.environ["OPENCODE_GO_API_KEY"] = api_key
             d1_result = check_d1(d1_block)
         except Exception as e:
             logger.exception(f"D1 failed for {label}")
@@ -382,10 +402,6 @@ def process_tex(
         mapped["formalized"] = formalized
         results.append(mapped)
         logger.info(f"  {label}: {mapped['veredicto']} (formalized={formalized})")
-
-    # Restore server key after pipeline (in case user key was set)
-    if SERVER_API_KEY:
-        os.environ["OPENCODE_GO_API_KEY"] = SERVER_API_KEY
 
     if progress:
         progress(1.0, desc="Done.")
