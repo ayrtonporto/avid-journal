@@ -1,45 +1,56 @@
-# AViD Journal — Full pipeline deployment
+# AViD Journal — Full pipeline + Cloudflare Tunnel
 #
 # Usage:
 #   docker compose up -d          # start detached (builds first time)
 #   docker compose logs -f        # follow logs
 #   docker compose down           # stop
 #
-# Secrets: copy .env.example to .env and fill in OPENCODE_GO_API_KEY
+# Prerequisites:
+#   1. Create Cloudflare Tunnel at https://one.dash.cloudflare.com/
+#      → Networks → Tunnels → Create tunnel → get token
+#   2. Copy .env.example to .env and fill in all values
+#      (OPENCODE_GO_API_KEY + CLOUDFLARE_TUNNEL_TOKEN are mandatory)
 
 version: "3.9"
 
 services:
-  avid-demo:
+  # ── AViD Journal server (FastAPI + Gradio + Lean 4) ────────────────────
+  avid:
     build:
       context: .
       dockerfile: deploy/Dockerfile
     image: avid-journal:latest
-    container_name: avid-demo
+    container_name: avid-server
     restart: unless-stopped
-    ports:
-      - "7860:7860"
     env_file:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-      - GRADIO_SERVER_NAME=0.0.0.0
       - LEAN_PROJECT_DIR=/app/lean_project
       - AVID_FORMALIZATION_ENABLED=1
       - AVID_D2_ENABLED=1
     volumes:
-      # Persist caches across restarts
       - avid_cache:/app/cache
-      # Persist Mathlib oleans (avoid re-download on rebuild)
       - avid_lean:/app/lean_project/.lake
-      # Persist paper submissions
       - avid_submissions:/app/src/publication/submissions
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      test: ["CMD", "curl", "-f", "http://localhost:7860/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 120s
+
+  # ── Cloudflare Tunnel (exposes avid:7860 to your domain) ───────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: avid-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      avid:
+        condition: service_healthy
+    networks:
+      - default
 
 volumes:
   avid_cache:
