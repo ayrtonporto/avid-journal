@@ -257,7 +257,7 @@ async def api_analyze(request: Request):
                 {"type": "progress", "step": step, "msg": msg, "pct": pct},
             )
 
-        yield _json.dumps({"type": "progress", "step": "start", "msg": f"Starting pipeline for {uploaded.filename}...", "pct": 0}) + "\n"
+        yield f"data: {_json.dumps({'type': 'progress', 'step': 'start', 'msg': f'Starting pipeline for {uploaded.filename}...', 'pct': 0})}\n\n"
 
         # Run process_tex in a thread (it's synchronous and blocks)
         result_holder = {"summary": None, "results": None, "lean_path": None, "pub_html": None, "error": None}
@@ -281,28 +281,22 @@ async def api_analyze(request: Request):
         while thread.is_alive():
             try:
                 msg = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
-                yield _json.dumps(msg) + "\n"
+                yield f"data: {_json.dumps(msg)}\n\n"
             except asyncio.TimeoutError:
                 pass
 
         # Drain any remaining messages
         while not progress_queue.empty():
             msg = progress_queue.get_nowait()
-            yield _json.dumps(msg) + "\n"
+            yield f"data: {_json.dumps(msg)}\n\n"
 
         thread.join()
 
         if result_holder["error"]:
-            yield _json.dumps({"type": "error", "msg": result_holder["error"]}) + "\n"
+            yield f"data: {_json.dumps({'type': 'error', 'msg': result_holder['error']})}\n\n"
         else:
-            yield _json.dumps({"type": "done", "msg": "Analysis complete"}) + "\n"
-            yield _json.dumps({
-                "type": "result",
-                "summary": result_holder["summary"],
-                "results": result_holder["results"],
-                "lean_path": result_holder["lean_path"],
-                "publication_html": result_holder["pub_html"],
-            }) + "\n"
+            yield f"data: {_json.dumps({'type': 'done', 'msg': 'Analysis complete'})}\n\n"
+            yield f"data: {_json.dumps({'type': 'result', 'summary': result_holder['summary'], 'results': result_holder['results'], 'lean_path': result_holder['lean_path'], 'publication_html': result_holder['pub_html']})}\n\n"
 
     # Log the action (fire and forget — don't block the stream)
     if DEV_MODE:
@@ -313,7 +307,11 @@ async def api_analyze(request: Request):
     })
 
     from fastapi.responses import StreamingResponse
-    return StreamingResponse(stream(), media_type="application/x-ndjson")
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
