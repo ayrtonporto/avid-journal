@@ -94,13 +94,11 @@ def formalize_block_with_provider(
 ) -> Optional[str]:
     """Formalize a single block (statement + proof) using the model provider.
 
-    Uses the verification loop: generate → compile → fix errors → retry.
-
     Args:
         block: parser block dict (type, content_latex, proof_latex).
         provider: ModelProvider instance.
         context_lean: previously formalized Lean declarations.
-        lean_project_dir: path to lean_project/ for compilation.
+        lean_project_dir: path to lean_project/ for compilation (optional).
         max_rounds: max verification rounds.
 
     Returns:
@@ -108,7 +106,8 @@ def formalize_block_with_provider(
     """
     keyword_map = {"definition": "def", "theorem": "theorem", "lemma": "lemma",
                    "proposition": "theorem", "corollary": "theorem"}
-    keyword = keyword_map.get(block.get("type", "theorem"), "theorem")
+    block_type = (block.get("type") or "theorem").lower()
+    keyword = keyword_map.get(block_type, "theorem")
 
     latex = (block.get("content_latex") or "") + "\n\n" + (block.get("proof_latex") or "")
     prompt = FORMALIZE_BLOCK_PROMPT.format(
@@ -117,34 +116,46 @@ def formalize_block_with_provider(
         latex=latex[:4000],
     )
 
-    # Write a temporary .lean file for the verification loop
     import tempfile
     tmp = tempfile.NamedTemporaryFile(
         mode="w", suffix=".lean", delete=False, encoding="utf-8"
     )
     target = Path(tmp.name)
-    stub = f"import Mathlib\n\n{context_lean}\n\n-- TODO: formalize {block.get('label', 'unknown')}\n"
+    stub = f"import Mathlib\n\n{context_lean}\n\n"
     tmp.write(stub)
     tmp.close()
 
     try:
         for round_num in range(1, max_rounds + 1):
-            # Generate
             response = provider.generate([{"role": "user", "content": prompt}])
             if not response:
                 continue
 
-            # Extract Lean code
             m = re.search(r"```(?:lean4?)?\s*\n?(.*?)\n?```", response, re.DOTALL)
             code = m.group(1).strip() if m else ""
             if not code:
                 code = response.strip()
 
-            # Write to file with context
+            # Quality check: reject sorry, missing declaration, too short
+            if re.search(r":=\s*(by\s+)?sorry\b", code):
+                prompt = (
+                    f"Your output contains `sorry`. This is unacceptable. "
+                    f"Provide a COMPLETE proof without any sorry.\n\n"
+                    f"Original task:\n{FORMALIZE_BLOCK_PROMPT.format(keyword=keyword, context=context_lean or '(none)', latex=latex[:4000])}"
+                )
+                continue
+            if not any(kw in code for kw in ["theorem ", "lemma ", "def ", "example "]):
+                prompt = (
+                    f"Your output does not contain a valid Lean declaration "
+                    f"(missing `{keyword}`, `theorem`, `lemma`, or `def`). Fix it.\n\n"
+                    f"Original task:\n{FORMALIZE_BLOCK_PROMPT.format(keyword=keyword, context=context_lean or '(none)', latex=latex[:4000])}"
+                )
+                continue
+
             full_code = f"import Mathlib\n\n{context_lean}\n\n{code}\n"
             target.write_text(full_code, encoding="utf-8")
 
-            # Try to compile
+            # Compile check (only if Mathlib is available)
             if lean_project_dir and Path(lean_project_dir).exists():
                 has_error, has_sorry, stdout, stderr = check_lean_file(str(target))
                 if has_error or has_sorry:
@@ -156,10 +167,8 @@ def formalize_block_with_provider(
                     )
                     continue
 
-            # Success or skipping compilation
             return code
 
-        logger.warning(f"Formalization failed after {max_rounds} rounds for {block.get('label')}")
         return None
 
     finally:
@@ -329,11 +338,6 @@ def process_tex(
 
         results.append(mapped)
         logger.info(f"  {label}: {mapped['veredicto']} (formalized={formalized})")
-        mapped["content_preview"] = latex[:200].strip()
-        mapped["lean_statement"] = lean_stmt
-        mapped["formalized"] = formalized
-        results.append(mapped)
-        logger.info(f"  {label}: {mapped['veredicto']} (formalized={formalized})")
 
     if progress:
         progress(1.0, desc="Done.")
@@ -371,11 +375,8 @@ def _build_lean_file(results: List[dict], tex_path: str) -> str | None:
         # Remove import lines from body
         body = _re.sub(r"^import\s+.*\n?", "", code, flags=_re.MULTILINE).strip()
 
-        # Strip `:= sorry`, `:= by sorry`, `:= sorry` with variations
-        body = _re.sub(r":=\s*(by\s+)?sorry\b.*$", ":= ", body, flags=_re.MULTILINE).strip()
-
-        # Remove trailing empty colon
-        body = _re.sub(r":=\s*$", "", body).strip()
+        # Strip `:= sorry`, `:= by sorry`
+        body = _re.sub(r":=\s*(by\s+)?sorry\b.*", "", body, flags=_re.MULTILINE).strip()
 
         if body:
             clean_blocks.append(body)
