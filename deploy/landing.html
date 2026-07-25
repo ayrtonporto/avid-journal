@@ -411,7 +411,7 @@
         </label>
         <div id="own-key-fields" style="display:none;margin-top:12px">
           <select id="provider-select" onchange="onProviderChange()" style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:8px">
-            <option value="claude-code" data-model="">Claude Code (local · OAuth · no key)</option>
+            <option value="claude-code" data-model="" data-devonly="1">Claude Code (local · OAuth · no key)</option>
             <option value="opencode" data-model="deepseek-v4-pro">OpenCode Go — DeepSeek V4 Pro</option>
             <option value="opencode" data-model="qwen3.7-max">OpenCode Go — Qwen 3.7 Max</option>
             <option value="openrouter" data-model="anthropic/claude-sonnet-4">OpenRouter</option>
@@ -957,6 +957,20 @@ function renderResults(filename, summary, results, pubHtml) {
 
 // Init on page load
 updateAuthUI();
+
+// Claude Code (OAuth) is a server-local formalizer — hide it on the deployed
+// web (the backend still accepts provider=claude-code for local runs). It stays
+// visible in dev mode (AVID_DEV_MODE=1, e.g. run_local_demo.ps1).
+(function hideLocalOnlyProviders() {
+  if (DEV_MODE) return;
+  const sel = document.getElementById("provider-select");
+  if (!sel) return;
+  Array.prototype.forEach.call(sel.querySelectorAll("option[data-devonly]"), function (opt) {
+    opt.remove();
+  });
+  if (sel.options.length) sel.selectedIndex = 0;  // re-pick a visible default
+  onProviderChange();
+})();
 
 // ═══════════════════════════════════════════════════════════════════
 // PUBLICATION
