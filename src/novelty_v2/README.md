@@ -5,17 +5,23 @@ Implementación de la métrica de novedad de AViD Journal conforme a
 
 ## Relación con src/novelty/ (v1)
 
-`src/novelty/` **no se modifica**. Es la implementación previa de stages
-0–3 (Leandex + Semantic Scholar + MiniLM + juez LLM). Este módulo la usa
-como dependencia externa:
+`src/novelty/` **está congelado** (solo fix-packs aprobados). Es la
+implementación previa de stages 0–3 (Leandex + arXiv + MiniLM + juez LLM).
+Este módulo la usa como dependencia externa:
 
 | Función importada de src/novelty/ | Reutilizada en |
 |---|---|
 | `mathlib_checker.check_in_mathlib()` | D1 sobre C_F |
-| `arxiv_search.search_semantic_scholar/arxiv()` | D1 sobre C_I etapa A |
+| `arxiv_search.search_arxiv()` | D1 sobre C_I etapa A (fuente primaria) |
 | `block_comparator` (MiniLM) | D1 sobre C_I etapa A (filtro grueso) |
-| `llm_judge.judge_theorem_pair()` | D1 sobre C_I etapa B |
+| `llm_judge.judge_theorem_pair()` | D1 sobre C_I etapa B (juez DeepSeek) |
 | `_cache.cache_or_fetch()` | caching compartido todas las dimensiones |
+
+> **Nota (2026-07-25):** Semantic Scholar quedó fuera del path activo; las
+> fuentes de C_I son arXiv (primaria) + TheoremSearch (nivel-teorema) + Matlas
+> (gated). D1 envuelve toda llamada de red y el juez en timeouts fail-open, y
+> D2 rutea las tácticas por el REPL pool residente (`src/lean_repl/`). El spec
+> `paper/metric_spec.md` **no está presente en el repo** (referencia externa).
 
 ## Estructura
 

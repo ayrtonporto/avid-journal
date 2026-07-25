@@ -77,7 +77,7 @@ This exercises the parser, complexity classifier, topological sort, and per-bloc
 pytest -m "not live"
 ```
 
-`-m "not live"` skips tests that hit Leandex, Semantic Scholar, ArXiv, or Anthropic. Drop the flag to run them.
+`-m "not live"` skips tests that hit Leandex, arXiv, TheoremSearch, or Anthropic. Drop the flag to run them.
 
 ---
 

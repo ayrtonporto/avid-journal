@@ -2,6 +2,12 @@
 
 System design and technical decisions.
 
+> ⚠️ **Actualización (jul 2026) — este doc describe el diseño histórico.** Cambios vigentes:
+> - El veredicto de novedad activo es `src/novelty_v2/` (árbol D2→D1→D3, 7 veredictos), no `src/novelty/` directamente (que quedó congelado y se usa como dependencia).
+> - Fuentes de C_I: **arXiv (primaria) + TheoremSearch + Matlas (gated)**. **Semantic Scholar fue retirado** — donde este doc dice "Semantic Scholar", leer "arXiv + TheoremSearch".
+> - Hay un **demo web** (`app.py` + `server.py` + `deploy/landing.html`) acelerado por un **REPL pool Lean residente** (`src/lean_repl/`, Mathlib precargado → compile-check sub-segundo).
+> - Fuente de verdad de estado y decisiones: `CLAUDE.md`.
+
 ---
 
 ## 🏛️ High-Level Architecture
