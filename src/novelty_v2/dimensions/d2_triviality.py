@@ -91,6 +91,23 @@ def _run_tactic(
     """Ejecuta un intento con una táctica. Devuelve (success, elapsed_s, output)."""
     source = _lean_source(lean_statement, tactic, _heartbeats(budget_seconds), lean_imports)
 
+    # Warm fast-path: correr la táctica contra el pool de REPLs residentes
+    # (Mathlib en env 0), evitando el ~30s de `lake env lean` frío por táctica.
+    # `pool.check` neutraliza el `import Mathlib` del source (env 0 ya lo tiene).
+    # Si el pool está apagado o falla, cae al path frío de abajo.
+    try:
+        from src.lean_repl import pool_enabled, get_pool
+        if pool_enabled():
+            pool = get_pool(lean_project_dir)
+            if pool is not None:
+                t0 = time.monotonic()
+                has_error, _hs, out, _err = pool.check(
+                    source, "", timeout=budget_seconds + LEAN_STARTUP_OVERHEAD_S
+                )
+                return (not has_error), time.monotonic() - t0, (out or None)
+    except Exception:
+        pass  # fall back to the cold subprocess path
+
     fd, tmppath = tempfile.mkstemp(suffix=".lean", prefix="avid_d2_")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:

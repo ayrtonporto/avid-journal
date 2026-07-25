@@ -113,8 +113,8 @@ def check_novelty(
             d3=d3,
             revision_humana=False,
             razonamiento=(
-                f"D2: táctica '{d2.tactica}' cerró el enunciado "
-                f"en {d2.tiempo_segundos:.1f}s. No requiere idea matemática."
+                f"D2: tactic '{d2.tactica}' closed the statement "
+                f"in {d2.tiempo_segundos:.1f}s. No mathematical idea required."
             ),
             stage_detenido=2,
         )
@@ -146,9 +146,9 @@ def check_novelty(
                 d3=d3,
                 revision_humana=False,
                 razonamiento=(
-                    f"D1 C_F: match en Mathlib — '{lean_name_existente}'. "
-                    f"D3: no se pudo calcular distancia (flags: {flags_str}). "
-                    f"Premise sets vacíos después de filtros — evidencia insuficiente."
+                    f"D1 C_F: match in Mathlib — '{lean_name_existente}'. "
+                    f"D3: could not compute distance (flags: {flags_str}). "
+                    f"Premise sets empty after filtering — insufficient evidence."
                 ),
                 stage_detenido=3,
             )
@@ -161,11 +161,11 @@ def check_novelty(
                 d3=d3,
                 revision_humana=False,
                 razonamiento=(
-                    f"D1 C_F: match en Mathlib — '{lean_name_existente}'. "
-                    f"D3: distancia Jaccard = {d3.jaccard:.4f}, "
+                    f"D1 C_F: match in Mathlib — '{lean_name_existente}'. "
+                    f"D3: Jaccard distance = {d3.jaccard:.4f}, "
                     f"inter={d3.intersection_size}, union={d3.union_size} > "
-                    f"umbral θ = {d3.umbral_theta} → pruebas estructuralmente "
-                    f"distantes. Mismo enunciado, prueba nueva."
+                    f"threshold θ = {d3.umbral_theta} → structurally distant "
+                    f"proofs. Same statement, new proof."
                 ),
                 stage_detenido=3,
             )
@@ -178,11 +178,11 @@ def check_novelty(
                 d3=d3,
                 revision_humana=False,
                 razonamiento=(
-                    f"D1 C_F: match en Mathlib — '{lean_name_existente}'. "
-                    f"D3: distancia Jaccard = {d3.jaccard:.4f}, "
+                    f"D1 C_F: match in Mathlib — '{lean_name_existente}'. "
+                    f"D3: Jaccard distance = {d3.jaccard:.4f}, "
                     f"inter={d3.intersection_size}, union={d3.union_size} ≤ "
-                    f"umbral θ = {d3.umbral_theta} → misma prueba. "
-                    f"Enunciado y demostración conocidos."
+                    f"threshold θ = {d3.umbral_theta} → same proof. "
+                    f"Statement and proof already known."
                 ),
                 stage_detenido=3,
             )
@@ -196,10 +196,10 @@ def check_novelty(
             d3=d3,
             revision_humana=False,
             razonamiento=(
-                f"D1 C_F: match en Mathlib — '{lean_name_existente}' "
-                f"(sim={sim:.2f}). Enunciado conocido. "
-                f"Novedad de prueba pendiente de D3 (análisis offline "
-                f"con LeanDojo)."
+                f"D1 C_F: match in Mathlib — '{lean_name_existente}' "
+                f"(sim={sim:.2f}). Statement already known. "
+                f"Proof novelty pending D3 (offline analysis "
+                f"with LeanDojo)."
             ),
             stage_detenido=1,
         )
@@ -239,9 +239,9 @@ def check_novelty(
                     d3=d3,
                     revision_humana=False,
                     razonamiento=(
-                        f"D1 C_F (exact?): '{lean_name}' cerró el enunciado "
-                        f"en {elapsed:.1f}s. Enunciado conocido en Mathlib (vía exact?). "
-                        f"Novedad de prueba pendiente de D3."
+                        f"D1 C_F (exact?): '{lean_name}' closed the statement "
+                        f"in {elapsed:.1f}s. Statement known in Mathlib (via exact?). "
+                        f"Proof novelty pending D3."
                     ),
                     stage_detenido=1,
                 )
@@ -268,9 +268,9 @@ def check_novelty(
             d3=d3,
             revision_humana=True,
             razonamiento=(
-                f"D1 C_I: juez LLM marcó '{llm_v}' con candidato "
+                f"D1 C_I: LLM judge flagged '{llm_v}' against candidate "
                 f"'{(d1.match_C_I or {}).get('title', '?')}'. "
-                f"Tipos relacionados pero no iguales — revisión humana."
+                f"Related but not identical statements — needs human review."
             ),
             stage_detenido=1,
         )
@@ -283,10 +283,10 @@ def check_novelty(
             d3=d3,
             revision_humana=d1.traduccion_incierta,
             razonamiento=(
-                f"D1 C_I: match en literatura informal — "
+                f"D1 C_I: match in informal literature — "
                 f"'{(d1.match_C_I or {}).get('title', '?')}'. "
-                f"Sin match en Mathlib. Formalización puede ser aporte "
-                f"de ingeniería."
+                f"No match in Mathlib. Formalization may be an "
+                f"engineering contribution."
             ),
             stage_detenido=1,
         )
@@ -299,9 +299,9 @@ def check_novelty(
         d3=d3,
         revision_humana=d1.traduccion_incierta,
         razonamiento=(
-            "D1: sin match en C_F (Mathlib) ni en C_I (arXiv/SS). "
-            "Enunciado genuinamente nuevo."
-            + (" [traducción incierta — revisar]" if d1.traduccion_incierta else "")
+            "D1: no match in C_F (Mathlib) or C_I (arXiv/TheoremSearch). "
+            "Genuinely new statement."
+            + (" [uncertain translation — review]" if d1.traduccion_incierta else "")
         ),
         stage_detenido=1,
     )

@@ -2,7 +2,9 @@
 
 Verifica si el teorema candidato ya existe en:
   C_F (corpus formal):   Mathlib, vía Leandex (búsqueda semántica sobre declaraciones Lean).
-  C_I (corpus informal): arXiv/Semantic Scholar/TheoremSearch, con filtro grueso MiniLM + juez LLM fino.
+  C_I (corpus informal): arXiv (primaria) + TheoremSearch (opcional, THEOREMSEARCH_ENABLED),
+                         con filtro grueso MiniLM + juez LLM fino DeepSeek. Semantic Scholar
+                         quedó fuera del path activo (reemplazado por TheoremSearch).
 
 Spec: paper/metric_spec.md §4.1
 Decisiones de diseño: paper/decisions.md
@@ -18,9 +20,10 @@ NOTA sobre el bloque de entrada:
 
 Relación con src/novelty/ (congelado):
   - mathlib_checker.check_in_mathlib → C_F
-  - arxiv_search.search_semantic_scholar → C_I etapa A (filtro)
-  - block_comparator._cosine_similarity_text → C_I etapa A (similitud)
-  - llm_judge.judge_theorem_pair → C_I etapa B (verificación fina)
+  - arxiv_search.search_arxiv → C_I etapa A (fuente primaria)
+  - theoremsearch.search_theoremsearch → C_I etapa A (opcional, theorem-level)
+  - block_comparator (MiniLM) → C_I etapa A (similitud, filtro grueso)
+  - llm_judge.judge_theorem_pair → C_I etapa B (verificación fina, DeepSeek)
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -47,6 +51,26 @@ logger = logging.getLogger(__name__)
 # Más bajo que el umbral de mathlib (0.85) porque arXiv abstracts son más ruidosos
 # que declaraciones Lean. Los candidatos que pasan van a etapa B (llm_judge).
 CI_SIMILARITY_THRESHOLD_A: float = 0.40
+
+# Topes de pared (segundos) para las llamadas de red de D1. Las funciones
+# congeladas de src/novelty tienen sus propios timeouts (a veces largos o con
+# backoff que come minutos); acá ponemos un cap MÁS chico desde el caller para
+# que la novedad no se cuelgue en la web. Si se pasa, fail-open.
+CI_JUDGE_TIMEOUT: int = int(os.getenv("AVID_JUDGE_TIMEOUT", "30"))     # por candidato (etapa B)
+CI_SOURCE_TIMEOUT: int = int(os.getenv("AVID_CI_SOURCE_TIMEOUT", "20"))  # por fuente (etapa A)
+
+
+def _call_with_timeout(fn, timeout, *args, **kwargs):
+    """Corre fn(*args, **kwargs) bajo un timeout de pared. En timeout levanta
+    concurrent.futures.TimeoutError y deja el hilo huérfano terminando en
+    background (acotado por el timeout interno de la fuente) en vez de bloquear,
+    así el pipeline nunca se cuelga esperando una llamada de red."""
+    ex = ThreadPoolExecutor(max_workers=1)
+    fut = ex.submit(fn, *args, **kwargs)
+    try:
+        return fut.result(timeout=timeout)
+    finally:
+        ex.shutdown(wait=False)
 
 
 # ── arXiv ID date extraction ─────────────────────────────────────────────────
@@ -125,9 +149,11 @@ def _check_cf(block: Dict[str, Any], use_cache: bool) -> D1Result:
     """Busca el bloque en Mathlib vía Leandex. Devuelve D1Result parcial (solo C_F)."""
     result = D1Result()
     try:
-        mathlib_res = check_in_mathlib(block, use_cache=use_cache)
+        mathlib_res = _call_with_timeout(
+            check_in_mathlib, CI_SOURCE_TIMEOUT, block, use_cache=use_cache
+        )
     except Exception as exc:
-        logger.warning("check_in_mathlib failed: %s", exc)
+        logger.warning("check_in_mathlib failed/timed out: %s", exc)
         return result
 
     result.existe_en_C_F = mathlib_res.found
@@ -182,8 +208,9 @@ def _run_ci_stage_a(
     # ── arXiv (fuente primaria) ──────────────────────────────────────────
     # NOTA: search_arxiv NO soporta exclude_arxiv_ids — se filtra post-búsqueda.
     try:
-        arxiv_candidates = search_arxiv(
-            query_clean, top_k=20, reference_text=query_raw, use_cache=use_cache
+        arxiv_candidates = _call_with_timeout(
+            search_arxiv, CI_SOURCE_TIMEOUT,
+            query_clean, top_k=20, reference_text=query_raw, use_cache=use_cache,
         )
         if paper_arxiv_id_norm:
             arxiv_candidates = [
@@ -199,7 +226,9 @@ def _run_ci_stage_a(
     if os.getenv("MATLAS_ENABLED", "").strip().lower() in ("1", "true", "yes"):
         try:
             from src.novelty.matlas import search_matlas
-            matlas_candidates = search_matlas(query_clean, top_k=10, use_cache=use_cache)
+            matlas_candidates = _call_with_timeout(
+                search_matlas, CI_SOURCE_TIMEOUT, query_clean, top_k=10, use_cache=use_cache
+            )
             all_candidates.extend(matlas_candidates)
             logger.info(
                 "C_I Matlas: %d candidates for query '%s'",
@@ -212,8 +241,9 @@ def _run_ci_stage_a(
     # ── TheoremSearch (fuente terciaria, theorem-level, opcional) ───────
     if os.getenv("THEOREMSEARCH_ENABLED", "").strip().lower() in ("1", "true", "yes"):
         try:
-            ts_candidates = search_theoremsearch(
-                query_clean, top_k=20, use_cache=use_cache, exclude_arxiv_ids=exclude_ids
+            ts_candidates = _call_with_timeout(
+                search_theoremsearch, CI_SOURCE_TIMEOUT,
+                query_clean, top_k=20, use_cache=use_cache, exclude_arxiv_ids=exclude_ids,
             )
             all_candidates.extend(ts_candidates)
             logger.info(
@@ -326,7 +356,17 @@ def _run_ci_stage_b(
             "content_latex": cand.abstract,
         }
         try:
-            judge = judge_theorem_pair(block_new, block_candidate, use_cache=use_cache)
+            judge = _call_with_timeout(
+                judge_theorem_pair, CI_JUDGE_TIMEOUT,
+                block_new, block_candidate, use_cache=use_cache,
+            )
+        except FuturesTimeout:
+            logger.warning(
+                "llm_judge timed out (%ss) for candidate '%s' — skipping (fail-open)",
+                CI_JUDGE_TIMEOUT, cand.title,
+            )
+            result.traduccion_incierta = True
+            continue
         except Exception as exc:
             logger.warning("llm_judge failed for candidate '%s': %s", cand.title, exc)
             result.traduccion_incierta = True
