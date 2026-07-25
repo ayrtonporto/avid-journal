@@ -146,7 +146,13 @@ Rules:
 - Write a proper `{keyword}` declaration with the statement and its proof.
 - The proof must be complete — no `sorry`, no placeholders.
 - If the block is a definition, use `def` with `:=`.
-- Reference previously defined theorems by their Lean names.
+- IMPORTANT: never redeclare a name that already exists in Mathlib (e.g. `Even`,
+  `Prime`, `Continuous`). Redeclaring causes a `'X' has already been declared`
+  error. If the paper defines a concept Mathlib already has, give your `def` a
+  fresh, unused name (e.g. prefix it, `PaperEven`) and use that name consistently
+  in every later statement and proof.
+- Reference previously defined theorems and definitions by their exact Lean names
+  as they appear in the context below.
 - Available context (already formalized above):
 {context}
 - Wrap your response in ```lean ... ```.
@@ -161,6 +167,9 @@ def formalize_block_with_provider(
     context_lean: str = "",
     lean_project_dir: Optional[str] = None,
     max_rounds: int = 10,
+    on_progress = None,
+    progress_desc: str = "",
+    progress_pct: int = 0,
 ) -> Optional[str]:
     """Formalize a single block (statement + proof) using the model provider.
 
@@ -204,8 +213,13 @@ def formalize_block_with_provider(
     # Only attempt compilation if inside a Lean project
     can_compile = lean_project_dir and Path(lean_project_dir).exists()
 
+    def _emit(msg: str):
+        if on_progress and progress_desc:
+            on_progress("formalize", f"{progress_desc} — {msg}", progress_pct)
+
     try:
         for round_num in range(1, max_rounds + 1):
+            _emit(f"round {round_num}/{max_rounds}: asking model for Lean…")
             response = provider.generate([{"role": "user", "content": prompt}])
             if not response:
                 logger.warning(f"Formalization round {round_num}: provider returned empty for {block.get('label')}")
@@ -240,11 +254,21 @@ def formalize_block_with_provider(
             full_code = f"import Mathlib\n\n{context_lean}\n\n{code}\n"
             target.write_text(full_code, encoding="utf-8")
 
-            # Compile check (only for non-definition blocks with proofs)
-            if can_compile and block_type != "definition":
-                has_error, has_sorry, stdout, stderr = check_lean_file(str(target))
+            # Compile check. We compile definitions too: a definition that
+            # shadows a Mathlib name (`Even`, `Prime`, …) compiles fine on its
+            # own but poisons every later block's context with an
+            # `already been declared` error. Catching it here lets the retry
+            # loop rename the definition before it enters the context.
+            if can_compile:
+                _emit(f"round {round_num}/{max_rounds}: compiling in Lean…")
+                # Pass a Path, not a str: find_lean_project_root() calls
+                # .is_file() on it, so a str raises inside check_lean_file and
+                # every compile silently reports has_error=True — no model
+                # output can ever pass. (target is already a Path.)
+                has_error, has_sorry, stdout, stderr = check_lean_file(target)
                 logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
+                    _emit(f"round {round_num}/{max_rounds}: Lean errors, retrying…")
                     prompt = (
                         f"The Lean code has errors. Fix them.\n\n"
                         f"Errors:\n{stdout}\n{stderr}\n\n"
@@ -299,6 +323,7 @@ def process_tex(
     progress: gr.Progress = None,
     on_progress = None,
     provider_name: str = "",
+    model_name: str = "",
 ) -> tuple:
     """Full pipeline: .tex → parse → formalize → D2 → D1 → verdicts.
 
@@ -350,8 +375,8 @@ def process_tex(
     # never stored or logged), otherwise the server default (DeepSeek V4 Pro).
     try:
         if provider_name and api_key_input.strip():
-            provider = build_client_provider(provider_name, api_key_input)
-            logger.info(f"Using client provider: {provider_name} ({type(provider).__name__})")
+            provider = build_client_provider(provider_name, api_key_input, model=model_name)
+            logger.info(f"Using client provider: {provider_name} model={model_name or '(default)'} ({type(provider).__name__})")
         else:
             provider = resolve_provider()
             logger.info(f"Using server default provider: {type(provider).__name__}")
@@ -455,6 +480,9 @@ def process_tex(
                     context_lean=context,
                     lean_project_dir=lean_dir,
                     max_rounds=10,
+                    on_progress=on_progress,
+                    progress_desc=f"Formalizing [{i+1}/{n}]: {title}",
+                    progress_pct=int(pct),
                 )
 
             if lean_stmt is not None:
