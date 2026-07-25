@@ -14,24 +14,28 @@ pinned: false
 **Automated Verification in Demonstrations**
 
 A system that checks whether mathematical theorems are genuinely novel by
-searching formal libraries (Mathlib) and informal literature (arXiv).
+searching formal libraries (Mathlib) and informal literature (arXiv +
+TheoremSearch).
 
 ## What this demo does
 
-This is a **D1-only** demo: it checks whether a theorem already exists in:
-- **Mathlib** (via Leandex semantic search) — formal corpus
-- **arXiv / Semantic Scholar** (via embeddings + LLM judge) — informal corpus
+For each theorem in your `.tex` file the pipeline runs:
+- **Formalization** — `.tex` → Lean 4 (a formalizer provider; verified by Lean).
+- **D2 (triviality)** — tactic budget `{decide, norm_num, simp, omega, tauto, aesop}`.
+- **D1 (existence)** — Mathlib (Leandex) as formal corpus C_F; arXiv +
+  TheoremSearch as informal corpus C_I (MiniLM coarse filter + DeepSeek judge).
 
-For each theorem in your `.tex` file, you get a verdict:
+Verdicts you may see:
 - 🟢 `NOVEDAD_ENUNCIADO` — genuinely new statement
 - 🟡 `MATCH_ENCONTRADO_PENDIENTE_D3` — found in Mathlib, proof novelty unknown
-- 🟠 `CONOCIDO_LITERATURA` — found in arXiv literature
+- 🟠 `CONOCIDO_LITERATURA` — found in informal literature
 - ⚪ `ZONA_GRIS` — related but different (generalization/specialization)
+- 🔴 `NO_NOVEDOSO_trivial` — closed by a D2 tactic
 
-## What's NOT included
-
-- **D2 (triviality filter):** requires Lean 4 + Mathlib locally
-- **D3 (proof distance):** requires LeanDojo + premise extraction
+Formalization and D2 need Lean 4 + Mathlib. The Docker image (`deploy/Dockerfile`)
+bundles them plus a **resident Lean REPL pool** (Mathlib preloaded) so checks are
+sub-second; a lightweight deploy without Lean falls back to D1-only.
+**D3 (proof distance)** runs offline (LeanDojo + premise extraction), not in the demo.
 
 For the full pipeline, clone the repo and run locally:
 ```

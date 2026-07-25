@@ -9,9 +9,15 @@
 
 ## 🎯 Vision
 
-AViD Journal accepts `.tex` files, formalizes proofs in Lean 4, verifies correctness, checks novelty against Mathlib and ArXiv corpus, and auto-publishes if valid.
+AViD Journal accepts `.tex` files, formalizes proofs in Lean 4, verifies correctness, checks novelty against Mathlib + arXiv + TheoremSearch, and auto-publishes if valid.
 
 This is critical infrastructure for AI-driven mathematical research — when AIs discover theorems autonomously, they'll need automated verification and review.
+
+> **Estado (jul 2026):** el veredicto de novedad activo vive en `src/novelty_v2/`
+> (árbol D2→D1→D3, 7 veredictos). El **demo web** es `app.py` (backend) + `server.py`
+> (FastAPI, sirve `deploy/landing.html`, SSE), acelerado por un **REPL pool Lean
+> residente** (`src/lean_repl/`). Fuentes C_I: arXiv + TheoremSearch (Semantic
+> Scholar retirado). Ver `CLAUDE.md` para el estado detallado y las decisiones.
 
 ---
 
@@ -81,7 +87,7 @@ avid-journal/
 │   │
 │   ├── novelty/                    # Novelty detection (Stages 0–3)
 │   │   ├── mathlib_checker.py      # Stage 0: Leandex search in Mathlib
-│   │   ├── arxiv_search.py         # Stage 1: Semantic Scholar + ArXiv
+│   │   ├── arxiv_search.py         # Stage 1: arXiv + TheoremSearch (Semantic Scholar retired)
 │   │   ├── paper_extractor.py      # Stage 2: PDF download & text extraction
 │   │   ├── block_comparator.py     # Stage 3: block ↔ candidate comparison
 │   │   ├── llm_judge.py            # Claude judge for theorem equivalence
@@ -187,7 +193,7 @@ See [docs/PROGRESS.md](docs/PROGRESS.md) for the up-to-date breakdown of what's 
 # Full test suite
 pytest tests/
 
-# Skip tests that hit Leandex / Semantic Scholar / ArXiv / Anthropic
+# Skip tests that hit Leandex / arXiv / TheoremSearch / Anthropic
 pytest -m "not live"
 
 # Orchestrator dry-run (no Claude credits spent)
