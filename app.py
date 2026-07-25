@@ -269,11 +269,33 @@ def formalize_block_with_provider(
                 logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
                     _emit(f"round {round_num}/{max_rounds}: Lean errors, retrying…")
+                    
+                    # Parse errors with context
+                    from src.formalization.error_parser import (
+                        parse_lean_errors, format_errors_for_llm, explain_common_errors
+                    )
+                    code_lines = full_code.split('\n')
+                    errors = parse_lean_errors(stdout, stderr, code_lines)
+                    formatted_errors = format_errors_for_llm(errors)
+                    
+                    # Add explanations for common errors
+                    explanations = []
+                    for err in errors[:3]:
+                        explanation = explain_common_errors(err['message'])
+                        if explanation:
+                            explanations.append(f"- {err['message'][:80]}: {explanation}")
+                    
+                    explanation_text = ""
+                    if explanations:
+                        explanation_text = "\n\nCommon error patterns:\n" + "\n".join(explanations)
+                    
                     prompt = (
-                        f"The Lean code has errors. Fix them.\n\n"
-                        f"Errors:\n{stdout}\n{stderr}\n\n"
+                        f"The Lean code has compilation errors. Fix them.\n\n"
+                        f"{formatted_errors}\n"
+                        f"{explanation_text}\n\n"
                         f"Current code:\n```lean\n{full_code}\n```\n\n"
-                        f"Rewrite the declaration to compile without errors or sorry."
+                        f"Rewrite the entire declaration to compile without errors or sorry. "
+                        f"Pay attention to the exact line numbers and error messages."
                     )
                     continue
 

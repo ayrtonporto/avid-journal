@@ -64,8 +64,8 @@ if [ ! -f ".env" ]; then
 # AViD Journal - Environment Variables
 # Copy this to .env and fill in your values
 
-# Claude API (for LLM judge)
-CLAUDE_API_KEY=your_api_key_here
+# OpenCode Go API key (for LLM judge + formalization)
+OPENCODE_GO_API_KEY=sk-...
 
 # Optional: Semantic Scholar API
 # (Not required for basic usage)

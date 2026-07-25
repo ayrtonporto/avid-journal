@@ -1,0 +1,53 @@
+\section{Related Work}
+
+\label{sec:related}
+
+\subsection{Theorem Search Engines and Infrastructure}
+
+\textbf{TheoremSearch}~\cite{theoremsearch2026} indexes 9.2 million statements extracted from arXiv and seven additional sources, represents each theorem with a short natural language description for embedding, and exposes a public API without authentication. Its documented motivation (arXiv withdrawals due to duplication) is the same that motivates our experiment with withdrawn papers. TheoremSearch finds similar statements; AViD adds the verdict layer.
+
+\textbf{Matlas}~\cite{matlas2026} extracts 8.07 million statements from 435,000 peer-reviewed articles spanning 1826 to 2025, sourced from 180 journals selected by ICM citation criteria, plus 1,900 textbooks. The two sources are complementary in temporal coverage: TheoremSearch covers arXiv since 1991, Matlas covers peer-reviewed journals since 1826. AViD consumes them as the two branches of its informal corpus, and section~\ref{sec:experimentos} reports how far that combined coverage reaches.
+
+The Mathlib search engine space is saturated. \textbf{Leandex}~\cite{leandex2026}, Project Numina's semantic search engine, offers search over Lean~4 declarations; \textbf{Lean Finder}~\cite{leanfinder2025} incorporates user intent into semantic search over Mathlib. AViD does not compete in that space: it consumes one of them as infrastructure (Leandex is the backend for D1~C$_F$) and adds the decision layer that none offers. A recent survey on mathematical AI~\cite{survey2026} cites statement search engines as infrastructure for locating already established theorems, which situates the problem AViD addresses as recognized by the field.
+
+Two recent works are relevant as infrastructure, not as competitors. \textbf{TheoremGraph}~\cite{theoremgraph2026} builds a statement-level dependency graph that unifies the informal (11.7M theorem-type environments from arXiv) and the formal (LeanGraph, 388,105 Lean~4 nodes); we evaluated using its graph dependencies to measure distance between proofs in D3, but ultimately stayed with the direct premise set of each proof. In a complementary direction, \textbf{COMPOSE}~\cite{compose2026} predicts plausible future statements by combining an article's citation graph with Mathlib's formal dependencies, generating conjectures rather than arbitrating their novelty.
+
+\subsection{Novelty Filters in Conjecture Generation}
+
+\textbf{LeanConjecturer}~\cite{leanconjecturer2025} filters novelty with \texttt{exact?} against Mathlib and non-triviality with \texttt{aesop}: it generated 12,289 conjectures from 40 seed files, of which 3,776 proved syntactically valid and non-trivial. These are exactly the mechanisms that AViD implements as D1 (\texttt{exact?} as fallback for C$_F$) and D2 (\texttt{aesop} in \texttt{T\_AUTO}). AViD's contribution is not inventing these filters but composing them into a decision tree that issues a verdict, adding D3 and an informal branch with temporal filter, and evaluating them against external ground truth. Work on pruning redundant conjectures~\cite{mining2024} and synthetic generation via forward reasoning~\cite{synthetic2024} illustrates the same need from the generation side.
+
+\subsection{Proof Identity and Similarity}
+
+The Jaccard distance over premise sets that AViD uses in D3 borrows its representation from the premise selection literature, where a theorem is characterized by the premises of its proof: MaSh~\cite{kuhlwein2013}, \textbf{Kaliszyk and Urban}~\cite{kaliszyk2014} with IDF-weighted $k$-NN, and \textbf{Magnushammer}~\cite{magnushammer2024} with transformers. But the task is the inverse: those systems \textit{select} premises to construct a proof from a statement, whereas D3 uses the set of premises \textit{already employed} as a fingerprint to compare finished proofs. The only directly inherited component is the filtering: the \textit{math filter} of \textbf{Piotrowski et al.}~\cite{piotrowski2023}, which uses Mathlib names as a whitelist to discard technical lemmas, is the same recipe applied by the filters prior to D3's Jaccard.
+
+The Mathlib network analysis by Li et al.~\cite{network2026}, over a graph of 308,129 declarations and 8.4 million edges, shows that the most cited lemmas in the library are technical infrastructure rather than deep mathematics: equality reflexivity (\texttt{Eq.refl}) is the second highest in-degree node, with 69,580 citations, while the Chinese Remainder Theorem does not even appear among the top hundred. That is, centrality in the graph measures how ubiquitous a lemma is, not how much mathematical content it contributes. This justifies D3's Filter~1: before computing the Jaccard between two proofs, AViD discards premises from the \texttt{Init.} and \texttt{Lean.} namespaces, which are precisely those omnipresent technical lemmas. Without the filter, two proofs would appear similar merely for sharing the basic machinery of the language; with it, the Jaccard reflects the premises that truly distinguish mathematical content.
+
+\textbf{Yoo}~\cite{yoo2025} represents theorems as \textit{proof vectors} over axiom systems and compares them with cosine, Euclidean, or Jaccard similarity. It is the closest work in conceptual tool but with opposite purpose: the Atlas organizes theorems by structural similarity; AViD uses that similarity to decide whether a proof is redundant. \textbf{Huch}~\cite{huch2022} documents the scale-free in-degree distribution in the AFP, relevant for future work with IDF-weighted premises.
+
+\subsection{Correctness versus Novelty}
+
+Existing paper-to-Lean pipelines verify that a proof is correct, not that it is new; novelty verification is delegated to human reviewers. AViD is explicitly that delegated layer. A complete automated review system would require both dimensions, and section~\ref{sec:experimentos} shows that the first is not a sufficient condition for the second: a Lean file can compile without errors and yet not be a faithful formalization of the original statement.
+
+\subsection{Positioning}
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+System & Existence & Triviality & Proof dist. & Informal corpus & Verdict \\
+\midrule
+Kasaura et al.~\cite{kasaura2025}      & Mathlib            & --- & --- & --- & yes/no \\
+LeanConjecturer~\cite{leanconjecturer2025} & \texttt{exact?} & \texttt{aesop} & --- & --- & --- \\
+TheoremSearch~\cite{theoremsearch2026} & 9.2M statements    & --- & --- & \checkmark & --- \\
+Matlas~\cite{matlas2026}               & 8.07M statements   & --- & --- & \checkmark & --- \\
+Atlas~\cite{yoo2025}                   & ---                & --- & Jaccard & --- & --- \\
+AViD (this work)                      & Mathlib + informal & 6 tactics & Jaccard$^{*}$ & TS + Matlas & 8 verdicts \\
+\bottomrule
+\end{tabular}
+\caption{Positioning of AViD with respect to prior work. Prior works build infrastructure pieces; AViD composes them into a pipeline that goes from LaTeX source to verdict. $^{*}$D3 is implemented and validated in isolation (section~\ref{sec:instrumentos}), but is not exercised within the decision tree in the reported experiments.}
+\label{tab:posicionamiento}
+\end{table}
+
+The difference lies not in any individual cell but in the composition: prior works build infrastructure pieces---search, formalization, similarity---; AViD assembles them into a pipeline that receives a LaTeX paper and returns a verdict.

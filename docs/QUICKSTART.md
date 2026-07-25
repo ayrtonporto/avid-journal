@@ -27,7 +27,7 @@ Copy the env template and fill in keys:
 
 ```bash
 cp .env.example .env
-# then edit .env and set ANTHROPIC_API_KEY (and optionally SEMANTIC_SCHOLAR_API_KEY)
+# then edit .env and set OPENCODE_GO_API_KEY (and optionally SEMANTIC_SCHOLAR_API_KEY)
 ```
 
 On Windows PowerShell, use `Copy-Item .env.example .env`.

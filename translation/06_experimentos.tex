@@ -1,0 +1,171 @@
+\section{Experiments}
+
+\label{sec:experimentos}
+
+This section reports the evaluation of the pipeline on real articles. The ground truth comes from articles withdrawn from arXiv whose withdrawal comment declares duplication of prior results. The evaluation produced both operational measures and the characterization of three obstacles that limit the approach regardless of this implementation.
+
+\subsection{Construction of the Withdrawn Article Set}
+
+The arXiv public API was queried with a search for withdrawn articles in mathematics categories, returning approximately 2,600 results. Over the withdrawal comment text, 23 regular expression patterns were applied, designed to identify withdrawals due to duplication of prior results and exclude withdrawals due to errors, gaps, or administrative issues. The most frequent patterns correspond to formulas such as \textit{result was already known}, \textit{had already been proved by}, \textit{results are not new}, and \textit{subsumed by}.
+
+The filtering yielded 33 candidates, of which 26 proved viable at the time of construction: downloadable LaTeX source and at least one detectable theorem environment. The remaining 7 use formats the parser does not recognize, such as AMS-\TeX{} or abbreviated environment names. The 26 viable ones cover 17 categories, with concentration in combinatorics and algebraic geometry, and a year range from 2001 to 2026. For each, two controls were selected from the same category, with publication year within $\pm 1$, not withdrawn, and with verifiable source; 382 candidates were examined to obtain 52 controls.
+
+\textbf{Ground truth quality.} Of the 26 withdrawn articles, 12 explicitly identify the prior work that duplicates their result; the remaining 14 use generic formulas without specifying the source. Among the 12 that do identify it, only a minority provide an arXiv identifier: the majority cite by author and publication, which requires manual resolution. That asymmetry has consequences analyzed in section~\ref{ssec:cobertura}.
+
+\subsection{Source Availability: A Structural Obstacle}
+\label{ssec:fuentes}
+
+During the expansion of the set, a restriction affecting the entire method was discovered: \textbf{arXiv removes the source code of an article upon withdrawal.} The source endpoint returns 404 for withdrawn articles, with no exceptions observed.
+
+This was verified on a random sample of 25 articles withdrawn for duplication drawn from a larger candidate set: none retained downloadable source. The hypothesis that articles marked as subsumed but not formally withdrawn would retain their source proved false: on arXiv, the subsumption mark implies withdrawal.
+
+The consequences are twofold. First, no pipeline that starts from LaTeX source can process withdrawn articles, unless the sources were downloaded before withdrawal. Second, and more serious for evaluation, the set we constructed is not reproducible from arXiv: the articles that were viable at the time of construction ceased to be so, and their processable material survives only in local copies. Any future work using withdrawn articles as duplication ground truth must account for this restriction from the design stage, preserving sources at the time of selection.
+
+\subsection{Formalization Model Selection}
+
+Four language models were compared on the \textit{statement-only} formalization task over five withdrawn articles.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lcl}
+\toprule
+Model & Success & Predominant failure mode \\
+\midrule
+Qwen 3.7-max      & 5/5 & --- \\
+GLM-5.2           & 3/5 & fixable errors, one timeout \\
+DeepSeek V4 Pro   & 0/5 & synthesis errors, placeholder definition \\
+DeepSeek V4 Flash & 0/5 & synthesis errors, unexpected tokens \\
+\bottomrule
+\end{tabular}
+\caption{Comparison of formalization backends over five statements. Qwen 3.7-max was the only one that produced mathematically substantive definitions in all five cases, and is the model used in the rest of the experiments.}
+\label{tab:modelos}
+\end{table}
+
+\textbf{Caveat on this selection.} The five articles in the comparison bank are the same that make up the withdrawn group of the in-depth study. The model was therefore chosen over part of the evaluation set, which introduces an optimistic bias on its performance in that group and offers an alternative explanation for the fidelity asymmetry reported below.
+
+\subsection{In-depth Study}
+
+The in-depth study evaluated 10 articles (5 withdrawn and 5 matched controls) with \textit{statement-only} formalization of the statement, triviality filter, and search in formal and informal corpora. The withdrawn articles were manually selected from the 26 viable ones as clear cases of duplication.
+
+Of the 10 articles, 7 were successfully formalized. Of the remaining 3, one failed due to a compilation error and two due to exceeding the model limit with statements of four levels of nested cases.
+
+\subsubsection{Fidelity Audit}
+
+The first author manually reviewed the 7 successful formalizations, comparing the generated Lean code against the original statement.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+Article & Role & Fidelity & Problem detected \\
+\midrule
+1609.02090v1   & withdrawn & faithful & --- \\
+1207.0631v1    & withdrawn & faithful & --- \\
+1212.0196v1    & withdrawn & faithful & --- \\
+1004.3381v1    & withdrawn & faithful$^{\dagger}$ & --- \\
+1101.3720v1    & control  & incorrect & \texttt{sorry} in the central definition \\
+0904.1783v3    & control  & approximation & only one direction of an equivalence \\
+math/0504586v2 & control  & incorrect & event and measure trivialized \\
+\bottomrule
+\end{tabular}
+\caption{Manual audit of the seven successful formalizations. $^{\dagger}$See note in the text on this case.}
+\label{tab:fidelidad}
+\end{table}
+
+The fidelity rate is 4/4 among withdrawn articles and 0/3 among controls. Two explanations compete. The first is a complexity bias: the controls, matched by category and year but not by statement difficulty, tend toward longer statements with more nested cases, a hypothesis reinforced by the two controls that failed due to exceeding the model limit. The second, simpler, is the model selection bias noted above: the formalizer was chosen for its performance on these same withdrawn articles and on no controls. The available data do not allow distinguishing between the two.
+
+The experimental consequence is that the three evaluated controls do not contribute evidence on false positives: their formalizations do not represent the original theorems, so that any verdict on them is informative about the formalization and not about the detector.
+
+\subsubsection{Five Failure Modes of Compilation-Based Verification}
+\label{ssec:modosfalla}
+
+Automatic formalization introduces a problem that does not exist in manual verification: a Lean file can compile without errors without containing a faithful formalization of the original theorem. During development, five successive failure modes were documented. Each motivated a new guard, and each guard let the next one through.
+
+\begin{enumerate}
+\item \textbf{Empty file.} A file with no declarations compiles cleanly. In the first run, five out of five formalizations were empty files that satisfied the original success criterion. The corresponding guard requires the presence of at least one substantive declaration.
+
+\item \textbf{Placeholder definition.} A definition of the form \texttt{def CongruentNumber := True} compiles, contains a substantive declaration, and satisfies the previous guard, but captures no mathematical definition. The response was to reinforce the prompt against definition trivialization.
+
+\item \textbf{Correct definition without the theorem.} After that reinforcement, the same article produced a mathematically correct definition but omitted the theorem statement. The file compiled, the definition was faithful, and the object to be evaluated was absent.
+
+\item \textbf{\texttt{sorry} in an auxiliary definition.} A \texttt{sorry} inside the body of a definition compiles and satisfies any syntactic guard over the declarations: the signature exists, the content is a placeholder. The success criterion rejects files with \texttt{sorry}, but only if the verifier detects it in the right place.
+
+\item \textbf{Only one direction of an equivalence.} A theorem stated as an equivalence in the original article was formalized in only one direction. The file compiles, the definitions are faithful, the formalized direction is correct, and half the statement is missing.
+\end{enumerate}
+
+The five steps share a property: compilation verifies coherence, never semantic fidelity. Each guard closes one failure class and lets the next through because the underlying question (whether the generated Lean code means the same as the original statement) is not decidable by syntactic means. Hence human auditing is irreducible: no automatic test can establish that defining a percolation event as the total set is not an acceptable formalization.
+
+This observation has scope beyond AViD. Automatic formalization pipelines routinely report successful compilation rates as a performance measure. The five failure modes show that this metric and semantic fidelity are distinct magnitudes, and that the former does not bound the latter. What fraction of compiling formalizations is semantically unfaithful is an open question requiring systematic auditing with a blind protocol, and one that this work does not answer.
+
+\subsection{Duplication Detection}
+
+\subsubsection{Two Corrected Defects}
+
+Two pipeline defects were identified by running the evaluation, and both produced duplication false positives.
+
+\textbf{Absence of temporal ordering.} Article 1207.0631v1, published in 2012, received a \texttt{CONOCIDO\_LITERATURA} verdict based on a 2018 candidate that the judge classified as equivalent. A later work cannot be what an earlier work duplicates: the verdict was logically impossible. The incorporation of the temporal filter (section~\ref{ssec:d1}) discards the three candidates later than the article's date and the verdict correctly changes to \texttt{NOVEDAD\_ENUNCIADO}.
+
+\textbf{Self-article retrieval.} The queried indices contain the evaluated articles. Without explicit exclusion, three of the seven articles retrieved themselves as candidates and the judge classified them as equivalent or specializations, producing non-novelty verdicts without content. With exclusion, the three verdicts are corrected and no self-matches are observed.
+
+Both defects are generic: they affect any system that verifies novelty by retrieval over indices that contain the evaluated material. The second, moreover, had been corrected in one branch of the system and remained active in another, illustrating that a point fix does not propagate on its own.
+
+\subsubsection{Results}
+
+With both corrections and queries constructed from the statement, the pipeline detected a single match on a control article (whose result appears in an earlier indexed work) and none on the withdrawn articles with faithful formalization. That match falls on a control whose formalization was only an approximation (one direction of an equivalence), so that, as noted above, it does not constitute clean evidence about the detector: its verdict informs about the formalization as much as about the search.
+
+The absence of detections among withdrawn articles is not a detector failure. The duplicators of those articles (results by Hardy and Littlewood, Monsky, and Gyárfás and Lehel) predate the electronic preprint era. Section~\ref{ssec:cobertura} shows that this fact, and not the metric or the judge, determines the result.
+
+\subsubsection{Similarity and Result Identity}
+
+One case illustrates the distance between retrieving a similar work and retrieving the duplicated work. Article 1609.02090v1 contains two independent results: one that the article itself explicitly attributes to a prior work, and another (the reason for withdrawal) that had been proved by Hardy and Littlewood around 1928. The search retrieved the first, that is, the work that duplicates a result the author never claimed as their own, and not the second. The match is correct and at the same time irrelevant to the question posed.
+
+\subsection{Coverage of the Retrieval Corpora}
+\label{ssec:cobertura}
+
+The above results suggest that the limiting factor lies not in the pipeline but in what the indices contain. To verify this, coverage was measured directly on the known duplicators, without pipeline intervention: the question is whether the duplicated work is indexed, not whether the system finds it.
+
+\textbf{Retrievability of the duplicators.} Of the duplicators identified in the withdrawal comments, the majority correspond to works before 1991: classical results published in journals, not preprints. Only a minority have an arXiv identifier. This distribution is not accidental: when a result is re-proved without noticing, the original work tends to be an established and old result, precisely the type of material that theorem indices cover worst.
+
+To rule out that the absence was an artifact of the query method, each of the twelve duplicators explicitly identified was searched by its exact name in both corpora (TheoremSearch and Matlas), without obtaining any match. The exact-name search, more permissive than the statement-based retrieval used by the pipeline, confirms that those works are not in the reachable corpus: the absence is one of coverage, not of method.
+
+\textbf{Consequence.} A duplicator absent from the index imposes a recall ceiling of zero, regardless of the quality of the similarity metric, the embedding threshold, or the judge. No pipeline improvement modifies that ceiling. The improvement path is corpus expansion, and the incorporation of a peer-reviewed journal index with coverage since 1826 was not sufficient for the evaluated cases. This limitation is not specific to AViD: any system that verifies novelty by retrieval faces it with the currently available infrastructure.
+
+\subsection{A Semantic Similarity Baseline}
+
+As a reference, it was evaluated whether a semantic similarity metric applied directly to the text of statements, without formalization or decision tree, allows distinguishing withdrawn articles from controls. Over 37 evaluable articles, a Mann--Whitney test on the score distributions yields no significant difference ($p = 0{,}854$).
+
+This result should not be read as evidence of absence of effect. The sample size is small and uneven, the exclusion of articles was not random (controls had approximately twice the probability of being excluded due to absence of extractable statement), and statistical power is not reported. What the result does indicate is that textual similarity between statements, taken in isolation, is not a useful discriminator of duplication in this set.
+
+A previous version of this same baseline yielded an apparently positive result that proved artifactual: without self-article exclusion, the majority of strong matches were self-matches. It is documented here as a warning for works that evaluate over indices that contain the evaluated material.
+
+\subsection{Summary}
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{p{3.6cm}p{1.6cm}p{8.6cm}}
+\toprule
+Evaluation & $n$ & Result \\
+\midrule
+Backend selection & 5 $\times$ 4 & Qwen 3.7-max 5/5; both DeepSeek models 0/5. Selection contaminated by overlap with the evaluation set. \\
+\addlinespace
+Formalization & 10 & 7 formalized. Fidelity 4/4 on withdrawn, 0/3 on controls; controls do not contribute evidence on false positives. \\
+\addlinespace
+Failure modes & --- & Five successive modes in which successful compilation does not imply semantic fidelity. \\
+\addlinespace
+Duplication detection & 7 & Two defects corrected (temporal order, self-match). No detections on withdrawn articles with pre-1991 duplicator. \\
+\addlinespace
+Corpus coverage & --- & The content of the indices, and not the metric, determines the recall ceiling. \\
+\addlinespace
+Source availability & 25 & No withdrawn article source remains available on arXiv. \\
+\addlinespace
+Semantic baseline & 37 & No significant difference ($p = 0{,}854$); small and biased sample. \\
+\bottomrule
+\end{tabular}
+\caption{Evaluation summary. The last three rows correspond to structural obstacles, not to pipeline performance measurements.}
+\label{tab:resumen}
+\end{table}

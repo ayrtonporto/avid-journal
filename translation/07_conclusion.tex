@@ -1,0 +1,45 @@
+\section{Conclusion}
+
+\label{sec:conclusion}
+
+\subsection{What Was Built}
+
+AViD Journal traverses the complete path from a LaTeX article to a novelty verdict: parser of mathematical environments with topological ordering of dependencies, formalization in Lean~4 with abstraction over eight backends, three reference corpora (Mathlib via Leandex, TheoremSearch, and Matlas), and an eight-verdict decision tree over three dimensions evaluated in increasing cost order.
+
+\subsection{What Was Measured}
+
+D2 succeeded on 22 of 24 theorems in the evaluation set (91{,}7\,\%), with no false positives or false negatives over the cases with defined expectation. D3 proved consistent with human judgment in the five calibration pairs, although only two of them constrain the threshold. D1 C$_F$ returned a match in the 18 queries that reached that stage, but without a similarity threshold that result does not distinguish real coverage from absence of filtering. On real articles, the pipeline detects duplication when the duplicated work is indexed in the corpus, and does not detect it when it is not.
+
+The comparison of four formalization models quantifies the relative viability of different backends and motivated the choice of the one used in the experiments. Additionally documented is a methodological defect that affects any evaluation over theorem indices: without explicit self-article exclusion, a paper retrieves itself as a candidate and the judge classifies it as equivalent, producing duplication false positives.
+
+\subsection{What Was Learned}
+
+The evaluation produced a result more informative than any pipeline performance measure: the identification of three obstacles that are not deficiencies of this implementation but properties of the problem with the infrastructure available today.
+
+The first is that compilation verifies coherence, never semantic fidelity: a Lean file can compile without errors and not represent the original statement, and no syntactic guard closes that gap (section~\ref{sec:experimentos}). The second is that the coverage of theorem indices, and not the similarity metric or the judge, imposes the recall ceiling: a duplicator absent from the corpus cannot be found by any pipeline, however good. The third is that arXiv removes the source code of articles upon withdrawal, which restricts what can be processed and compromises the reproducibility of any benchmark built upon them: the set of articles we assembled is replicable in its composition (identifiers and withdrawal comments) but not in its processable material, which must be preserved locally before withdrawal.
+
+The three are transferable: any system that verifies novelty by retrieval and formalization will encounter them.
+
+\subsection{Limitations and Future Work}
+\label{sec:limitaciones}
+
+The remaining limitations of this version define, for the most part, the work that follows.
+
+\textbf{Scope of the metric.} AViD evaluates each statement separately, so that an article whose novelty lies in the combination of known results would not be detected; an aggregation layer is future work. D3 operates only over \texttt{Prop} and assumes proof irrelevance: extending it to \texttt{Type}, where the appropriate notion would be homotopic, is a long-term goal. More fundamentally, the framework measures novelty over statements and proofs frozen in a corpus and does not capture the conceptual novelty of a definition that reformulates a problem or of a method transferable to other domains~\cite{lakatos1976}; and proof identity is undecidable in general~\cite{dosen2003}, so that Jaccard over premises is an engineering approximation, with false positives when equivalent proofs use superficially distinct premises and false negatives when distinct strategies share core lemmas.
+
+\textbf{D3 calibration.} The threshold $\theta = 0{,}5$ is a design choice. The calibration ladder is consistent with human judgment in the five pairs, but only two constrain the threshold and one of them is degenerate, so that the evidence bounds the admissible interval to $\theta < 0{,}7222$ without fixing a value. Calibrating requires a corpus of proof pairs for the same theorem with prior human labeling, selected so that their distances fall in the interior of the range and their premise sets are large enough for the ratio to be stable; such a corpus would also allow weighting premises by IDF~\cite{huch2022} instead of counting them equally, replacing premise sets with complete dependency graphs, and reporting precision and recall of D3 on the proof identity axis. This is the first thing we will do in the next version.
+
+\textbf{Formalizer dependence.} AViD evaluates the formalized proof, not the informal one. A maximum distance may be due to the formalizer choosing different lemmas, and a low distance to convergence to the same Mathlib lemma (section~\ref{ssec:d3cal}). The same effect operates on D2, whose result depends on the triple (formalized statement, tactic, budget) and not on the theorem. Quantifying how often self-formalization preserves or collapses the distinction between strategies requires a systematic experiment across multiple theorems and multiple models, with human auditing of the fidelity of each formalization; it is the line of work we consider most promising. Running several formalizers in parallel would also reduce dependence on a single provider.
+
+\textbf{D1 precision.} Statement comparison is syntactic: incorporating \texttt{isDefEq} would allow recognizing definitional equivalences that currently produce false negatives. The informal branch also depends on being able to formalize third-party proofs, a capability that had 0\,\% success in the proof of concept; without that link D3 cannot be applied to informal corpus matches.
+Two extensions point to accelerated publication scenarios like the one described in the introduction. The first is of temporal granularity: the date that the filter derives from the arXiv identifier resolves at the month level, sufficient to discard candidates later by years but not to establish priority between works appearing days apart; replacing it with the submission date provided by the API would resolve that case. The second is of scope: the pipeline formalizes statements and compiles the result, so that the infrastructure for evaluating the validity of a counterexample (a computationally much cheaper task than verifying a proof) is already present, although the current decision tree only issues novelty verdicts. Extending it in that direction would require first measuring with what fidelity the formalizer translates counterexample statements, and therefore faces the same obstacle documented in section~\ref{ssec:modosfalla}.
+
+\textbf{Evaluation scale.} The 24 theorems in the evaluation set were constructed by the first author, and the in-depth study operated on articles selected from those that proved parseable and formalizable, introducing a technical accessibility bias whose effect on duplicability we do not know. Three directions expand that scale: evaluating D2 against a corpus of independently labeled conjectures, which would provide a measure with external ground truth; running the complete pipeline over Mathlib, which offers a formal corpus of magnitude far greater than the current set; and building a benchmark over self-formalized arXiv articles, where the source remains available. As for the duplication ground truth, the withdrawal comment is an imperfect proxy: of the viable withdrawn articles, fewer than half explicitly identify the work that duplicates them, and among those that do the majority cite it by author and publication rather than by identifier, which requires manual resolution with its own margin of error.
+
+\textbf{Engineering.} Premise extraction requires loading full Mathlib, so that D3 is offered as on-demand analysis and not within the interactive flow; imports of specific modules do not work on temporary files, which forces loading the entire library on each D2 invocation.
+
+\subsection{Closing}
+
+AViD Journal does not solve the problem of automatic novelty verification. It poses it operationally, implements it end to end, and documents precisely where it fails. The system operates over the subset of theorems expressible in the \texttt{Prop} fragment of Lean~4, with statement parseable and formalizable by some available model; within that perimeter the decision tree produces verifiable verdicts, and outside it it is explicitly incomplete.
+
+The thesis of the work is that the question of whether novelty can be automatically arbitrated is not answered with a metric design or an architecture argument, but by building the system, running it against real ground truth, and reporting what worked and what did not. The three identified obstacles suggest that the bottleneck is not where metric design invites one to look for it.

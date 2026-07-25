@@ -2,7 +2,7 @@
 
 **AViD Journal** — Automated Verification in Demonstrations.  
 Pipeline: `.tex` → parse blocks → formalize in Lean 4 → verify correctness → check novelty (Mathlib + arXiv) → auto-publish if valid.  
-Author: Ayrton Porto (UNICEN, Argentina). PhD applications target: Wenda Li (Edinburgh), Welleck (CMU), van Doorn (Bonn).
+Author: Ayrton Porto.
 
 ## Architecture
 
@@ -78,7 +78,7 @@ Author: Ayrton Porto (UNICEN, Argentina). PhD applications target: Wenda Li (Edi
 - **Python**: 3.11+ with venv at `.venv/`. Run with `.venv/Scripts/python.exe`.
 - **LLM Judge API**: OpenCode Go (`OPENCODE_GO_API_KEY` in `~/.hermes/.env`). Model: `deepseek-v4-flash`.
 - **WSL2**: Ubuntu 22.04 at `D:\WSL\Ubuntu2204\`. LeanDojo 4.20.0 installed. Not for automated pipeline.
-- **Repo**: `D:\Mis documentos\Documentos\AViD Journal\`. Public: `github.com/ayrtonporto/avid-journal`.
+- **Repo**: Public: `github.com/ayrtonporto/avid-journal`.
 
 ## Key files map
 

@@ -1,0 +1,162 @@
+\section{The AViD Pipeline}
+
+\label{sec:pipeline}
+
+The system receives a \texttt{.tex} file, extracts its mathematical blocks, formalizes them in Lean~4, and applies a three-dimensional decision tree to issue a novelty verdict. This section describes each stage with the detail necessary for its conceptual reproduction.
+
+\subsection{LaTeX Ingestion and Parsing}
+
+The parser extracts mathematical environments from the LaTeX source: \texttt{theorem}, \texttt{lemma}, \texttt{proposition}, \texttt{corollary}, \texttt{definition}, and their Spanish variants (\texttt{teorema}, \texttt{lema}, \texttt{proposición}, \texttt{definición}, \texttt{corolario}). It also recognizes abbreviated variants (\texttt{thm}, \texttt{lem}, \texttt{prop}, \texttt{cor}, \texttt{defn}) and user-defined environments via \verb|\newtheorem| and \verb|\theoremstyle|.
+
+Dependencies between blocks are extracted from cross-references \verb|\ref{}| and \verb|\cite{}|. With them the parser builds a directed acyclic graph and applies a topological ordering (Kahn's algorithm) to determine the formalization sequence: blocks without dependencies are processed first; those that depend on others, afterwards.
+
+Not all detected environments proceed to the next stage. The orchestrator only formalizes types considered \textit{formalizable}: \texttt{theorem}, \texttt{lemma}, \texttt{proposition}, \texttt{corollary}, and their variants. Environments such as \texttt{remark}, \texttt{example}, \texttt{proof}, and \texttt{definition} (when not required as a dependency) are extracted but not formalized.
+
+\textbf{Known limitation.} The parser operates via compiled regular expressions with a fixed list of environment names. Papers using AMS-\TeX{} (\verb|\documentstyle{amsppt}|) or defining environments with idiosyncratic names (\verb|\begin{inizio}|, \verb|\begin{numero}|) are not parseable by this version. Of the 33 candidates in the withdrawn dataset, 7 proved non-viable for this reason.
+
+\subsection{Formalization in Lean 4}
+
+\subsubsection{Multi-model Abstraction}
+
+The formalization of each block (statement and proof) is delegated to a language model through an abstract \texttt{ModelProvider} interface. The current implementation supports eight backends: Claude Code (agentic mode, via CLI), Anthropic API, OpenAI, DeepSeek, OpenRouter, Mistral, Gemini, and OpenCode Go. The experiments reported in section~\ref{sec:experimentos} use Qwen 3.7-max through OpenCode Go, selected by empirical comparison across backends.
+
+The architecture distinguishes two families of providers. \textit{Agentic} ones handle their own verification cycle: the model receives the prompt, generates Lean code, attempts to compile, and corrects iteratively. \textit{API} ones use an external verification cycle: the system sends the prompt, receives the response, extracts the Lean code, compiles with \texttt{lake env lean}, and re-sends errors as feedback for the next iteration. This iterative prompting scheme with compiler feedback adopts the strategy of the Numina-Lean-Agent~\cite{leandex2026}.
+
+Each block is classified into one of four modes according to its estimated complexity: \texttt{SIMPLE} (5 maximum correction rounds), \texttt{MEDIUM} (15 rounds), \texttt{HARD} (30 rounds), and \texttt{EXTERNAL} (no model; an axiom with source reference is emitted).
+
+\subsubsection{Shared Lean Project}
+
+All papers share a single Lean~4 project (v4.29.0) with a Mathlib build (8,247 \texttt{.olean} files). Each paper is hosted as a submodule under \texttt{Papers/<Slug>/}. Formalized blocks accumulate incrementally in a \texttt{Paper.lean} file and are registered in an index that the orchestrator consults before searching Mathlib.
+
+The formalization success criterion is demanding: the file must compile without errors, without \texttt{sorry} in any declaration, and must contain at least one substantive declaration (\texttt{theorem}, \texttt{lemma}, \texttt{def}). Empty files or files with only imports are rejected. Section~\ref{sec:experimentos} documents why this criterion, demanding as it is, does not guarantee semantic fidelity.
+
+\subsubsection{Statement-only Mode}
+
+For experiments where only the statement is required, the system operates in \textit{statement-only} mode: the model generates the Lean statement with \texttt{:= by sorry} and the success criterion is relaxed to accept the presence of \texttt{sorry} as long as there are no compilation errors. This mode is not a native capability of the codebase but a configuration of prompts and the acceptance criterion. All experiments on real papers reported in this work operate in this mode, which implies that D3 (which requires premises from a proof) is not exercised in them.
+
+\subsection{Reference Corpora}
+
+The system compares each statement against three corpora.
+
+\textbf{C$_F$ (formal corpus).} Mathlib v4.29.0, accessed through the Leandex API~\cite{leandex2026}, Project Numina's semantic search engine. Leandex indexes Mathlib statements and returns matches with their proof status. The current API version (v2) does not provide similarity scores; the system uses the ordering provided by the API and discards results whose status is \texttt{statement\_only}. The absence of a threshold is a limitation with consequences for the interpretation of D1 C$_F$ results (section~\ref{sec:instrumentos}).
+
+\textbf{C$_I$ (informal corpus).} Two sources complementary in temporal coverage: TheoremSearch~\cite{theoremsearch2026}, with 9.2 million statements extracted from arXiv and seven additional sources, and Matlas~\cite{matlas2026}, with 8.07 million statements from peer-reviewed journals since 1826. Both expose public APIs without authentication. Retrieved candidates are filtered with MiniLM embeddings (cosine similarity threshold $\geq 0.40$) and then pass through the filters described in section~\ref{ssec:d1} before reaching the LLM judge.
+
+\textbf{Own corpus.} As the orchestrator formalizes blocks from a paper, it accumulates them in a local index. Blocks already processed within the same paper are consulted before searching Mathlib, preventing the system from marking as already existing a theorem that the paper itself has just introduced.
+
+\subsection{The Three Dimensions}
+
+\subsubsection{D1: Prior Non-existence}
+\label{ssec:d1}
+
+D1 verifies whether the statement already appears in the formal corpus (C$_F$) or the informal corpus (C$_I$). The evaluation follows a fixed order with short-circuiting: if C$_F$ finds a match, C$_I$ is not executed.
+
+\textbf{C$_F$ branch.} The Leandex API is queried with the statement in natural language. If Leandex returns at least one result whose status is not \texttt{statement\_only}, the theorem is considered to exist in Mathlib. No similarity threshold is applied, because the API does not provide scores.
+
+\textbf{\texttt{exact?} fallback.} If Leandex finds no match, the system executes \texttt{example : $\tau$ := by exact?} with a 15-second budget on the Lean environment with full Mathlib. If the tactic finds a theorem that closes the goal, it is treated as a C$_F$ match. This tactic is classified as D1 and not D2 because its function is to find an already proven theorem, not to close the goal by automation.
+
+\textbf{C$_I$ branch.} Activated only if C$_F$ found no match. Stage A queries TheoremSearch and Matlas with the statement, previously cleaned of LaTeX markup. Candidates surviving the embedding threshold pass through two structural filters before stage B, in which an LLM judge (temperature $=0$) compares each candidate with the original statement and issues one of four verdicts: \texttt{equivalent}, \texttt{generalization}, \texttt{specialization}, \texttt{different}.
+
+\textbf{Temporal filter.} A valid duplicator must predate the work it duplicates. The system discards any candidate whose publication date is later than that of the paper under evaluation. For arXiv candidates, the date is derived from the identifier, which encodes year and month in three distinct historical formats (\texttt{YYMM.NNNNN}, \texttt{cat/YYMMNNN}, and the variant without category prefix). For Matlas candidates, identified by DOI rather than arXiv ID, the publication year provided by the source is used. Candidates without a retrievable date are not discarded: they pass to stage B and are tallied separately, so that their presence is recorded rather than producing a silent discard. If the paper under evaluation has no parseable date, the filter is deactivated.
+
+Without this filter, the system can issue a non-novelty verdict against a work \textit{later} than the one evaluated, which is logically impossible as duplication. Section~\ref{sec:experimentos} documents a concrete case and its correction.
+
+\textbf{Self-paper exclusion.} The C$_I$ indices contain the papers the system evaluates. Without explicit exclusion, a paper retrieves itself as a candidate and the judge classifies it as \texttt{equivalent}, producing a duplication false positive. The system passes the evaluated paper's identifier as an exclusion parameter to sources that support it natively, and applies a post-search filter on those that do not.
+
+\subsubsection{D2: Non-triviality}
+
+D2 verifies whether the statement can be proved exclusively with Lean's standard automatic tactics. If any tactic closes \texttt{example : $\tau$ := by T}, the theorem is considered trivial.
+
+\textbf{Tactics, order, and budgets.} The set \texttt{T\_AUTO} is executed in this order: \texttt{decide}, \texttt{norm\_num}, \texttt{simp}, \texttt{omega}, \texttt{tauto}, \texttt{aesop}. The first five have 10 seconds each; \texttt{aesop} has 30. The order prioritizes cheap and specific tactics; \texttt{aesop}, which performs a more exhaustive search, goes last. Execution stops at the first tactic that closes the goal.
+
+Each tactic invocation requires loading the Lean environment with full Mathlib. Without pre-warming, that startup dominates execution time; the times reported in section~\ref{sec:instrumentos} correspond to invocations on an already loaded environment.
+
+\textbf{\texttt{norm\_num} blacklist.} The \texttt{norm\_num} tactic in Mathlib v4.29.0 includes a shortcut that closes \texttt{Irrational (Real.sqrt 2)}. To avoid that false positive, \texttt{norm\_num} is excluded when the statement contains the word \texttt{Irrational}.
+
+\textbf{\texttt{exact?} does not belong to D2.} The tactic was relocated to D1 as C$_F$ fallback for a semantic reason: it searches for an existing theorem in the environment, which is verification of prior existence and not of triviality.
+
+\textbf{Sensitivity to the formalized statement.} The D2 result is not a fixed property of the theorem but of the triple (formalized statement, tactic, budget). The same informal theorem can produce formalizations that \texttt{aesop} closes in seconds or that exceed the budget by an order of magnitude, depending on which definitions the formalizer chose. Section~\ref{sec:instrumentos} documents a concrete case.
+
+\subsubsection{D3: Structural Premise Distance}
+
+D3 measures how different a proof is from another existing in Mathlib. The metric is the Jaccard distance over the sets of premises (lemmas, theorems, definitions) used in each proof.
+
+\textbf{Premise extraction.} Premises are extracted with a standalone Lean tool that traverses the \texttt{InfoTree} and collects, for each \texttt{TermInfo} node, the referenced constant, its definition location, and the module containing it. References occurring at the constant's own definition site are excluded, to prevent a theorem from registering itself as a premise.
+
+\textbf{Canonical identity and deduplication.} Two premises with the same definition location represent the same logical object, even if they appear in different positions of the proof. Before any filtering, premises are deduplicated by this canonical identity.
+
+\textbf{Filtering pipeline.} Before computing Jaccard, premises pass through two filters:
+
+\begin{enumerate}
+\item \textbf{Namespace blacklist.} Premises whose module begins with \texttt{Init.} or \texttt{Lean.} are removed. These namespaces contain kernel type constructors, typeclass instances, and tactic internals that the elaborator resolves automatically; they do not reflect mathematical content and would artificially dominate the intersection. The Mathlib network analysis by Li et al.~\cite{network2026} supports this criterion: over a graph of 308,129 declarations and 8.4 million edges, they find that centrality captures language infrastructure more than mathematical relevance.
+
+\item \textbf{Statement premises.} Premises whose position in the source file falls within the statement's line range are removed. Constants appearing in the statement (hypotheses, types, local definitions) are part of the signature and not of the proof; comparing them artificially inflates similarity.
+\end{enumerate}
+
+\textbf{Computation.} Let $P(A)$ and $P(B)$ be the post-filter and deduplicated premise sets. The Jaccard distance is
+\[
+d_J(A,B) \;=\; 1 - \frac{|P(A) \cap P(B)|}{|P(A) \cup P(B)|}.
+\]
+The decision threshold is $\theta = 0{,}5$: if the distance exceeds it, the proofs are considered structurally distinct. If either set is empty after filtering, no distance is emitted and the verdict is \texttt{INCONCLUSIVE}.
+
+\textbf{Calibration status.} The threshold $\theta = 0{,}5$ is the initial design value and has not been calibrated against a broad set of pairs. Section~\ref{sec:instrumentos} reports its behavior on five pairs with human judgment, of which only two prove informative for calibration.
+
+\subsection{Verdict Tree}
+
+The orchestrator traverses the three dimensions in increasing cost order (figure~\ref{fig:arbol}).
+
+\begin{figure}[htbp]
+\centering
+\small
+\begin{verbatim}
+D2 (triviality): does any T_AUTO tactic close tau?
+  |
+  +-- YES -> NO_NOVEDOSO_trivial                      (END)
+  |
+  +-- NO  -> D1 C_F (Leandex)
+             |
+             +-- match    -> D3 (if premises available)
+             |            +-- distant         -> NOVEDAD_DEMOSTRACION
+             |            +-- close           -> NO_NOVEDOSO_redundante
+             |            +-- empty sets      -> INCONCLUSIVE
+             |            +-- not available   -> MATCH_PENDIENTE_D3
+             |
+             +-- no match -> exact? (fallback)
+                              |
+                              +-- match -> same path as C_F
+                              |
+                              +-- no match -> D1 C_I
+                                               (TheoremSearch + Matlas,
+                                                temporal filter, LLM judge)
+                                   +-- equivalent        -> CONOCIDO_LITERATURA
+                                   +-- generalization /
+                                       specialization    -> ZONA_GRIS
+                                   +-- different or
+                                       no candidates     -> NOVEDAD_ENUNCIADO
+\end{verbatim}
+\caption{Orchestrator decision tree. The dimensions are evaluated in increasing cost order: D2 is local, D1 C$_F$ is an HTTP query, D1 C$_I$ involves several APIs and an LLM judge, and D3 requires premise extraction.}
+\label{fig:arbol}
+\end{figure}
+
+\textbf{Short-circuit logic.} D2 is evaluated first because it is local and cheap: if the theorem is trivial, the tree terminates without consulting external APIs. D1 C$_F$ is second because it is a fast HTTP query. D1 C$_I$ is third because it involves several APIs and a judge call. D3 is the most expensive and only runs when there is a C$_F$ match that requires deciding whether the proof is novel or redundant.
+
+\textbf{The eight verdicts.}
+
+\begin{enumerate}
+\item \texttt{NOVEDAD\_ENUNCIADO}: no match in C$_F$ or C$_I$.
+\item \texttt{NOVEDAD\_DEMOSTRACION}: match in C$_F$, D3 indicates distant proofs.
+\item \texttt{CONOCIDO\_LITERATURA}: match in C$_I$, no match in C$_F$.
+\item \texttt{NO\_NOVEDOSO\_redundante}: match in C$_F$, D3 indicates same proof.
+\item \texttt{NO\_NOVEDOSO\_trivial}: D2 closes with standard tactic.
+\item \texttt{ZONA\_GRIS}: the judge classifies the match as generalization or specialization; requires human review.
+\item \texttt{MATCH\_PENDIENTE\_D3}: match in C$_F$, D3 not available.
+\item \texttt{INCONCLUSIVE}: D3 executed, premise sets empty after filtering.
+\end{enumerate}
+
+Three of the eight verdicts (\texttt{NOVEDAD\_DEMOSTRACION}, \texttt{NO\_NOVEDOSO\_redundante}, \texttt{INCONCLUSIVE}) depend on D3 and, therefore, are not emitted in the reported experiments, which operate in statement-only mode.
+
+\subsection{Implementation and Current State}
+
+The system is implemented in Python 3.11+. The codebase is organized into two modules: one contains the parser, the novelty orchestrator, and the three dimensions; the other, a formalization orchestrator with multi-model abstraction. The verdict tree is identical regardless of which orchestrator formalized the paper.
+
+The project has 153 passed tests and 1 skipped, an evaluation set of 24 theorems, and a dataset of 26 papers withdrawn for duplication with controls matched by category and year.
