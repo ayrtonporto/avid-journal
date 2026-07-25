@@ -331,6 +331,7 @@ async def api_analyze(request: Request):
     # Client's own provider + key (transient — used for this request only,
     # never stored or logged). Empty => server default (DeepSeek V4 Pro).
     client_provider = (form.get("provider") or "").strip()
+    client_model = (form.get("model") or "").strip()
     client_api_key = (form.get("api_key") or "").strip()
 
     import tempfile, json as _json
@@ -367,6 +368,7 @@ async def api_analyze(request: Request):
                     FakeFile(),
                     api_key_input=client_api_key,
                     provider_name=client_provider,
+                    model_name=client_model,
                     on_progress=on_progress_cb,
                 )
                 result_holder["summary"] = summary

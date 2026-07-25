@@ -406,12 +406,12 @@
         </label>
         <label style="display:flex;align-items:center;gap:8px;font-family:Inter,sans-serif;font-size:14px;color:var(--ink-2);cursor:pointer">
           <input type="radio" name="model-mode" value="own"
-                 onchange="document.getElementById('own-key-fields').style.display='block'">
+                 onchange="document.getElementById('own-key-fields').style.display='block'; onProviderChange()">
           Use my own API key
         </label>
         <div id="own-key-fields" style="display:none;margin-top:12px">
-          <select id="provider-select" style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:8px">
-            <option value="opencode">OpenCode Go (DeepSeek V4 Pro)</option>
+          <select id="provider-select" onchange="onProviderChange()" style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:8px">
+            <option value="opencode">OpenCode Go</option>
             <option value="openrouter">OpenRouter</option>
             <option value="anthropic">Claude (Anthropic)</option>
             <option value="openai">OpenAI</option>
@@ -419,6 +419,9 @@
             <option value="deepseek">DeepSeek</option>
             <option value="mistral">Mistral</option>
           </select>
+          <input type="text" id="model-input" placeholder="Model ID"
+                 style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:8px">
+          <div id="model-hint" style="font-family:Inter,sans-serif;font-size:12px;color:var(--ink-3);margin:-2px 0 8px">Exact model ID for this provider. Edit if you want a different one.</div>
           <input type="password" id="api-key-input" placeholder="Your API key"
                  style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px">
           <div style="font-family:Inter,sans-serif;font-size:12px;color:var(--ink-3);margin-top:6px">Sent over HTTPS, used for this analysis only — never saved or logged.</div>
@@ -748,11 +751,36 @@ function onFileSelected() {
   if (startBtn) { startBtn.disabled = false; startBtn.style.opacity = "1"; }
 }
 
+// Default model per provider. Must match CLIENT_PROVIDERS in app.py. The field
+// is editable — these are just sensible starting points (OpenRouter alone has
+// hundreds of models, so the user must be able to pick).
+const PROVIDER_DEFAULT_MODEL = {
+  opencode:   "deepseek-v4-pro",
+  openrouter: "anthropic/claude-sonnet-4",
+  anthropic:  "claude-sonnet-4-20250514",
+  openai:     "gpt-4o",
+  gemini:     "gemini-2.5-pro",
+  deepseek:   "deepseek-chat",
+  mistral:    "mistral-large-latest",
+};
+
+// When the provider changes, refill the model field with that provider's
+// default — but only if the user hasn't typed a custom value (or the field
+// still holds another provider's default).
+function onProviderChange() {
+  const sel = document.getElementById("provider-select");
+  const mi = document.getElementById("model-input");
+  if (!sel || !mi) return;
+  const cur = mi.value.trim();
+  const isDefault = cur === "" || Object.values(PROVIDER_DEFAULT_MODEL).includes(cur);
+  if (isDefault) mi.value = PROVIDER_DEFAULT_MODEL[sel.value] || "";
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // API CALL (streaming)
 // ═══════════════════════════════════════════════════════════════════
 function setAnalysisRunning(running) {
-  ["start-btn", "provider-select", "api-key-input", "tex-input"].forEach(function(id){
+  ["start-btn", "provider-select", "model-input", "api-key-input", "tex-input"].forEach(function(id){
     const el = document.getElementById(id); if (el) el.disabled = running;
   });
   document.querySelectorAll('input[name="model-mode"]').forEach(function(el){ el.disabled = running; });
@@ -783,12 +811,18 @@ async function analyze(file) {
     const mode = document.querySelector('input[name="model-mode"]:checked')?.value;
     if (mode === "own") {
       const prov = document.getElementById("provider-select")?.value || "";
+      const model = document.getElementById("model-input")?.value?.trim() || "";
       const key = document.getElementById("api-key-input")?.value?.trim() || "";
       if (!key) {
         statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter your API key, or switch to the provided model.</span>';
         return;
       }
+      if (!model) {
+        statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter a model ID for ' + prov + '.</span>';
+        return;
+      }
       formData.append("provider", prov);
+      formData.append("model", model);
       formData.append("api_key", key);
     }
 

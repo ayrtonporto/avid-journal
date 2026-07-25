@@ -167,6 +167,9 @@ def formalize_block_with_provider(
     context_lean: str = "",
     lean_project_dir: Optional[str] = None,
     max_rounds: int = 10,
+    on_progress = None,
+    progress_desc: str = "",
+    progress_pct: int = 0,
 ) -> Optional[str]:
     """Formalize a single block (statement + proof) using the model provider.
 
@@ -210,8 +213,13 @@ def formalize_block_with_provider(
     # Only attempt compilation if inside a Lean project
     can_compile = lean_project_dir and Path(lean_project_dir).exists()
 
+    def _emit(msg: str):
+        if on_progress and progress_desc:
+            on_progress("formalize", f"{progress_desc} — {msg}", progress_pct)
+
     try:
         for round_num in range(1, max_rounds + 1):
+            _emit(f"round {round_num}/{max_rounds}: asking model for Lean…")
             response = provider.generate([{"role": "user", "content": prompt}])
             if not response:
                 logger.warning(f"Formalization round {round_num}: provider returned empty for {block.get('label')}")
@@ -252,9 +260,11 @@ def formalize_block_with_provider(
             # `already been declared` error. Catching it here lets the retry
             # loop rename the definition before it enters the context.
             if can_compile:
+                _emit(f"round {round_num}/{max_rounds}: compiling in Lean…")
                 has_error, has_sorry, stdout, stderr = check_lean_file(str(target))
                 logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
+                    _emit(f"round {round_num}/{max_rounds}: Lean errors, retrying…")
                     prompt = (
                         f"The Lean code has errors. Fix them.\n\n"
                         f"Errors:\n{stdout}\n{stderr}\n\n"
@@ -309,6 +319,7 @@ def process_tex(
     progress: gr.Progress = None,
     on_progress = None,
     provider_name: str = "",
+    model_name: str = "",
 ) -> tuple:
     """Full pipeline: .tex → parse → formalize → D2 → D1 → verdicts.
 
@@ -360,8 +371,8 @@ def process_tex(
     # never stored or logged), otherwise the server default (DeepSeek V4 Pro).
     try:
         if provider_name and api_key_input.strip():
-            provider = build_client_provider(provider_name, api_key_input)
-            logger.info(f"Using client provider: {provider_name} ({type(provider).__name__})")
+            provider = build_client_provider(provider_name, api_key_input, model=model_name)
+            logger.info(f"Using client provider: {provider_name} model={model_name or '(default)'} ({type(provider).__name__})")
         else:
             provider = resolve_provider()
             logger.info(f"Using server default provider: {type(provider).__name__}")
@@ -465,6 +476,9 @@ def process_tex(
                     context_lean=context,
                     lean_project_dir=lean_dir,
                     max_rounds=10,
+                    on_progress=on_progress,
+                    progress_desc=f"Formalizing [{i+1}/{n}]: {title}",
+                    progress_pct=int(pct),
                 )
 
             if lean_stmt is not None:
