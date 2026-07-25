@@ -22,7 +22,7 @@ SMTP_HOST = os.environ.get("AVID_SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("AVID_SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("AVID_SMTP_USER", "")
 SMTP_PASS = os.environ.get("AVID_SMTP_PASS", "")
-SMTP_FROM = os.environ.get("AVID_SMTP_FROM", "avid-journal@nousresearch.com")
+SMTP_FROM = os.environ.get("AVID_SMTP_FROM", "no-reply@avid-journal.org")
 
 EMAIL_ENABLED = bool(SMTP_USER and SMTP_PASS)
 
