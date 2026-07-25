@@ -105,6 +105,7 @@ def resolve_api_key(user_key: str = "") -> str:
 # Note: the "Claude" option here means the Anthropic API (client's Anthropic
 # key) — NOT the Claude Code CLI, which is OAuth-only and server-local.
 CLIENT_PROVIDERS: Dict[str, tuple] = {
+    "opencode": ("https://opencode.ai/zen/go/v1", "deepseek-v4-pro"),
     "openrouter": ("https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-pro"),
     "openai": ("https://api.openai.com/v1", "gpt-4o"),
