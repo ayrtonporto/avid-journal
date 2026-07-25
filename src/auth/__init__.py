@@ -95,8 +95,15 @@ def verify_google_token(credential: str) -> Optional[GoogleUser]:
 
         data = resp.json()
 
-        # Verify audience matches our client ID
-        if GOOGLE_CLIENT_ID and data.get("aud") != GOOGLE_CLIENT_ID:
+        # Verify the token was issued for OUR app. Fail closed: without a known
+        # client id we cannot trust the audience, so reject rather than accept
+        # tokens minted for any other Google app.
+        if not GOOGLE_CLIENT_ID:
+            logger.error(
+                "GOOGLE_CLIENT_ID not set — cannot verify token audience; rejecting login"
+            )
+            return None
+        if data.get("aud") != GOOGLE_CLIENT_ID:
             logger.warning("Token audience mismatch")
             return None
 

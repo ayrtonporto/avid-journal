@@ -286,6 +286,27 @@ def _check_rate(ip: str) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Auth helper
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _require_user(request: Request) -> str:
+    """Return the authenticated user's google_id, or raise 401.
+
+    In dev mode (AVID_DEV_MODE=1) auth is disabled and a synthetic dev user is
+    returned. Otherwise a valid Bearer session token is required.
+    """
+    if DEV_MODE:
+        return "dev-user"
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    session = get_session(token)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    return session.user.google_id
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Analysis endpoint (delegates to app.py pipeline)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -294,27 +315,23 @@ async def api_analyze(request: Request):
     """Run the full novelty pipeline on an uploaded .tex file.
     Streams progress as JSON Lines, ending with the final result.
     """
-    # Auth check (skipped in dev mode — uses anonymous user)
-    google_id = "dev-user"
-    if not DEV_MODE:
-        token = request.headers.get("Authorization", "").replace("Bearer ", "")
-        if not token:
-            raise HTTPException(status_code=401, detail="Authentication required")
-        session = get_session(token)
-        if session is None:
-            raise HTTPException(status_code=401, detail="Invalid or expired session")
-        google_id = session.user.google_id
+    google_id = _require_user(request)
 
     # Rate limit
     ip = request.client.host if request.client else "unknown"
     if not _check_rate(ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-    # Read uploaded file
+    # Read uploaded file + optional client model choice.
     form = await request.form()
     uploaded = form.get("file")
     if uploaded is None:
         raise HTTPException(status_code=400, detail="No file uploaded")
+
+    # Client's own provider + key (transient — used for this request only,
+    # never stored or logged). Empty => server default (DeepSeek V4 Pro).
+    client_provider = (form.get("provider") or "").strip()
+    client_api_key = (form.get("api_key") or "").strip()
 
     import tempfile, json as _json
     with tempfile.NamedTemporaryFile(suffix=".tex", delete=False) as tmp:
@@ -346,7 +363,12 @@ async def api_analyze(request: Request):
             try:
                 class FakeFile:
                     name = tex_path
-                summary, results, lean_path, pub_html = process_tex(FakeFile(), on_progress=on_progress_cb)
+                summary, results, lean_path, pub_html = process_tex(
+                    FakeFile(),
+                    api_key_input=client_api_key,
+                    provider_name=client_provider,
+                    on_progress=on_progress_cb,
+                )
                 result_holder["summary"] = summary
                 result_holder["results"] = results
                 result_holder["lean_path"] = lean_path
@@ -420,6 +442,8 @@ async def api_publish(request: Request):
     from src.publication import submit as pub_submit
     from src.users import increment_papers
 
+    google_id = _require_user(request)
+
     body = await request.json()
     author = (body.get("author") or "").strip()
     email = (body.get("email") or "").strip()
@@ -443,13 +467,9 @@ async def api_publish(request: Request):
             llm_model=llm,
             submission_id=submission_id,
         )
-        # Update user stats if logged in. increment_papers expects a google_id,
-        # so resolve the session from the Bearer token first.
+        # Attribute the submission to the authenticated user.
         if not DEV_MODE:
-            token = request.headers.get("Authorization", "").replace("Bearer ", "")
-            session = get_session(token) if token else None
-            if session is not None:
-                increment_papers(session.user.google_id)
+            increment_papers(google_id)
 
         return JSONResponse({"status": "ok", "id": record["id"]})
     except Exception as e:
