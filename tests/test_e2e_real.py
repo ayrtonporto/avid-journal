@@ -102,13 +102,13 @@ class TestE2EReal:
         blocks = parse_latex(str(FIXTURE_TEX))
         results = {}
 
+        from src.formalization.providers import resolve_provider
+        provider = resolve_provider()
+        
         for b in blocks:
             label = b["label"]
-            latex = b["content_latex"]
-            lean = avid_app.formalize_statement(latex, API_KEY)
+            lean = avid_app.formalize_block_with_provider(b, provider)
             assert lean is not None, f"Formalization returned None for {label}"
-            # Accept any non-empty response (definitions sometimes produce
-            # explanation text; the formalize_statement filter handles this)
             assert len(lean.strip()) > 0, f"Empty formalization for {label}"
             results[label] = lean
 
@@ -132,8 +132,9 @@ class TestE2EReal:
         blocks = parse_latex(str(FIXTURE_TEX))
         # D2 is expensive — test on 1 block to validate the integration
         b = blocks[0]
-        latex = b["content_latex"]
-        lean = avid_app.formalize_statement(latex, API_KEY)
+        from src.formalization.providers import resolve_provider
+        provider = resolve_provider()
+        lean = avid_app.formalize_block_with_provider(b, provider)
         assert lean is not None
 
         d2 = check_triviality(lean, lean_project_dir=str(LEAN_PROJECT))
@@ -151,10 +152,11 @@ class TestE2EReal:
 
         for b in blocks:
             label = b["label"]
-            latex = b["content_latex"]
+            from src.formalization.providers import resolve_provider
+            provider = resolve_provider()
 
             # Formalize first so we have Lean statement for the query
-            lean = avid_app.formalize_statement(latex, API_KEY)
+            lean = avid_app.formalize_block_with_provider(b, provider)
 
             # Pass Lean statement to D1 for better Leandex matching
             d1_block = dict(b)
@@ -209,33 +211,31 @@ class TestE2EReal:
             latex = b["content_latex"]
 
             # Formalize
-            lean = avid_app.formalize_statement(latex, API_KEY)
+            from src.formalization.providers import resolve_provider
+            provider = resolve_provider()
+            lean = avid_app.formalize_block_with_provider(b, provider)
             formalized = lean is not None
             if formalized:
                 formalized_count += 1
 
-            # D2: skipped in integration test (already validated in Step 3)
-            # D2 takes ~4 min/block — run only if EXPLICIT_D2=1 env var is set
-            d2_result = None
-            if os.environ.get("E2E_FULL_D2") == "1" and lean and HAS_LEAN:
-                try:
-                    d2_result = check_triviality(lean, lean_project_dir=str(LEAN_PROJECT))
-                except Exception as e:
-                    print(f"  [warn] D2 failed for {label}: {e}")
-
-            # D1
-            d1_block = dict(b)
-            if lean:
-                d1_block["lean_statement"] = lean
-            d1_result = check_d1(d1_block)
-
-            # Map verdict
-            mapped = avid_app.map_verdict(d1_result, d2_result)
-            mapped["label"] = label
-            mapped["title"] = b.get("title") or label
-            mapped["content_preview"] = latex[:200].strip()
-            mapped["lean_statement"] = lean
-            mapped["formalized"] = formalized
+            # D2 + D1 via orchestrator
+            from src.novelty_v2.orchestrator import check_novelty
+            verdict = check_novelty(
+                block=b,
+                lean_statement=lean or latex,
+                lean_project_dir=str(LEAN_PROJECT),
+            )
+            
+            mapped = {
+                "veredicto": verdict.veredicto.value,
+                "status": "novel" if verdict.veredicto == Verdict.NOVEDAD_ENUNCIADO else "known",
+                "detail": verdict.razonamiento or "",
+                "label": label,
+                "title": b.get("title") or label,
+                "content_preview": latex[:200].strip(),
+                "lean_statement": lean,
+                "formalized": formalized,
+            }
             results.append(mapped)
 
         # ── Assertions ────────────────────────────────────────────────────
