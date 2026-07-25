@@ -261,7 +261,11 @@ def formalize_block_with_provider(
             # loop rename the definition before it enters the context.
             if can_compile:
                 _emit(f"round {round_num}/{max_rounds}: compiling in Lean…")
-                has_error, has_sorry, stdout, stderr = check_lean_file(str(target))
+                # Pass a Path, not a str: find_lean_project_root() calls
+                # .is_file() on it, so a str raises inside check_lean_file and
+                # every compile silently reports has_error=True — no model
+                # output can ever pass. (target is already a Path.)
+                has_error, has_sorry, stdout, stderr = check_lean_file(target)
                 logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
                     _emit(f"round {round_num}/{max_rounds}: Lean errors, retrying…")
