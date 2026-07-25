@@ -146,7 +146,13 @@ Rules:
 - Write a proper `{keyword}` declaration with the statement and its proof.
 - The proof must be complete — no `sorry`, no placeholders.
 - If the block is a definition, use `def` with `:=`.
-- Reference previously defined theorems by their Lean names.
+- IMPORTANT: never redeclare a name that already exists in Mathlib (e.g. `Even`,
+  `Prime`, `Continuous`). Redeclaring causes a `'X' has already been declared`
+  error. If the paper defines a concept Mathlib already has, give your `def` a
+  fresh, unused name (e.g. prefix it, `PaperEven`) and use that name consistently
+  in every later statement and proof.
+- Reference previously defined theorems and definitions by their exact Lean names
+  as they appear in the context below.
 - Available context (already formalized above):
 {context}
 - Wrap your response in ```lean ... ```.
@@ -240,8 +246,12 @@ def formalize_block_with_provider(
             full_code = f"import Mathlib\n\n{context_lean}\n\n{code}\n"
             target.write_text(full_code, encoding="utf-8")
 
-            # Compile check (only for non-definition blocks with proofs)
-            if can_compile and block_type != "definition":
+            # Compile check. We compile definitions too: a definition that
+            # shadows a Mathlib name (`Even`, `Prime`, …) compiles fine on its
+            # own but poisons every later block's context with an
+            # `already been declared` error. Catching it here lets the retry
+            # loop rename the definition before it enters the context.
+            if can_compile:
                 has_error, has_sorry, stdout, stderr = check_lean_file(str(target))
                 logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
