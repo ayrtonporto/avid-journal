@@ -35,6 +35,8 @@ from src.formalization.orchestrator import (
 )
 from src.formalization.providers.config import resolve_provider
 from src.formalization.providers.base import AgenticProvider
+from src.formalization.providers.openai_compatible import OpenAIChatProvider
+from src.formalization.providers.anthropic import AnthropicProvider
 from src.formalization.scripts.lean_checker import check_lean_file
 from src.publication import submit, list_submissions, record_novel_run
 
@@ -96,6 +98,38 @@ def resolve_api_key(user_key: str = "") -> str:
     if key:
         return key
     return SERVER_API_KEY
+
+
+# Providers a client can pick with their OWN API key: name -> (base_url,
+# default_model). "anthropic"/"claude" is special-cased to AnthropicProvider.
+# Note: the "Claude" option here means the Anthropic API (client's Anthropic
+# key) — NOT the Claude Code CLI, which is OAuth-only and server-local.
+CLIENT_PROVIDERS: Dict[str, tuple] = {
+    "openrouter": ("https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4"),
+    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-pro"),
+    "openai": ("https://api.openai.com/v1", "gpt-4o"),
+    "deepseek": ("https://api.deepseek.com/v1", "deepseek-chat"),
+    "mistral": ("https://api.mistral.ai/v1", "mistral-large-latest"),
+}
+
+
+def build_client_provider(provider_name: str, api_key: str, model: str = ""):
+    """Build a per-request ModelProvider from a client's provider choice + key.
+
+    The key is used only for this single request — never stored, never logged.
+    Returns None if provider_name or api_key is empty; raises ValueError on an
+    unknown provider name.
+    """
+    name = (provider_name or "").strip().lower()
+    key = (api_key or "").strip()
+    if not name or not key:
+        return None
+    if name in ("anthropic", "claude"):
+        return AnthropicProvider(api_key=key, model=(model or "claude-sonnet-4-20250514"))
+    if name in CLIENT_PROVIDERS:
+        base_url, default_model = CLIENT_PROVIDERS[name]
+        return OpenAIChatProvider(api_key=key, base_url=base_url, model=(model or default_model))
+    raise ValueError(f"Unknown provider: {provider_name}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -263,6 +297,7 @@ def process_tex(
     api_key_input: str = "",
     progress: gr.Progress = None,
     on_progress = None,
+    provider_name: str = "",
 ) -> tuple:
     """Full pipeline: .tex → parse → formalize → D2 → D1 → verdicts.
 
@@ -310,9 +345,15 @@ def process_tex(
     ordered = topological_sort(blocks)
     logger.info(f"Ordered {len(ordered)} blocks (topological sort)")
 
-    # Resolve provider
+    # Resolve provider: the client's own provider+key when supplied (transient,
+    # never stored or logged), otherwise the server default (DeepSeek V4 Pro).
     try:
-        provider = resolve_provider()
+        if provider_name and api_key_input.strip():
+            provider = build_client_provider(provider_name, api_key_input)
+            logger.info(f"Using client provider: {provider_name} ({type(provider).__name__})")
+        else:
+            provider = resolve_provider()
+            logger.info(f"Using server default provider: {type(provider).__name__}")
     except Exception as e:
         logger.warning(f"Provider not available: {e}")
         provider = None

@@ -322,11 +322,16 @@ async def api_analyze(request: Request):
     if not _check_rate(ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-    # Read uploaded file
+    # Read uploaded file + optional client model choice.
     form = await request.form()
     uploaded = form.get("file")
     if uploaded is None:
         raise HTTPException(status_code=400, detail="No file uploaded")
+
+    # Client's own provider + key (transient — used for this request only,
+    # never stored or logged). Empty => server default (DeepSeek V4 Pro).
+    client_provider = (form.get("provider") or "").strip()
+    client_api_key = (form.get("api_key") or "").strip()
 
     import tempfile, json as _json
     with tempfile.NamedTemporaryFile(suffix=".tex", delete=False) as tmp:
@@ -358,7 +363,12 @@ async def api_analyze(request: Request):
             try:
                 class FakeFile:
                     name = tex_path
-                summary, results, lean_path, pub_html = process_tex(FakeFile(), on_progress=on_progress_cb)
+                summary, results, lean_path, pub_html = process_tex(
+                    FakeFile(),
+                    api_key_input=client_api_key,
+                    provider_name=client_provider,
+                    on_progress=on_progress_cb,
+                )
                 result_holder["summary"] = summary
                 result_holder["results"] = results
                 result_holder["lean_path"] = lean_path

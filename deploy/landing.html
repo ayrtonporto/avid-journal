@@ -395,6 +395,34 @@
           <div class="upload"><div class="ic">🔒</div><div class="ut">Sign in with <b>Google</b> to analyze</div><div class="uf">your papers are private until published</div></div>
         </div>
       </div>
+
+      <!-- MODEL CHOICE (shown once signed in) -->
+      <div id="model-choice" style="display:none;margin-top:20px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--maroon);margin-bottom:10px">Model</div>
+        <label style="display:flex;align-items:center;gap:8px;font-family:Inter,sans-serif;font-size:14px;color:var(--ink-2);margin-bottom:7px;cursor:pointer">
+          <input type="radio" name="model-mode" value="provided" checked
+                 onchange="document.getElementById('own-key-fields').style.display='none'">
+          Use the provided model <span style="color:var(--ink-3)">— DeepSeek&nbsp;V4&nbsp;Pro (limited)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-family:Inter,sans-serif;font-size:14px;color:var(--ink-2);cursor:pointer">
+          <input type="radio" name="model-mode" value="own"
+                 onchange="document.getElementById('own-key-fields').style.display='block'">
+          Use my own API key
+        </label>
+        <div id="own-key-fields" style="display:none;margin-top:12px">
+          <select id="provider-select" style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:8px">
+            <option value="openrouter">OpenRouter</option>
+            <option value="anthropic">Claude (Anthropic)</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="mistral">Mistral</option>
+          </select>
+          <input type="password" id="api-key-input" placeholder="Your API key"
+                 style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px">
+          <div style="font-family:Inter,sans-serif;font-size:12px;color:var(--ink-3);margin-top:6px">Sent over HTTPS, used for this analysis only — never saved or logged.</div>
+        </div>
+      </div>
     </div>
 
     <!-- RESULTS (hidden until analysis runs) -->
@@ -641,6 +669,8 @@ function updateAuthUI() {
   const navAuth = document.getElementById("nav-auth");
   const uploadGate = document.getElementById("upload-gate");
   if (!navAuth || !uploadGate) return;
+  const modelChoice = document.getElementById("model-choice");
+  if (modelChoice) modelChoice.style.display = isLoggedIn() ? "block" : "none";
 
   if (isLoggedIn()) {
     const userName = DEV_MODE ? "Dev Mode" : AUTH_USER.name;
@@ -727,6 +757,19 @@ async function analyze(file) {
   try {
     const formData = new FormData();
     formData.append("file", file);
+
+    // Model choice: own provider+key, or the provided default (DeepSeek).
+    const mode = document.querySelector('input[name="model-mode"]:checked')?.value;
+    if (mode === "own") {
+      const prov = document.getElementById("provider-select")?.value || "";
+      const key = document.getElementById("api-key-input")?.value?.trim() || "";
+      if (!key) {
+        statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter your API key, or switch to the provided model.</span>';
+        return;
+      }
+      formData.append("provider", prov);
+      formData.append("api_key", key);
+    }
 
     const headers = {};
     if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
