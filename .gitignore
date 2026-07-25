@@ -72,6 +72,11 @@ src/publication/submissions.json
 TestLemmas.lean
 .hermes/
 src/users/users.db
+# Ephemeral Lean compile scratch written into lean_project/ at runtime
+lean_project/tmp*.lean
+lean_project/_prewarm_*.lean
+# Locally-built Lean REPL binary (prod builds it in the Docker image)
+vendor/repl/
 avid_journal.tex
 *.db-shm
 *.db-wal

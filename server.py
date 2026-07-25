@@ -127,12 +127,49 @@ def _prewarm_mathlib() -> None:
             pass
 
 
+def _warm_minilm() -> None:
+    """Load the MiniLM model once at boot so the first novelty check (D1 stage A)
+    doesn't pay the lazy cold-load (torch init, tens of seconds) mid-request."""
+    try:
+        from src.novelty.block_comparator import get_model
+        get_model()
+        logger.info("[prewarm] MiniLM model loaded")
+    except Exception as e:
+        logger.warning("[prewarm] MiniLM preload failed: %s", e)
+
+
+def _warm_startup() -> None:
+    """Warm Lean on boot. If the resident REPL pool is enabled, starting it
+    imports Mathlib into every worker (which also warms the OS disk cache), so
+    it subsumes the cold prewarm. Otherwise fall back to the cold prewarm."""
+    from src.lean_repl import pool_enabled, warm_pool
+    import app as _appmod
+
+    # MiniLM powers the D1 novelty coarse filter; load it up front too.
+    _warm_minilm()
+
+    if pool_enabled():
+        logger.info("[prewarm] starting resident REPL pool…")
+        pool = warm_pool(_appmod.LEAN_PROJECT_DIR)
+        if pool is not None:
+            logger.info("[prewarm] REPL pool warm and ready")
+            return
+        logger.warning("[prewarm] REPL pool unavailable — using cold prewarm")
+    _prewarm_mathlib()
+
+
 @app.on_event("startup")
 async def _on_startup() -> None:
     if os.environ.get("AVID_PREWARM", "1") == "1":
         import threading
-        threading.Thread(target=_prewarm_mathlib, daemon=True).start()
+        threading.Thread(target=_warm_startup, daemon=True).start()
         logger.info("[prewarm] background warm-up started")
+
+
+@app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    from src.lean_repl import shutdown_pool
+    shutdown_pool()
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Landing page

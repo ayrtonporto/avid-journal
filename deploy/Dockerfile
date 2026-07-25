@@ -42,6 +42,19 @@ WORKDIR /app/lean_project
 RUN lake exe cache get || echo "Cache download failed — will need to build from source"
 RUN lake build || echo "Build failed — D2 will be disabled"
 
+# ── Lean REPL (resident Mathlib pool) ──────────────────────────────────────
+# Build leanprover-community/repl on the SAME toolchain as Mathlib (v4.29.0) so
+# its oleans are compatible. The pool keeps Mathlib resident in env 0 and drops
+# every compile check from ~27s to sub-second. If this build fails the app
+# still works — it falls back to the cold `lake env lean` path automatically.
+WORKDIR /app/vendor
+RUN git clone --depth 1 --branch v4.29.0-rc8 \
+      https://github.com/leanprover-community/repl.git repl \
+    && echo "leanprover/lean4:v4.29.0" > repl/lean-toolchain \
+    && (cd repl && lake build repl) \
+    || echo "REPL build failed — pool disabled, cold path will be used"
+WORKDIR /app/lean_project
+
 # ── Source code ───────────────────────────────────────────────────────────
 WORKDIR /app
 COPY src/ ./src/
@@ -60,6 +73,18 @@ ENV LEAN_PROJECT_DIR=/app/lean_project
 ENV LANDING_HTML=/app/deploy/landing.html
 ENV AVID_FORMALIZATION_ENABLED=1
 ENV AVID_D2_ENABLED=1
+
+# Resident Lean REPL pool (see .env.example). Enabled by default in the image;
+# the app falls back to the cold path if the REPL binary is missing. Tune
+# AVID_REPL_POOL_SIZE to the host RAM (each worker holds Mathlib, ~4-6 GB).
+ENV AVID_REPL_POOL=1
+ENV AVID_REPL_BIN=/app/vendor/repl/.lake/build/bin/repl
+ENV AVID_REPL_POOL_SIZE=2
+
+# D1 novelty (C_I) tuning: enable the theorem-level source (replaces Semantic
+# Scholar) and hard-cap each DeepSeek judge call so novelty never hangs.
+ENV THEOREMSEARCH_ENABLED=1
+ENV AVID_JUDGE_TIMEOUT=30
 
 EXPOSE 7860
 

@@ -328,7 +328,7 @@
         </div>
         <div class="actions">
           <a class="btn btn-primary" href="#try">Try the demo <span class="arr">↓</span></a>
-          <a class="btn btn-secondary" href="https://github.com/avid-journal" target="_blank" rel="noopener">View on GitHub</a>
+          <a class="btn btn-secondary" href="https://github.com/ayrtonporto/avid-journal" target="_blank" rel="noopener">View on GitHub</a>
         </div>
       </div>
 
@@ -411,6 +411,7 @@
         </label>
         <div id="own-key-fields" style="display:none;margin-top:12px">
           <select id="provider-select" onchange="onProviderChange()" style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:8px">
+            <option value="claude-code" data-model="" data-devonly="1">Claude Code (local · OAuth · no key)</option>
             <option value="opencode" data-model="deepseek-v4-pro">OpenCode Go — DeepSeek V4 Pro</option>
             <option value="opencode" data-model="qwen3.7-max">OpenCode Go — Qwen 3.7 Max</option>
             <option value="openrouter" data-model="anthropic/claude-sonnet-4">OpenRouter</option>
@@ -772,6 +773,11 @@ function onProviderChange() {
   const sel = document.getElementById("provider-select");
   const mi = document.getElementById("model-input");
   if (!sel || !mi) return;
+  // Claude Code is server-local + OAuth: no API key, model optional. Hide the
+  // key field to avoid confusion.
+  const keyEl = document.getElementById("api-key-input");
+  const isClaudeCode = sel.value === "claude-code";
+  if (keyEl) keyEl.style.display = isClaudeCode ? "none" : "";
   // Read the model straight off the selected <option> (data-model), so two
   // options sharing the same provider value — e.g. OpenCode Go with DeepSeek
   // vs Qwen — resolve to different models.
@@ -820,17 +826,23 @@ async function analyze(file) {
       const prov = document.getElementById("provider-select")?.value || "";
       const model = document.getElementById("model-input")?.value?.trim() || "";
       const key = document.getElementById("api-key-input")?.value?.trim() || "";
-      if (!key) {
-        statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter your API key, or switch to the provided model.</span>';
-        return;
+      // Claude Code (local, OAuth) is server-local and needs no API key/model.
+      if (prov === "claude-code") {
+        formData.append("provider", prov);
+        formData.append("model", model);   // optional; blank => Claude Code default
+      } else {
+        if (!key) {
+          statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter your API key, or switch to the provided model.</span>';
+          return;
+        }
+        if (!model) {
+          statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter a model ID for ' + prov + '.</span>';
+          return;
+        }
+        formData.append("provider", prov);
+        formData.append("model", model);
+        formData.append("api_key", key);
       }
-      if (!model) {
-        statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter a model ID for ' + prov + '.</span>';
-        return;
-      }
-      formData.append("provider", prov);
-      formData.append("model", model);
-      formData.append("api_key", key);
     }
 
     const headers = {};
@@ -945,6 +957,20 @@ function renderResults(filename, summary, results, pubHtml) {
 
 // Init on page load
 updateAuthUI();
+
+// Claude Code (OAuth) is a server-local formalizer — hide it on the deployed
+// web (the backend still accepts provider=claude-code for local runs). It stays
+// visible in dev mode (AVID_DEV_MODE=1, e.g. run_local_demo.ps1).
+(function hideLocalOnlyProviders() {
+  if (DEV_MODE) return;
+  const sel = document.getElementById("provider-select");
+  if (!sel) return;
+  Array.prototype.forEach.call(sel.querySelectorAll("option[data-devonly]"), function (opt) {
+    opt.remove();
+  });
+  if (sel.options.length) sel.selectedIndex = 0;  // re-pick a visible default
+  onProviderChange();
+})();
 
 // ═══════════════════════════════════════════════════════════════════
 // PUBLICATION

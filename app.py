@@ -35,9 +35,11 @@ from src.formalization.orchestrator import (
 )
 from src.formalization.providers.config import resolve_provider
 from src.formalization.providers.base import AgenticProvider
+from src.formalization.providers.claude_code import ClaudeCodeProvider
 from src.formalization.providers.openai_compatible import OpenAIChatProvider
 from src.formalization.providers.anthropic import AnthropicProvider
 from src.formalization.scripts.lean_checker import check_lean_file
+from src.lean_repl import compile_check
 from src.publication import submit, list_submissions, record_novel_run
 
 logging.basicConfig(level=logging.INFO)
@@ -261,11 +263,14 @@ def formalize_block_with_provider(
             # loop rename the definition before it enters the context.
             if can_compile:
                 _emit(f"round {round_num}/{max_rounds}: compiling in Lean…")
-                # Pass a Path, not a str: find_lean_project_root() calls
-                # .is_file() on it, so a str raises inside check_lean_file and
-                # every compile silently reports has_error=True — no model
-                # output can ever pass. (target is already a Path.)
-                has_error, has_sorry, stdout, stderr = check_lean_file(target)
+                # compile_check uses a resident Mathlib REPL (env 0) when the
+                # pool is enabled — no per-check `import Mathlib` (~27s saved),
+                # falling back to the cold check_lean_file when the pool is off
+                # or unavailable. It rewrites `target` in the fallback path, so
+                # `full_code` above stays the reference frame for line numbers.
+                has_error, has_sorry, stdout, stderr = compile_check(
+                    code, context_lean, target, lean_project_dir
+                )
                 logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
                     _emit(f"round {round_num}/{max_rounds}: Lean errors, retrying…")
@@ -321,18 +326,35 @@ def _build_context_lean(formalized: list[tuple[str, str]]) -> str:
 # Publishability check
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _is_publishable(results: List[dict]) -> bool:
-    """A paper is publishable if ALL blocks are novel (no matches, no trivial, no errors)."""
-    if not results:
-        return False
-    publishable_verdicts = {
+def _block_blocks_publication(r: dict) -> bool:
+    """True if this block prevents the paper from being published.
+
+    Definitions are supporting scaffolding: they are very often already
+    known (e.g. `Even` is in Mathlib) and being known must NOT block a
+    paper. A definition only blocks publication if it failed to formalize.
+    Theorems/lemmas must be genuinely novel.
+    """
+    novel_verdicts = {
         Verdict.NOVEDAD_ENUNCIADO.value,
         Verdict.NOVEDAD_DEMOSTRACION.value,
     }
-    for r in results:
-        if r.get("veredicto") not in publishable_verdicts:
-            return False
-    return True
+    if (r.get("type") or "").lower() == "definition":
+        # A known definition is fine; only a formalization failure blocks.
+        return r.get("veredicto") == "ERROR" or not r.get("formalized")
+    return r.get("veredicto") not in novel_verdicts
+
+
+def _is_publishable(results: List[dict]) -> bool:
+    """A paper is publishable if every theorem/lemma is novel and at least
+    one such claim exists. Definitions may be known (see
+    _block_blocks_publication) without disqualifying the paper."""
+    if not results:
+        return False
+    if any(_block_blocks_publication(r) for r in results):
+        return False
+    # Require at least one novel claim — a paper of only definitions is not
+    # a result.
+    return any((r.get("type") or "").lower() != "definition" for r in results)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -396,7 +418,14 @@ def process_tex(
     # Resolve provider: the client's own provider+key when supplied (transient,
     # never stored or logged), otherwise the server default (DeepSeek V4 Pro).
     try:
-        if provider_name and api_key_input.strip():
+        pname = (provider_name or "").strip().lower()
+        if pname in ("claude-code", "claude-cli", "claude-oauth"):
+            # Claude Code CLI: agentic, OAuth, server-local — no API key. It
+            # formalizes via the orchestrator's agentic path. Requires `claude`
+            # on PATH (see run_local_demo.ps1 / deploy notes).
+            provider = ClaudeCodeProvider(model=(model_name or None))
+            logger.info("Using agentic Claude Code (OAuth) provider")
+        elif provider_name and api_key_input.strip():
             provider = build_client_provider(provider_name, api_key_input, model=model_name)
             logger.info(f"Using client provider: {provider_name} model={model_name or '(default)'} ({type(provider).__name__})")
         else:
@@ -440,6 +469,9 @@ def process_tex(
                 paper_title=scratch_title,
                 parent_project=str(LEAN_PROJECT_DIR) if LEAN_PROJECT_DIR.exists() else None,
                 resume=False,
+                # formalize_paper rebuilds the provider from `model`; map the
+                # agentic Claude Code provider to the orchestrator's "claude".
+                model=("claude" if isinstance(provider, ClaudeCodeProvider) else None),
                 on_progress=fp_progress,
             )
             blocks_dir = Path(fp_summary["project_dir"]) / "Blocks"
@@ -711,7 +743,7 @@ def _build_publication_section(
         </div>
         """
     else:
-        failed = [r for r in results if r.get("veredicto") != Verdict.NOVEDAD_ENUNCIADO.value]
+        failed = [r for r in results if _block_blocks_publication(r)]
         failed_list = "".join(
             f"<li><b>{r['title']}</b>: {r['veredicto']}</li>"
             for r in failed[:5]
