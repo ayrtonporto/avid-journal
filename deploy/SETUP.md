@@ -5,9 +5,13 @@ After setup, your domain will serve the full pipeline: upload → analyze → ve
 
 ## Prerequisites
 
+- A Linux VPS with **≥ 8 GB RAM** (each resident Lean REPL worker holds Mathlib
+  in memory, ~4–6 GB — see the RAM sizing note in Step 3). 8 GB → run serial
+  (`AVID_REPL_POOL_SIZE=1`); 16 GB → two concurrent analyses (`=2`).
 - Docker + Docker Compose installed
 - `git` installed
 - Domain delegated to Cloudflare (`avidjournal.com.ar` or your own)
+- A **Google OAuth Client ID** (unless you run open, no-login — see Step 3).
 
 ---
 
@@ -43,11 +47,27 @@ Edit `.env` and fill in:
 ```ini
 OPENCODE_GO_API_KEY=sk-xxx
 CLOUDFLARE_TUNNEL_TOKEN=eyJ...
+# Google sign-in is REQUIRED by default (AVID_DEV_MODE=0). Without a client ID
+# nobody can log in and /api/analyze returns 401. Create one (OAuth 2.0 Client
+# ID, type "Web application") at https://console.cloud.google.com/apis/credentials
+# and add your domain to both "Authorized JavaScript origins" and redirect URIs.
+GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
 ```
 
-Optional:
+**RAM sizing** — each resident Lean REPL worker keeps Mathlib in memory
+(~4–6 GB). Set the pool size to your box:
 ```ini
-GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
+AVID_REPL_POOL_SIZE=1   # 8 GB box: serial (default in the image is 2 → needs ~16 GB)
+```
+
+To run **open, with no login** (careful — this leaves your API key usable by
+anyone who hits the site, and re-shows the local-only "Claude Code" provider):
+```ini
+AVID_DEV_MODE=1
+```
+
+Optional (email confirmations):
+```ini
 AVID_SMTP_HOST=smtp.gmail.com
 AVID_SMTP_PORT=587
 AVID_SMTP_USER=you@gmail.com
