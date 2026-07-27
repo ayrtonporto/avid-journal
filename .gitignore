@@ -80,3 +80,5 @@ vendor/repl/
 avid_journal.tex
 *.db-shm
 *.db-wal
+# D3 temp extraction files
+lean_project/Papers/_d3_temp/

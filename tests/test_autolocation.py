@@ -20,7 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 def test_locate_single_theorem(tmp_path):
     """Find a theorem and compute exact line range."""
-    from src.novelty_v2.premise_autolocation import locate_theorem_in_file
+    from src.novelty.premise_autolocation import locate_theorem_in_file
 
     # No trailing blank/comment lines after the theorem body
     content = """import Mathlib
@@ -41,7 +41,7 @@ theorem my_lemma (x : Nat) : x = x := by
 
 def test_locate_theorem_with_end_keyword(tmp_path):
     """Theorem that ends at the next declaration keyword."""
-    from src.novelty_v2.premise_autolocation import locate_theorem_in_file
+    from src.novelty.premise_autolocation import locate_theorem_in_file
 
     content = """import Mathlib
 
@@ -65,7 +65,7 @@ lemma second_one : 2 = 2 := by
 
 def test_locate_last_theorem_in_file(tmp_path):
     """Last theorem goes to EOF."""
-    from src.novelty_v2.premise_autolocation import locate_theorem_in_file
+    from src.novelty.premise_autolocation import locate_theorem_in_file
 
     content = """theorem only_one : True :=
   trivial
@@ -82,7 +82,7 @@ def test_locate_last_theorem_in_file(tmp_path):
 
 def test_locate_not_found(tmp_path):
     """Non-existent theorem returns None."""
-    from src.novelty_v2.premise_autolocation import locate_theorem_in_file
+    from src.novelty.premise_autolocation import locate_theorem_in_file
 
     f = tmp_path / "test4.lean"
     f.write_text("theorem x : 1=1 := rfl\n")
@@ -100,8 +100,8 @@ def test_two_consecutive_theorems_no_premise_contamination(tmp_path):
     are consecutive, the end_line of the first stops at the second's header,
     so premises from the second theorem don't contaminate the first.
     """
-    from src.novelty_v2.premise_autolocation import locate_theorem_in_file
-    from src.novelty_v2.dimensions.d3_premises import compute_d3
+    from src.novelty.premise_autolocation import locate_theorem_in_file
+    from src.novelty.dimensions.d3_premises import compute_d3
 
     content = """import Mathlib.Tactic
 
@@ -134,7 +134,7 @@ theorem second_theorem : 2 + 2 = (4 : Nat) := by
 
 def test_consecutive_theorems_end_before_next(tmp_path):
     """Lemma followed by def: lemma's end is before the def."""
-    from src.novelty_v2.premise_autolocation import locate_theorem_in_file
+    from src.novelty.premise_autolocation import locate_theorem_in_file
 
     content = """lemma lem_a : 1 = 1 := rfl
 
@@ -153,7 +153,7 @@ def def_b : Nat := 42
 
 def test_locate_mathlib_irrational_sqrt_two():
     """Auto-locate irrational_sqrt_two in Mathlib sources."""
-    from src.novelty_v2.premise_autolocation import locate_mathlib_source
+    from src.novelty.premise_autolocation import locate_mathlib_source
 
     mathlib_root = (
         REPO_ROOT / "lean_project" / ".lake" / "packages" / "mathlib"
@@ -173,7 +173,7 @@ def test_locate_mathlib_irrational_sqrt_two():
 
 def test_locate_mathlib_not_found():
     """Non-existent name returns None."""
-    from src.novelty_v2.premise_autolocation import locate_mathlib_source
+    from src.novelty.premise_autolocation import locate_mathlib_source
 
     mathlib_root = (
         REPO_ROOT / "lean_project" / ".lake" / "packages" / "mathlib"
@@ -191,7 +191,7 @@ def test_locate_mathlib_not_found():
 
 def test_locate_candidate_t08a():
     """Auto-locate t08a_parity from the D3 calibration paper directory."""
-    from src.novelty_v2.premise_autolocation import locate_candidate_source
+    from src.novelty.premise_autolocation import locate_candidate_source
 
     proj = REPO_ROOT / "lean_project"
     result = locate_candidate_source("t08a_parity", proj)
@@ -205,7 +205,7 @@ def test_locate_candidate_t08a():
 
 def test_locate_candidate_t08b():
     """Auto-locate t08b_valuation from scan."""
-    from src.novelty_v2.premise_autolocation import locate_candidate_source
+    from src.novelty.premise_autolocation import locate_candidate_source
 
     proj = REPO_ROOT / "lean_project"
     result = locate_candidate_source("t08b_valuation", proj)
@@ -218,7 +218,7 @@ def test_locate_candidate_t08b():
 
 def test_locate_candidate_not_found():
     """Non-existent theorem returns None."""
-    from src.novelty_v2.premise_autolocation import locate_candidate_source
+    from src.novelty.premise_autolocation import locate_candidate_source
 
     proj = REPO_ROOT / "lean_project"
     result = locate_candidate_source("nonexistent_thm_xyz", proj)
@@ -231,7 +231,7 @@ def test_locate_candidate_not_found():
 
 def test_resolve_ast_json_for_project_file():
     """ast.json for a file directly in the lean project."""
-    from src.novelty_v2.premise_autolocation import resolve_ast_json_path
+    from src.novelty.premise_autolocation import resolve_ast_json_path
 
     proj = REPO_ROOT / "lean_project"
     lean_file = proj / "Papers" / "D3_Calibration" / "Paper.lean"
@@ -244,7 +244,7 @@ def test_resolve_ast_json_for_project_file():
 
 def test_resolve_ast_json_for_mathlib_file():
     """ast.json for a Mathlib package file."""
-    from src.novelty_v2.premise_autolocation import resolve_ast_json_path
+    from src.novelty.premise_autolocation import resolve_ast_json_path
 
     proj = REPO_ROOT / "lean_project"
     lean_file = (
@@ -271,11 +271,11 @@ def test_t08_auto_location_end_to_end():
       2. Side B: irrational_sqrt_two auto-located from Mathlib
       3. compute_d3 produces the expected result
     """
-    from src.novelty_v2.premise_autolocation import (
+    from src.novelty.premise_autolocation import (
         locate_candidate_source, locate_mathlib_source,
     )
-    from src.novelty_v2.premise_extraction import extract_premises_for_theorem
-    from src.novelty_v2.dimensions.d3_premises import compute_d3
+    from src.novelty.premise_extraction import extract_premises_for_theorem
+    from src.novelty.dimensions.d3_premises import compute_d3
 
     proj = REPO_ROOT / "lean_project"
     mathlib_root = proj / ".lake" / "packages" / "mathlib"

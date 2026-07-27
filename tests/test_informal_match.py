@@ -25,7 +25,7 @@ if str(REPO_ROOT) not in sys.path:
 def test_lemma_proof_then_theorem_proof_selects_correct_one():
     """Bug case: lemma→proof→theorem→proof. Asking for the theorem
     must return the THEOREM's proof, not the lemma's."""
-    from src.novelty_v2.informal_match import _extract_proof_block
+    from src.novelty.informal_match import _extract_proof_block
 
     tex = r"""
 \begin{lemma}[Auxiliary result]
@@ -55,7 +55,7 @@ This is the theorem proof. Apply the lemma.
 
 def test_no_proof_between_two_environments():
     """Theorem env followed by another env with no proof in between → None."""
-    from src.novelty_v2.informal_match import _extract_proof_block
+    from src.novelty.informal_match import _extract_proof_block
 
     tex = r"""
 \begin{theorem}[No proof theorem]
@@ -77,7 +77,7 @@ Proof of the lemma, not the theorem.
 
 def test_statement_not_found_returns_none():
     """Statement hint that doesn't match any theorem body → None."""
-    from src.novelty_v2.informal_match import _extract_proof_block
+    from src.novelty.informal_match import _extract_proof_block
 
     tex = r"""
 \begin{theorem}[Some theorem]
@@ -93,7 +93,7 @@ Trivial.
 
 def test_empty_hint_returns_first_proof():
     """With no statement hint, return the first proof found."""
-    from src.novelty_v2.informal_match import _extract_proof_block
+    from src.novelty.informal_match import _extract_proof_block
 
     tex = r"""
 \begin{theorem}[First]
@@ -117,7 +117,7 @@ Proof of second.
 
 def test_partial_word_overlap_sufficient():
     """Partial word overlap above threshold should still match."""
-    from src.novelty_v2.informal_match import _extract_proof_block
+    from src.novelty.informal_match import _extract_proof_block
 
     tex = r"""
 \begin{theorem}[Prime numbers]
@@ -135,7 +135,7 @@ Euclid's classic proof...
 
 def test_normalize_tex_strips_commands():
     """_normalize_tex removes LaTeX commands for comparison."""
-    from src.novelty_v2.informal_match import _normalize_tex
+    from src.novelty.informal_match import _normalize_tex
 
     tex = r"\mathbb{N} and \sqrt{2} is \frac{a}{b}"
     result = _normalize_tex(tex)
@@ -146,13 +146,13 @@ def test_normalize_tex_strips_commands():
 
 
 def test_word_overlap_identical():
-    from src.novelty_v2.informal_match import _word_overlap
+    from src.novelty.informal_match import _word_overlap
 
     assert _word_overlap("infinitely many primes", "infinitely many primes") == 1.0
 
 
 def test_word_overlap_partial():
-    from src.novelty_v2.informal_match import _word_overlap
+    from src.novelty.informal_match import _word_overlap
 
     score = _word_overlap("infinitely many prime numbers exist",
                           "there are infinitely many primes")
@@ -161,7 +161,7 @@ def test_word_overlap_partial():
 
 
 def test_word_overlap_no_match():
-    from src.novelty_v2.informal_match import _word_overlap
+    from src.novelty.informal_match import _word_overlap
 
     assert _word_overlap("quantum physics", "prime numbers") == 0.0
 
@@ -172,7 +172,7 @@ def test_word_overlap_no_match():
 
 def test_short_proof_gets_delegation_flag():
     """Proof < 400 chars with \ref{} gets the flag."""
-    from src.novelty_v2.informal_match import _check_proof_delegation
+    from src.novelty.informal_match import _check_proof_delegation
 
     short_proof = r"Direct consequence of Lemma~\ref{lem:cauchy} and \cite{author}."
     assert _check_proof_delegation(short_proof) is True
@@ -180,7 +180,7 @@ def test_short_proof_gets_delegation_flag():
 
 def test_long_substantial_proof_no_flag():
     """Proof > 400 chars without heavy delegation gets no flag."""
-    from src.novelty_v2.informal_match import _check_proof_delegation
+    from src.novelty.informal_match import _check_proof_delegation
 
     long_proof = (
         "We proceed by induction on n. "
@@ -196,7 +196,7 @@ def test_long_substantial_proof_no_flag():
 
 def test_proof_with_delegation_words_flagged():
     """Proof with many 'follows from' / 'Lemma' references."""
-    from src.novelty_v2.informal_match import _check_proof_delegation
+    from src.novelty.informal_match import _check_proof_delegation
 
     proof = ("follows from Lemma A. follows from Corollary B. "
              "by the previous result. immediate from Lemma C. "
@@ -211,7 +211,7 @@ def test_proof_with_delegation_words_flagged():
 def test_real_arxiv_1303_0730_primes_proof():
     """The infinitude of primes proof is correctly extracted."""
     import tempfile
-    from src.novelty_v2.informal_match import (
+    from src.novelty.informal_match import (
         _download_arxiv_source, _find_main_tex, _extract_proof_block,
     )
 
@@ -242,7 +242,7 @@ def test_real_arxiv_1607_03618_not_caught_by_lemma():
     Cauchy-Schwarz. It should either return the correct short proof
     or None (safety net)."""
     import tempfile
-    from src.novelty_v2.informal_match import (
+    from src.novelty.informal_match import (
         _download_arxiv_source, _find_main_tex, _extract_proof_block,
     )
 

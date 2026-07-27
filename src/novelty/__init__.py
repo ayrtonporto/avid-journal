@@ -1,30 +1,30 @@
-"""AViD Journal - Novelty Check Module.
+"""AViD Journal — Novelty Check Module.
 
-Pipeline en cascada (barato -> caro, parar pronto) para determinar si un
-bloque matematico de un paper nuevo es novedoso respecto a Mathlib y a la
-literatura indexada en Semantic Scholar / ArXiv.
+Implementación de la métrica de novedad.
 
-Stages activos en esta version:
-  0. Mathlib check via Leandex                (mathlib_checker)
-  1. Semantic Scholar + ArXiv search          (arxiv_search)
-  2. Block-level embedding comparison         (paper_extractor + block_comparator)
-  3. Claude judge sobre pares similares       (llm_judge)
+Tres dimensiones independientes:
+  D1 — No-existencia previa  (dimensions/d1_existence.py)
+  D2 — No-trivialidad        (dimensions/d2_triviality.py)
+  D3 — Distancia estructural (dimensions/d3_premises.py)
 
-Stages 4 y 5 (formalizacion del bloque candidato + arbol de tipos, comparacion
-de terminos de prueba) estan fuera de scope en v1: tras un veredicto
-"equivalent" en Stage 3 se devuelve NOT_NOVEL directamente.
+Árbol de decisión combinado y siete veredictos finales definidos en
+types.py y orchestrator.py.
 """
 
-from src.novelty.novelty_checker import (
-    BlockVerdict,
-    NoveltyChecker,
-    NoveltyLabel,
-    PaperVerdict,
+from src.novelty.orchestrator import check_novelty
+from src.novelty.types import (
+    NoveltyVerdict,
+    Verdict,
+    D1Result,
+    D2Result,
+    D3Result,
 )
 
 __all__ = [
-    "BlockVerdict",
-    "NoveltyChecker",
-    "NoveltyLabel",
-    "PaperVerdict",
+    "check_novelty",
+    "NoveltyVerdict",
+    "Verdict",
+    "D1Result",
+    "D2Result",
+    "D3Result",
 ]

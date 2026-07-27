@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.novelty_v2.dimensions.d3_premises import compute_d3
+from src.novelty.dimensions.d3_premises import compute_d3
 
 
 # ---------------------------------------------------------------------------

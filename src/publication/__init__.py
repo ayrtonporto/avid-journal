@@ -195,15 +195,19 @@ def record_novel_run(
     verdicts: Optional[Dict[str, Any]] = None,
     n_theorems: int = 0,
     title: str = "",
+    novel: bool = True,
 ) -> Dict[str, Any]:
-    """Auto-persist a NOVEL-verified run with empty author data.
+    """Auto-persist a run with empty author data.
 
-    Called at the end of a run once the paper passed as novel. Stores the
-    input .tex and the output .lean plus novelty metadata. Personal data is
-    left empty; enrich_submission() fills it if/when the author submits.
+    Called at the end of every analysis. Stores the input .tex and the output
+    .lean plus novelty metadata. Personal data is left empty; enrich_submission()
+    fills it if/when the author submits.
+
+    Args:
+        novel: whether the paper passed all novelty checks (affects publishability).
     """
     return _create(
-        status="auto_recorded", source="auto", novel=True,
+        status="auto_recorded", source="auto", novel=novel,
         tex_path=tex_path, lean_path=lean_path,
         title=title, authors="", email="", abstract="", affiliation="",
         llm_model="", llm_strategy="",

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AViD Journal — Automated novelty assessment for formalized mathematics</title>
+<title>AViD Journal: Automated novelty assessment for formalized mathematics</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -36,11 +36,11 @@
   ::selection{background:#f1d9dc;color:var(--ink)}
   em{font-style:italic}
 
-  /* ─── one consistent container everywhere ─── */
+  /* --- one consistent container everywhere --- */
   .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
   @media(max-width:600px){.wrap{padding:0 20px}}
 
-  /* ─── sticky nav (adopted from C, restyled to B) ─── */
+  /* --- sticky nav (adopted from C, restyled to B) --- */
   .runhead{
     position:sticky;top:0;z-index:30;background:var(--bg);
     border-bottom:1px solid var(--rule);
@@ -58,7 +58,7 @@
   .nav-cta:hover{border-color:var(--maroon);color:var(--maroon);text-decoration:none}
   @media(max-width:720px){.runhead nav{display:none}}
 
-  /* ─── masthead / hero ─── */
+  /* --- masthead / hero --- */
   .masthead{padding:54px 0 96px}
   @media(max-width:600px){.masthead{padding:40px 0 60px}}
   .label{font-family:"Inter",sans-serif;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--maroon);font-weight:600;margin-bottom:22px}
@@ -88,7 +88,7 @@
   .btn-secondary{color:var(--ink)}
   .btn-secondary:hover{border-color:var(--maroon);color:var(--maroon)}
 
-  /* ─── hero terminal (adopted from A, restyled to B's ink palette) ─── */
+  /* --- hero terminal (adopted from A, restyled to B's ink palette) ─── */
   .term{
     background:var(--ink);border:1px solid #2b2a26;overflow:hidden;
     box-shadow:0 26px 54px -34px rgba(17,17,16,.6);
@@ -111,7 +111,7 @@
   @keyframes blink{50%{opacity:0}}
   @media(prefers-reduced-motion:reduce){.cursor{animation:none}}
 
-  /* ─── nameplate · spectrum · sidenotes · drop cap (B personality) ─── */
+  /* --- nameplate · spectrum · sidenotes · drop cap (B personality) --- */
   .nameplate{
     display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
     font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;
@@ -153,7 +153,7 @@
     .has-notes .sidenote{float:right;clear:right;width:184px;margin:6px 0 18px 28px}
   }
 
-  /* ─── section structure — numbered eyebrows (mono) ─── */
+  /* --- section structure: numbered eyebrows (mono) --- */
   section{padding:96px 0;border-top:1px solid var(--rule)}
   @media(max-width:600px){section{padding:60px 0}}
   .sec-num{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--maroon);margin-bottom:16px}
@@ -174,7 +174,7 @@
   @media(max-width:640px){.compare .col2{border-top:1px solid var(--ink)}.compare .cell.av{border-left:none}}
   .compare ul{list-style:none}
   .compare li{font-size:18px;line-height:1.45;padding:9px 0;display:flex;gap:11px;color:var(--ink-2)}
-  .compare li::before{content:"—";color:var(--rule-2);flex:0 0 auto;font-family:"Inter",sans-serif}
+  .compare li::before{content:"–";color:var(--rule-2);flex:0 0 auto;font-family:"Inter",sans-serif}
   .compare .av li::before{color:var(--maroon-soft)}
   .marginnote{font-family:"Inter",sans-serif;font-size:14px;color:var(--ink-3);border-left:2px solid var(--maroon);padding:4px 0 4px 18px;margin-top:30px;max-width:58ch;line-height:1.5}
 
@@ -211,7 +211,7 @@
     .yes{justify-self:start}
   }
 
-  /* ─── try it (dark) — 2-col with upload mock (from C) ─── */
+  /* --- try it (dark): 2-col with upload mock (from C) --- */
   .tryit{background:var(--ink);color:#f4f3ef;border-top:none}
   .tryit .sec-num{color:var(--maroon-lite)}
   .tryit h2{color:#fff}
@@ -277,8 +277,15 @@
   .qrow p{font-size:18.5px;color:var(--ink-2);max-width:60ch;font-style:italic}
 
   /* about */
+  .about-grid{display:grid;grid-template-columns:auto 1fr;gap:32px;align-items:start}
+  @media(max-width:640px){.about-grid{grid-template-columns:1fr}}
+  .about-photo{max-width:280px;width:100%;height:auto;border:1px solid var(--rule)}
   .about p{font-size:20px;color:var(--ink-2);max-width:60ch}
   .about .contact{font-family:"Inter",sans-serif;font-size:14.5px;margin-top:24px;color:var(--ink-3)}
+  .about-links{display:flex;gap:22px;flex-wrap:wrap;font-family:"Inter",sans-serif;font-size:14px;margin-top:14px}
+  .about-links a{display:inline-flex;align-items:center;gap:7px;color:var(--ink-2)}
+  .about-links a:hover{color:var(--maroon);text-decoration:none}
+  .about-links .social-icon{width:18px;height:18px;fill:currentColor;flex-shrink:0}
 
   footer{border-top:1px solid var(--ink);padding:34px 0 50px}
   footer .wrap{display:flex;justify-content:space-between;align-items:baseline;gap:20px;flex-wrap:wrap;font-family:"Inter",sans-serif;font-size:14px}
@@ -287,6 +294,7 @@
   footer .cc{color:var(--ink-3)}
   footer .signoff{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.18em;text-transform:lowercase;color:var(--maroon-soft);opacity:.75;flex-basis:100%;text-align:right}
   @media(max-width:600px){footer .signoff{text-align:left}}
+  @media(max-width:560px){.contact-grid{grid-template-columns:1fr!important}}
 </style>
 </head>
 <body>
@@ -301,6 +309,7 @@
       <a href="#try">Demo</a>
       <a href="#questions">Research</a>
       <a href="#about">About</a>
+      <a href="#contact">Contact</a>
     </nav>
     <span id="nav-auth"><div id="g_id_signin"></div></span>
   </div>
@@ -320,7 +329,7 @@
         <div class="label">Research project · Formal theorem proving</div>
         <h1>Is this Math actually <span class="new">new?</span></h1>
         <div class="hero-sub">// Automated novelty assessment for formalized mathematics.</div>
-        <p class="abstract">We measure whether a mathematical contribution is genuinely new — distinguishing trivial automation from rediscovery from real novelty. Built on Lean&nbsp;4 and the contemporary state of mathlib.</p>
+        <p class="abstract">We measure whether a mathematical contribution is genuinely new, distinguishing trivial automation from rediscovery from real novelty. Built on Lean&nbsp;4 and the contemporary state of mathlib.</p>
         <div class="byline">
           <span><b>Ayrton Porto</b> · UNICEN, Argentina</span>
           <span class="sep">·</span>
@@ -328,7 +337,7 @@
         </div>
         <div class="actions">
           <a class="btn btn-primary" href="#try">Try the demo <span class="arr">↓</span></a>
-          <a class="btn btn-secondary" href="https://github.com/ayrtonporto/avid-journal" target="_blank" rel="noopener">View on GitHub</a>
+          <a class="btn btn-secondary" href="https://github.com/avid-journal" target="_blank" rel="noopener">View on GitHub</a>
         </div>
       </div>
 
@@ -336,7 +345,7 @@
       <div class="term" aria-hidden="true">
         <div class="term-head">
           <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-          <span class="ttl">avid — assess theorem.lean</span>
+          <span class="ttl">avid: assess theorem.lean</span>
         </div>
         <div class="term-body">
           <div class="term-line"><span class="k">$</span> avid assess theorem.lean</div>
@@ -380,13 +389,14 @@
         <div class="sec-num">01 · Try it</div>
         <h2>Try the prototype</h2>
         <div class="body">
-          <p>Upload a LaTeX file with mathematical theorems. AViD will parse each block and report a novelty verdict against Mathlib and arXiv — together with all the evidence collected along the way.</p>
+          <p>Upload a LaTeX file with mathematical theorems. AViD will parse each block and report a novelty verdict against Mathlib and arXiv, together with all the evidence collected along the way.</p>
+          <p style="font-size:14px;color:#9a988f;margin-top:6px">Your <code>.tex</code> file should use <code>\begin{definition}</code>, <code>\begin{lemma}</code>, <code>\begin{theorem}</code>, <code>\begin{proposition}</code>, or <code>\begin{corollary}</code> environments. Each block may include an optional <code>\begin{proof}...\end{proof}</code>. Definitions are parsed but excluded from novelty verdicts.</p>
         </div>
         <div class="actions" style="margin-bottom:12px">
           <a class="btn btn-primary" href="#try-upload">Analyze a file <span class="arr">↓</span></a>
           <a class="btn btn-secondary" href="https://github.com/ayrtonporto/avid-journal" target="_blank" rel="noopener">Full pipeline on GitHub</a>
         </div>
-        <p class="pnote">D1 (existence check) runs in the cloud. D2 (triviality) and D3 (proof distance) require local Lean&nbsp;4 install. <a href="https://github.com/ayrtonporto/avid-journal#readme" style="color:var(--maroon-lite)">Learn more.</a></p>
+        <p class="pnote">Formalization takes 2 to 5 minutes per theorem. Submissions are queued and processed in order. <a href="https://github.com/ayrtonporto/avid-journal#readme" style="color:var(--maroon-lite)">Learn more.</a></p>
       </div>
 
       <!-- REAL UPLOAD (auth-gated) -->
@@ -402,7 +412,7 @@
         <label style="display:flex;align-items:center;gap:8px;font-family:Inter,sans-serif;font-size:14px;color:var(--ink-2);margin-bottom:7px;cursor:pointer">
           <input type="radio" name="model-mode" value="provided" checked
                  onchange="document.getElementById('own-key-fields').style.display='none'">
-          Use the provided model <span style="color:var(--ink-3)">— DeepSeek&nbsp;V4&nbsp;Pro (limited)</span>
+          Use the provided model <span style="color:var(--ink-3)">(DeepSeek V4 Pro, limited)</span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;font-family:Inter,sans-serif;font-size:14px;color:var(--ink-2);cursor:pointer">
           <input type="radio" name="model-mode" value="own"
@@ -411,9 +421,8 @@
         </label>
         <div id="own-key-fields" style="display:none;margin-top:12px">
           <select id="provider-select" onchange="onProviderChange()" style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:8px">
-            <option value="claude-code" data-model="" data-devonly="1">Claude Code (local · OAuth · no key)</option>
-            <option value="opencode" data-model="deepseek-v4-pro">OpenCode Go — DeepSeek V4 Pro</option>
-            <option value="opencode" data-model="qwen3.7-max">OpenCode Go — Qwen 3.7 Max</option>
+            <option value="opencode" data-model="deepseek-v4-pro">OpenCode Go: DeepSeek V4 Pro</option>
+            <option value="opencode" data-model="qwen3.7-max">OpenCode Go: Qwen 3.7 Max</option>
             <option value="openrouter" data-model="anthropic/claude-sonnet-4">OpenRouter</option>
             <option value="anthropic" data-model="claude-sonnet-4-20250514">Claude (Anthropic)</option>
             <option value="openai" data-model="gpt-4o">OpenAI</option>
@@ -426,10 +435,10 @@
           <div id="model-hint" style="font-family:Inter,sans-serif;font-size:12px;color:var(--ink-3);margin:-2px 0 8px">Exact model ID for this provider. Edit if you want a different one.</div>
           <input type="password" id="api-key-input" placeholder="Your API key"
                  style="width:100%;padding:9px 12px;border:1px solid var(--rule-2);border-radius:0;background:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:13px">
-          <div style="font-family:Inter,sans-serif;font-size:12px;color:var(--ink-3);margin-top:6px">Sent over HTTPS, used for this analysis only — never saved or logged.</div>
+          <div style="font-family:Inter,sans-serif;font-size:12px;color:var(--ink-3);margin-top:6px">Sent over HTTPS, used for this analysis only, never saved or logged.</div>
         </div>
         <button id="start-btn" onclick="analyze(window.selectedFile)" disabled
-                style="margin-top:18px;font-family:Inter,sans-serif;font-size:14px;font-weight:500;padding:11px 26px;background:var(--ink);color:#fff;border:1px solid var(--ink);cursor:pointer;opacity:.45">
+                style="margin-top:18px;font-family:Inter,sans-serif;font-size:15px;font-weight:600;padding:14px 32px;background:var(--maroon);color:#fff;border:none;cursor:pointer;opacity:.45;letter-spacing:.02em;transition:opacity .2s,background .2s">
           Start analysis
         </button>
       </div>
@@ -440,11 +449,13 @@
       <div id="results-status" class="term" style="margin-bottom:28px">
         <div class="term-head">
           <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-          <span class="ttl" id="status-title">avid — analyzing</span>
+          <span class="ttl" id="status-title">avid: analyzing</span>
         </div>
         <div class="term-body" id="status-body">
-          <div class="term-line"><span class="k">$</span> avid assess <span class="val" id="status-file">—</span></div>
-          <div class="term-line"><span class="k">[ d1 ]</span> <span id="status-msg">Waiting for file...</span></div>
+          <div class="term-line"><span class="k">$</span> avid assess <span class="val" id="status-file">...</span></div>
+          <div id="status-log" style="max-height:420px;overflow-y:auto">
+            <div class="term-line"><span class="k">[d1]</span> <span id="status-msg">Waiting for file...</span></div>
+          </div>
         </div>
       </div>
       <div id="results-cards"></div>
@@ -457,9 +468,9 @@
     <div class="sec-num">02 · The problem</div>
     <h2>Why this matters</h2>
     <div class="body">
-      <p class="lede">Every day, more mathematical results are posted to arXiv and other preprint servers with no peer review — and the volume keeps growing. Telling a genuinely new contribution apart from a rediscovery or a repackaged known result is an increasingly real problem.<sup class="ref">1</sup> Current AI systems for mathematics measure <em>correctness</em> — they do not measure <em>novelty</em>. AViD Journal closes that gap.</p>
+      <p class="lede">Every day, more mathematical results are posted to arXiv and other preprint servers with no peer review, and the volume keeps growing. Telling a genuinely new contribution apart from a rediscovery or a repackaged known result is an increasingly real problem.<sup class="ref">1</sup> Current AI systems for mathematics measure <em>correctness</em>; they do not measure <em>novelty</em>. AViD Journal closes that gap.</p>
     </div>
-    <aside class="sidenote"><span class="sn-n">1</span>As unreviewed output grows, results presented as new that an adequate prior-work search would have flagged become more common — exactly the failure mode novelty assessment is meant to catch.</aside>
+    <aside class="sidenote"><span class="sn-n">1</span>As unreviewed output grows, results presented as new that an adequate prior-work search would have flagged become more common, exactly the failure mode novelty assessment is meant to catch.</aside>
 
     <div class="compare">
       <div class="col1">
@@ -503,13 +514,13 @@
       </div>
       <div class="dim">
         <div class="dh"><span class="did">D2</span><span class="dn">Triviality</span></div>
-        <p>Can the statement be closed by standard tactics — <code>decide</code>, <code>omega</code>, <code>simp</code>, <code>norm_num</code>, <code>aesop</code>, <code>tauto</code>, <code>exact?</code> — within a fixed budget? Triviality is relative to the current state of mathlib automation. A result trivial today may not have been trivial a year ago.<sup class="ref">2</sup></p>
+        <p>Can the statement be closed by standard tactics (<code>decide</code>, <code>omega</code>, <code>simp</code>, <code>norm_num</code>, <code>aesop</code>, <code>tauto</code>, <code>exact?</code>) within a fixed budget? Triviality is relative to the current state of mathlib automation. A result trivial today may not have been trivial a year ago.<sup class="ref">2</sup></p>
         <aside class="sidenote"><span class="sn-n">2</span>Triviality is not a property of a statement alone, but of a statement paired with an automation frontier. Every D2 verdict is implicitly stamped with the mathlib revision it ran against.</aside>
       </div>
       <div class="dim">
         <div class="dh"><span class="did">D3</span><span class="dn">Proof distance</span></div>
-        <p>When the statement exists but proofs differ, we measure Jaccard distance over the set of premises extracted from the elaborated Lean&nbsp;4 proof term — a proof-object-level signal, not a syntactic one.<sup class="ref">3</sup></p>
-        <aside class="sidenote"><span class="sn-n">3</span>Operating on the proof object means two proofs that read very differently in source but invoke the same lemmas register as close — and a genuinely different argument registers as far.</aside>
+        <p>When the statement exists but proofs differ, we measure Jaccard distance over the set of premises extracted from the elaborated Lean&nbsp;4 proof term, a proof-object-level signal, not a syntactic one.<sup class="ref">3</sup></p>
+        <aside class="sidenote"><span class="sn-n">3</span>Operating on the proof object means two proofs that read very differently in source but invoke the same lemmas register as close, and a genuinely different argument registers as far.</aside>
       </div>
     </div>
 
@@ -522,12 +533,12 @@
         </div>
         <div class="pdown"><span class="line"></span><span class="no">no ↓</span></div>
         <div class="pstep">
-          <div class="pbox"><div class="pid">D1 · EXISTENCE — C_F (formal)</div><div class="pq">Match in formal libraries?</div></div>
+          <div class="pbox"><div class="pid">D1 · EXISTENCE: C_F (formal)</div><div class="pq">Match in formal libraries?</div></div>
           <div class="yes"><span class="lab">yes →</span><span class="verdict term-v">REDISCOVERY · formal</span></div>
         </div>
         <div class="pdown"><span class="line"></span><span class="no">no ↓</span></div>
         <div class="pstep">
-          <div class="pbox"><div class="pid">D1 · EXISTENCE — C_I (informal)</div><div class="pq">Match in informal literature?</div></div>
+          <div class="pbox"><div class="pid">D1 · EXISTENCE: C_I (informal)</div><div class="pq">Match in informal literature?</div></div>
           <div class="yes"><span class="lab">yes →</span><span class="verdict term-v">REDISCOVERY · informal</span></div>
         </div>
         <div class="pdown"><span class="line"></span><span class="no">no ↓</span></div>
@@ -563,14 +574,14 @@
         <div class="qid">Q.02</div>
         <div>
           <h3>Generalization vs novelty</h3>
-          <p>How to distinguish formally between "generalization of A" and "novel result related to A" — beyond what current LLM judges can reliably do?</p>
+          <p>How to distinguish formally between "generalization of A" and "novel result related to A", beyond what current LLM judges can reliably do?</p>
         </div>
       </div>
       <div class="qrow">
         <div class="qid">Q.03</div>
         <div>
           <h3>Autoformalization fidelity</h3>
-          <p>How to measure semantic fidelity of autoformalization? Statements that type-check but misrepresent the original paper's claim are a critical bottleneck — and currently undetectable without human review.</p>
+          <p>How to measure semantic fidelity of autoformalization? Statements that type-check but misrepresent the original paper's claim are a critical bottleneck, and currently undetectable without human review.</p>
         </div>
       </div>
       <div class="qrow">
@@ -589,16 +600,31 @@
   <div class="wrap">
     <div class="sec-num">05 · About</div>
     <h2>About</h2>
-    <img class="about-photo" src="/static/ayrton-poster.jpg"
-         alt="Ayrton Porto presenting AViD Journal at UNICEN"
-         style="max-width:340px;width:100%;height:auto;border:1px solid var(--rule);margin:6px 0 20px" />
-    <p>AViD Journal is a research project by Ayrton Porto at UNICEN — Universidad Nacional del Centro de la Provincia de Buenos Aires, Argentina. A preprint is forthcoming on arXiv.</p>
-    <div class="contact">Contact — <a href="mailto:ayrporto@gmail.com">ayrporto@gmail.com</a></div>
-    <div class="about-links" style="margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:13px">
-      <a href="https://x.com/AyrPorto" target="_blank" rel="noopener">X / Twitter</a>
-      <a href="https://www.linkedin.com/in/ayrporto/" target="_blank" rel="noopener">LinkedIn</a>
-      <a href="https://ayrtonporto.github.io/" target="_blank" rel="noopener">Personal site</a>
-      <a href="mailto:ayrporto@gmail.com">Email</a>
+    <div class="about-grid">
+      <img class="about-photo" src="/static/ayrton-poster.jpg"
+           alt="Ayrton Porto presenting AViD Journal at UNICEN" />
+      <div>
+        <p>AViD Journal is a research project by Ayrton Porto at UNICEN (Universidad Nacional del Centro de la Provincia de Buenos Aires, Argentina). A preprint is forthcoming on arXiv.</p>
+        <div class="contact">Contact: <a href="mailto:ayrporto@gmail.com">ayrporto@gmail.com</a></div>
+        <div class="about-links">
+          <a href="https://x.com/AyrPorto" target="_blank" rel="noopener">
+            <svg class="social-icon" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            X / Twitter
+          </a>
+          <a href="https://www.linkedin.com/in/ayrporto/" target="_blank" rel="noopener">
+            <svg class="social-icon" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            LinkedIn
+          </a>
+          <a href="https://ayrtonporto.github.io/" target="_blank" rel="noopener">
+            <svg class="social-icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            Personal site
+          </a>
+          <a href="mailto:ayrporto@gmail.com">
+            <svg class="social-icon" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+            Email
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -609,10 +635,47 @@
     <div class="sec-num">06 · Acknowledgments</div>
     <h2>Thanks</h2>
     <div class="body">
-      <p>This project was supported by <b>Nodo Serrano</b>, <b>Hack Tandil</b>, and <b>BAISH</b> — communities that make independent research possible in Argentina.</p>
+      <p>Special thanks to <a href="https://www.linkedin.com/in/movejasmith/" target="_blank" rel="noopener"><b>Matias Oveja</b></a> for his guidance during the early stages of this project, and to <a href="https://www.linkedin.com/in/agustin-diez-martinez-76759a60/" target="_blank" rel="noopener"><b>Agustin Diez</b></a> for his help with deployment and infrastructure.</p>
+      <p>This project was also supported by <b>Nodo Serrano</b>, <b>Hack Tandil</b>, and <b>BAISH</b>, communities that make independent research possible in Argentina.</p>
       <div class="thanks-logos" style="margin-top:24px;display:flex;gap:36px;align-items:center;flex-wrap:wrap">
         <img src="/static/nodo-serrano.jpeg" alt="Nodo Serrano" style="height:46px;width:auto" />
         <img src="/static/hacktandil.png" alt="Hack Tandil" style="height:46px;width:auto;background:#000;padding:6px;border-radius:4px" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section id="contact">
+  <div class="wrap">
+    <div class="sec-num">07 · Contact</div>
+    <h2>Get in touch</h2>
+    <div class="body">
+      <p>AViD Journal is open research. Reach out for collaborations, press inquiries, or if you'd like to contribute.</p>
+    </div>
+    <div class="contact-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:28px">
+      <div style="font-family:'Inter',sans-serif;font-size:15px;line-height:1.7;color:var(--ink-2)">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--maroon);margin-bottom:10px">Email</div>
+        <a href="mailto:ayrporto@gmail.com" style="font-size:18px">ayrporto@gmail.com</a>
+        <div style="margin-top:18px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--maroon);margin-bottom:10px">Location</div>
+        <span>Tandil, Buenos Aires, Argentina</span>
+      </div>
+      <div style="font-family:'Inter',sans-serif;font-size:15px;line-height:1.7;color:var(--ink-2)">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--maroon);margin-bottom:10px">Online</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <a href="https://github.com/ayrtonporto/avid-journal" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+            GitHub
+          </a>
+          <a href="https://x.com/AyrPorto" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            X / Twitter
+          </a>
+          <a href="https://www.linkedin.com/in/ayrporto/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            LinkedIn
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -626,7 +689,7 @@
       <a href="#about">arXiv (forthcoming)</a>
       <a href="mailto:ayrporto@gmail.com">Contact</a>
     </div>
-    <div class="cc">AViD Journal — open research, MIT license</div>
+    <div class="cc">AViD Journal: open research, MIT license</div>
     <div class="signoff">where no proof has gone before</div>
   </div>
 </footer>
@@ -716,12 +779,14 @@ const API_URL = API_BASE + "/api/analyze";
 // ═══════════════════════════════════════════════════════════════════
 const STATUS_BADGES = {
   "NOVEDAD_ENUNCIADO":          ["novel",       "NOVEL"],
-  "NOVEDAD_DEMOSTRACION":       ["novel",       "NOVEL · proof"],
+  "NOVEDAD_DEMOSTRACION":       ["gray",        "POSSIBLE NOVELTY · review"],
   "CONOCIDO_LITERATURA":        ["known-informal","KNOWN · lit"],
   "NO_NOVEDOSO_redundante":     ["known-formal","REDUNDANT"],
   "NO_NOVEDOSO_trivial":        ["known-formal","TRIVIAL"],
-  "ZONA_GRIS":                  ["gray",        "GRAY ZONE"],
-  "MATCH_ENCONTRADO_PENDIENTE_D3": ["known-formal","FOUND · D3 pending"],
+  "ZONA_GRIS":                  ["gray",        "GRAY ZONE · review"],
+  "MATCH_ENCONTRADO_PENDIENTE_D3": ["gray",    "FOUND · D3 pending"],
+  "DEFINITION":                 ["gray",        "DEFINITION"],
+  "INCONCLUSIVE":               ["gray",        "INCONCLUSIVE · review"],
   "ERROR":                      ["error",       "ERROR"],
 };
 
@@ -729,8 +794,23 @@ const statusEl   = (id) => document.getElementById(id);
 const statusMsg  = statusEl("status-msg");
 const statusFile = statusEl("status-file");
 const statusTitle = statusEl("status-title");
+const statusLog   = statusEl("status-log");
 const resultsArea = statusEl("results-area");
 const resultsCards = statusEl("results-cards");
+
+function appendLog(step, msg, cls) {
+  if (!statusLog) return;
+  // Remove spinner from previous line
+  const prev = statusLog.querySelector(".term-line:last-child .spinner");
+  if (prev) prev.remove();
+  // Add new log line
+  const line = document.createElement("div");
+  line.className = "term-line";
+  if (cls) line.style.color = cls;
+  line.innerHTML = '<span class="k">[' + (step || "··") + ']</span> <span class="spinner"></span>' + msg;
+  statusLog.appendChild(line);
+  statusLog.scrollTop = statusLog.scrollHeight;
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // FILE UPLOAD
@@ -748,13 +828,13 @@ function onFileSelected() {
   if (uf) uf.textContent = (file.size / 1024).toFixed(1) + " KB";
   if (ic) ic.textContent = "✓";
   document.querySelector(".upload-real").classList.add("has-file");
-  // Enable the Start button — the user runs it explicitly (after choosing model).
+  // Enable the Start button (the user runs it explicitly (after choosing model).
   const startBtn = document.getElementById("start-btn");
   if (startBtn) { startBtn.disabled = false; startBtn.style.opacity = "1"; }
 }
 
 // Default model per provider. Must match CLIENT_PROVIDERS in app.py. The field
-// is editable — these are just sensible starting points (OpenRouter alone has
+// is editable; these are just sensible starting points (OpenRouter alone has
 // hundreds of models, so the user must be able to pick).
 const PROVIDER_DEFAULT_MODEL = {
   opencode:   "deepseek-v4-pro",
@@ -767,20 +847,15 @@ const PROVIDER_DEFAULT_MODEL = {
 };
 
 // When the provider changes, refill the model field with that provider's
-// default — but only if the user hasn't typed a custom value (or the field
+// default, but only if the user hasn't typed a custom value (or the field
 // still holds another provider's default).
 function onProviderChange() {
   const sel = document.getElementById("provider-select");
   const mi = document.getElementById("model-input");
   if (!sel || !mi) return;
-  // Claude Code is server-local + OAuth: no API key, model optional. Hide the
-  // key field to avoid confusion.
-  const keyEl = document.getElementById("api-key-input");
-  const isClaudeCode = sel.value === "claude-code";
-  if (keyEl) keyEl.style.display = isClaudeCode ? "none" : "";
   // Read the model straight off the selected <option> (data-model), so two
-  // options sharing the same provider value — e.g. OpenCode Go with DeepSeek
-  // vs Qwen — resolve to different models.
+  // options sharing the same provider value (e.g. OpenCode Go with DeepSeek
+  // vs Qwen) resolve to different models.
   const opt = sel.options[sel.selectedIndex];
   const def = (opt && opt.dataset.model) || PROVIDER_DEFAULT_MODEL[sel.value] || "";
   const knownDefaults = Array.from(sel.options).map(function(o){ return o.dataset.model; }).filter(Boolean);
@@ -806,87 +881,85 @@ async function analyze(file) {
     statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Please sign in with Google first.</span>';
     return;
   }
-  if (!file) return;                 // no file selected (Start is disabled anyway)
-  if (window.__avidRunning) return;  // already analyzing — ignore changes/double-start
+  if (!file) return;
+  if (window.__avidRunning) return;
   window.__avidRunning = true;
   setAnalysisRunning(true);
   resultsArea.style.display = "block";
   resultsCards.innerHTML = "";
-  statusTitle.textContent = "avid — analyzing";
+  statusTitle.textContent = "avid: analyzing";
   statusFile.textContent = file.name;
-  statusMsg.innerHTML = '<span class="spinner"></span>Starting pipeline...';
+  if (statusLog) statusLog.innerHTML = '';
+  appendLog("start", "Starting pipeline...");
 
   try {
     const formData = new FormData();
     formData.append("file", file);
 
-    // Model choice: own provider+key, or the provided default (DeepSeek).
     const mode = document.querySelector('input[name="model-mode"]:checked')?.value;
     if (mode === "own") {
       const prov = document.getElementById("provider-select")?.value || "";
       const model = document.getElementById("model-input")?.value?.trim() || "";
       const key = document.getElementById("api-key-input")?.value?.trim() || "";
-      // Claude Code (local, OAuth) is server-local and needs no API key/model.
-      if (prov === "claude-code") {
-        formData.append("provider", prov);
-        formData.append("model", model);   // optional; blank => Claude Code default
-      } else {
-        if (!key) {
-          statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter your API key, or switch to the provided model.</span>';
-          return;
-        }
-        if (!model) {
-          statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">Enter a model ID for ' + prov + '.</span>';
-          return;
-        }
-        formData.append("provider", prov);
-        formData.append("model", model);
-        formData.append("api_key", key);
+      if (!key) {
+        appendLog("err", "Enter your API key, or switch to the provided model.", "#d98c95");
+        return;
       }
+      if (!model) {
+        appendLog("err", "Enter a model ID for " + prov + ".", "#d98c95");
+        return;
+      }
+      formData.append("provider", prov);
+      formData.append("model", model);
+      formData.append("api_key", key);
     }
 
     const headers = {};
     if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
 
+    // POST → get run_id
     const resp = await fetch(API_URL, { method: "POST", body: formData, headers });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+    const { run_id } = await resp.json();
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+    // Poll for progress every second
+    let lastLen = 0;
+    const poll = setInterval(async () => {
+      try {
+        const pr = await fetch(API_BASE + "/api/progress/" + run_id);
+        if (!pr.ok) return;
+        const data = await pr.json();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop(); // keep incomplete line in buffer
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        let msg;
-        try {
-          // SSE format: "data: {...}"
-          const json = line.startsWith("data: ") ? line.slice(6) : line;
-          msg = JSON.parse(json);
-        } catch(e) { continue; }
-        if (msg.type === "progress") {
-          statusMsg.innerHTML = '<span class="spinner"></span>' + msg.msg;
-        } else if (msg.type === "result") {
-          renderResults(file.name, msg.summary, msg.results, msg.publication_html);
-        } else if (msg.type === "done") {
-          statusMsg.innerHTML = '<span class="val">' + msg.msg + '</span>';
-        } else if (msg.type === "error") {
-          statusTitle.textContent = "avid — error";
-          statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">' + msg.msg + '</span>';
+        // Append new log entries
+        const log = data.log || [];
+        for (let i = lastLen; i < log.length; i++) {
+          appendLog(log[i].step || "··", log[i].msg);
         }
-      }
-    }
+        lastLen = log.length;
+
+        if (data.status === "done" || data.status === "error") {
+          clearInterval(poll);
+          window.__avidRunning = false;
+          setAnalysisRunning(false);
+
+          if (data.status === "error") {
+            statusTitle.textContent = "avid: error";
+            appendLog("err", (data.result && data.result.error) || "Unknown error", "#d98c95");
+          } else if (data.result) {
+            const r = data.result;
+            appendLog("done", "Analysis complete", "#efece3");
+            const lastSpin = statusLog && statusLog.querySelector(".term-line:last-child .spinner");
+            if (lastSpin) lastSpin.remove();
+            renderResults(file.name, r.summary, r.results, r.pub_html);
+          }
+        }
+      } catch(e) { /* poll error, keep trying */ }
+    }, 1000);
+
   } catch (err) {
-    statusTitle.textContent = "avid — error";
-    statusMsg.innerHTML = '<span style="color:var(--maroon-lite)">' + err.message + '</span>';
+    statusTitle.textContent = "avid: error";
+    appendLog("err", err.message, "#d98c95");
     console.error(err);
-  } finally {
     window.__avidRunning = false;
     setAnalysisRunning(false);
   }
@@ -902,11 +975,12 @@ function renderResults(filename, summary, results, pubHtml) {
     .map(([k, v]) => v + " " + k.replace(/_/g, " ").toLowerCase())
     .join(" · ") || "no theorems found";
 
-  statusTitle.textContent = "avid — verdict";
+  statusTitle.textContent = "avid: verdict";
   statusFile.textContent = filename;
-  statusMsg.innerHTML =
-    '<span class="val">' + total + " theorems</span> — " + countStr +
-    ' <button onclick="downloadLean()" style="font-family:Inter,sans-serif;font-size:12px;padding:4px 10px;background:transparent;color:var(--maroon-lite);border:1px solid var(--maroon-lite);cursor:pointer;margin-left:12px">📥 Download .lean</button>';
+  appendLog("done", total + " theorems analyzed: " + countStr + '  <button onclick="downloadLean()" style="font-family:Inter,sans-serif;font-size:11px;padding:3px 8px;background:transparent;color:var(--maroon-lite);border:1px solid var(--maroon-lite);cursor:pointer;margin-left:10px">📥 Download .lean</button>', "#efece3");
+  // Remove spinner from last line
+  const lastSpin = statusLog && statusLog.querySelector(".term-line:last-child .spinner");
+  if (lastSpin) lastSpin.remove();
 
   resultsCards.innerHTML = results.map((r, i) => {
     const [cssClass, label] = STATUS_BADGES[r.veredicto] || ["error", r.veredicto];
@@ -957,20 +1031,6 @@ function renderResults(filename, summary, results, pubHtml) {
 
 // Init on page load
 updateAuthUI();
-
-// Claude Code (OAuth) is a server-local formalizer — hide it on the deployed
-// web (the backend still accepts provider=claude-code for local runs). It stays
-// visible in dev mode (AVID_DEV_MODE=1, e.g. run_local_demo.ps1).
-(function hideLocalOnlyProviders() {
-  if (DEV_MODE) return;
-  const sel = document.getElementById("provider-select");
-  if (!sel) return;
-  Array.prototype.forEach.call(sel.querySelectorAll("option[data-devonly]"), function (opt) {
-    opt.remove();
-  });
-  if (sel.options.length) sel.selectedIndex = 0;  // re-pick a visible default
-  onProviderChange();
-})();
 
 // ═══════════════════════════════════════════════════════════════════
 // PUBLICATION

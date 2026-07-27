@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.novelty_v2.dimensions.d3_premises import (
+from src.novelty.dimensions.d3_premises import (
     _canonical_id,
     _deduplicate,
     _filter1_blacklist,
@@ -209,19 +209,19 @@ def test_dedup_collapses_same_canonical_id():
 
 
 def test_dedup_keeps_distinct_definitions():
-    """Same fullName but different defPath → different objects."""
+    """Same fullName but different defPath → same canonical identity (dedup to 1)."""
     premises = [
         _p("foo", dpath="A.lean", dline=1, dcol=0),
         _p("foo", dpath="B.lean", dline=5, dcol=0),
     ]
     result = _deduplicate(premises)
-    assert len(result) == 2
+    assert len(result) == 1  # fullName-based: foo == foo
 
 
 def test_canonical_id_format():
     p = _p("Nat", dpath="Init/Prelude.lean", dline=1214, dcol=10)
     cid = _canonical_id(p)
-    assert cid == "Init/Prelude.lean:1214:10"
+    assert cid == "Nat"  # fullName-based identity
 
 
 # ---------------------------------------------------------------------------

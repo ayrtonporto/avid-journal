@@ -344,29 +344,30 @@ def _require_user(request: Request) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Analysis endpoint (delegates to app.py pipeline)
+# Analysis endpoint (polling-based progress)
 # ═══════════════════════════════════════════════════════════════════════════
+
+# In-memory store for analysis progress. Keyed by run_id.
+_run_store: dict[str, dict] = {}
+import threading as _threading
+import uuid as _uuid
+
 
 @app.post("/api/analyze")
 async def api_analyze(request: Request):
-    """Run the full novelty pipeline on an uploaded .tex file.
-    Streams progress as JSON Lines, ending with the final result.
-    """
+    """Run the full novelty pipeline. Returns {run_id} immediately; poll
+    GET /api/progress/{run_id} for real-time updates."""
     google_id = _require_user(request)
 
-    # Rate limit
     ip = request.client.host if request.client else "unknown"
     if not _check_rate(ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-    # Read uploaded file + optional client model choice.
     form = await request.form()
     uploaded = form.get("file")
     if uploaded is None:
         raise HTTPException(status_code=400, detail="No file uploaded")
 
-    # Client's own provider + key (transient — used for this request only,
-    # never stored or logged). Empty => server default (DeepSeek V4 Pro).
     client_provider = (form.get("provider") or "").strip()
     client_model = (form.get("model") or "").strip()
     client_api_key = (form.get("api_key") or "").strip()
@@ -378,97 +379,65 @@ async def api_analyze(request: Request):
         tex_path = tmp.name
 
     from app import process_tex
-    import asyncio, threading
 
-    progress_queue = asyncio.Queue()
+    run_id = _uuid.uuid4().hex[:12]
+    _run_store[run_id] = {
+        "log": [],
+        "status": "running",
+        "result": None,
+        "file": uploaded.filename,
+    }
 
-    async def stream():
-        loop = asyncio.get_running_loop()  # capture in main async context
+    def _on_progress(step, msg, _pct):
+        _run_store[run_id]["log"].append({
+            "step": step, "msg": msg,
+            "ts": time_module.time(),
+        })
 
-        def on_progress_cb(step, msg, pct):
-            # Called from thread — use captured loop
-            loop.call_soon_threadsafe(
-                progress_queue.put_nowait,
-                {"type": "progress", "step": step, "msg": msg, "pct": pct},
+    def _run():
+        try:
+            class FakeFile:
+                name = tex_path
+            summary, results, lean_path, pub_html = process_tex(
+                FakeFile(),
+                api_key_input=client_api_key,
+                provider_name=client_provider,
+                model_name=client_model,
+                on_progress=_on_progress,
             )
+            _run_store[run_id]["result"] = {
+                "summary": summary,
+                "results": results,
+                "lean_path": lean_path,
+                "pub_html": pub_html,
+            }
+            _run_store[run_id]["status"] = "done"
+        except Exception as e:
+            _run_store[run_id]["status"] = "error"
+            _run_store[run_id]["result"] = {"error": str(e)}
 
-        yield f"data: {_json.dumps({'type': 'progress', 'step': 'start', 'msg': f'Starting pipeline for {uploaded.filename}...', 'pct': 0})}\n\n"
+    _threading.Thread(target=_run, daemon=True).start()
 
-        # Run process_tex in a thread (it's synchronous and blocks)
-        result_holder = {"summary": None, "results": None, "lean_path": None, "pub_html": None, "error": None}
-
-        def run_pipeline():
-            try:
-                class FakeFile:
-                    name = tex_path
-                summary, results, lean_path, pub_html = process_tex(
-                    FakeFile(),
-                    api_key_input=client_api_key,
-                    provider_name=client_provider,
-                    model_name=client_model,
-                    on_progress=on_progress_cb,
-                )
-                result_holder["summary"] = summary
-                result_holder["results"] = results
-                result_holder["lean_path"] = lean_path
-                result_holder["pub_html"] = pub_html
-            except Exception as e:
-                result_holder["error"] = str(e)
-
-        thread = threading.Thread(target=run_pipeline)
-        thread.start()
-
-        # Stream progress events while the thread runs. If a step goes quiet
-        # for a while (cold Mathlib load, a slow proof), emit a heartbeat with
-        # the elapsed time so the page never looks frozen.
-        _start = time_module.time()
-        _last_activity = _start
-        _last_msg = "working…"
-        _HEARTBEAT_S = 10
-        while thread.is_alive():
-            try:
-                msg = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
-                _last_activity = time_module.time()
-                _last_msg = msg.get("msg", _last_msg)
-                yield f"data: {_json.dumps(msg)}\n\n"
-            except asyncio.TimeoutError:
-                now = time_module.time()
-                if now - _last_activity >= _HEARTBEAT_S:
-                    _last_activity = now
-                    elapsed = int(now - _start)
-                    hb = {
-                        "type": "progress", "step": "heartbeat",
-                        "msg": f"{_last_msg} · still working ({elapsed}s)",
-                    }
-                    yield f"data: {_json.dumps(hb)}\n\n"
-
-        # Drain any remaining messages
-        while not progress_queue.empty():
-            msg = progress_queue.get_nowait()
-            yield f"data: {_json.dumps(msg)}\n\n"
-
-        thread.join()
-
-        if result_holder["error"]:
-            yield f"data: {_json.dumps({'type': 'error', 'msg': result_holder['error']})}\n\n"
-        else:
-            yield f"data: {_json.dumps({'type': 'done', 'msg': 'Analysis complete'})}\n\n"
-            yield f"data: {_json.dumps({'type': 'result', 'summary': result_holder['summary'], 'results': result_holder['results'], 'lean_path': result_holder['lean_path'], 'publication_html': result_holder['pub_html']})}\n\n"
-
-    # Log the action (fire and forget — don't block the stream)
     if DEV_MODE:
         from src.users import upsert_user as _upsert
         _upsert("dev-user", "dev@localhost", "Dev Mode")
-    log_action(google_id, "analyze", {
-        "filename": uploaded.filename,
-    })
+    log_action(google_id, "analyze", {"filename": uploaded.filename})
 
-    from fastapi.responses import StreamingResponse
-    return StreamingResponse(
-        stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return JSONResponse({"run_id": run_id})
+
+
+@app.get("/api/progress/{run_id}")
+async def api_progress(run_id: str):
+    """Poll this endpoint for real-time progress updates."""
+    entry = _run_store.get(run_id)
+    if entry is None:
+        return JSONResponse({"status": "not_found"}, status_code=404)
+    return JSONResponse({
+        "status": entry["status"],
+        "file": entry["file"],
+        "log": entry["log"],
+        "result": entry.get("result"),
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -30,9 +30,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.parser.latex_parser import parse_latex
-from src.novelty_v2.dimensions.d1_existence import check_d1
-from src.novelty_v2.dimensions.d2_triviality import check_triviality
-from src.novelty_v2.types import D1Result, D2Result, Verdict
+from src.novelty.dimensions.d1_existence import check_d1
+from src.novelty.dimensions.d2_triviality import check_triviality
+from src.novelty.types import D1Result, D2Result, Verdict
 from src.publication import submit, load_manifest, SUBMISSIONS_DIR, MANIFEST_PATH
 import app as avid_app
 
@@ -219,7 +219,7 @@ class TestE2EReal:
                 formalized_count += 1
 
             # D2 + D1 via orchestrator
-            from src.novelty_v2.orchestrator import check_novelty
+            from src.novelty.orchestrator import check_novelty
             verdict = check_novelty(
                 block=b,
                 lean_statement=lean or latex,

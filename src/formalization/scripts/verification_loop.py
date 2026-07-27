@@ -16,9 +16,13 @@ Flujo:
 
 from __future__ import annotations
 
+import hashlib
+import logging
 from pathlib import Path
 
 from ..providers.base import APIProvider, FormalizationResult
+
+logger = logging.getLogger(__name__)
 
 
 def verification_loop(
@@ -44,6 +48,8 @@ def verification_loop(
 
     messages: list[dict] = [{"role": "user", "content": prompt}]
     last_code = ""
+    seen_hashes: set[str] = set()
+    repeat_count = 0
 
     for round_num in range(1, max_rounds + 1):
         # 1. Llamar al modelo
@@ -63,6 +69,29 @@ def verification_loop(
             })
             continue
 
+        # 2b. Detectar código idéntico repetido (modelo estancado)
+        code_hash = hashlib.sha256(code.encode()).hexdigest()
+        if code_hash in seen_hashes:
+            repeat_count += 1
+            logger.warning(
+                "Round %d: identical code repeated (hash=%s, repeat #%d)",
+                round_num, code_hash[:12], repeat_count,
+            )
+            if repeat_count >= 2:
+                logger.error(
+                    "Model stuck: same output %d times. Aborting.",
+                    repeat_count + 1,
+                )
+                return FormalizationResult(
+                    success=False,
+                    info="STUCK",
+                    rounds_used=round_num,
+                    extracted_code=code,
+                )
+        else:
+            repeat_count = 0
+            seen_hashes.add(code_hash)
+
         # 3. Escribir código en el archivo target
         target_path.write_text(code, encoding="utf-8")
 
@@ -79,7 +108,9 @@ def verification_loop(
             )
 
         # Construir feedback para la próxima ronda
-        feedback = _build_error_feedback(has_error, has_sorry, stdout, stderr)
+        feedback = _build_error_feedback(
+            has_error, has_sorry, stdout, stderr, code,
+        )
         messages.append({"role": "assistant", "content": response})
         messages.append({"role": "user", "content": feedback})
         last_code = code
@@ -127,32 +158,60 @@ def _build_error_feedback(
     has_sorry: bool,
     stdout: str,
     stderr: str,
+    code: str = "",
 ) -> str:
-    """Construye un mensaje de feedback para el modelo con los errores."""
-    parts = ["The Lean code has the following issues:\n"]
+    """Construye un mensaje de feedback para el modelo con los errores.
+
+    Incluye el código que falló y la salida de error de Lean para que
+    el modelo pueda corregir con contexto completo.
+    """
+    parts: list[str] = []
 
     if has_error:
-        parts.append("## Compilation Errors\n")
-        if stdout.strip():
-            # Mostrar últimas 50 líneas (lo más relevante suele estar al final)
-            stdout_lines = stdout.strip().splitlines()
-            relevant = stdout_lines[-50:]
-            parts.append("```\n" + "\n".join(relevant) + "\n```\n")
+        parts.append("## ❌ Compilation failed\n")
+
+        # Show actual error output first (most important)
+        error_text = ""
         if stderr.strip():
             stderr_lines = stderr.strip().splitlines()
-            relevant = stderr_lines[-20:]
-            parts.append("```\n" + "\n".join(relevant) + "\n```\n")
+            error_text = "\n".join(stderr_lines[-40:])
+        if stdout.strip():
+            stdout_lines = stdout.strip().splitlines()
+            if error_text:
+                error_text += "\n" + "\n".join(stdout_lines[-20:])
+            else:
+                error_text = "\n".join(stdout_lines[-40:])
+
+        if error_text.strip():
+            parts.append("```\n" + error_text.strip() + "\n```\n")
+        else:
+            parts.append(
+                "(Lean exited with non-zero status but produced no error output. "
+                "Check for syntax errors, duplicate definitions, or missing imports.)\n\n"
+            )
 
     if has_sorry:
+        parts.append("## ❌ Unresolved `sorry`\n")
         parts.append(
-            "## Unresolved `sorry`\n"
             "The code contains `sorry` placeholders. "
-            "Replace each `sorry` with an actual proof.\n"
+            "Replace each `sorry` with an actual proof.\n\n"
         )
 
+    # Include the failing code for context
+    if code.strip():
+        parts.append("## Your code that failed\n")
+        # Truncate if very long
+        code_display = code.strip()
+        if len(code_display) > 3000:
+            code_display = code_display[:1500] + "\n\n... (truncated) ...\n\n" + code_display[-1500:]
+        parts.append("```lean\n" + code_display + "\n```\n")
+
     parts.append(
-        "\nPlease fix ALL errors and remove ALL `sorry` placeholders. "
-        "Return the complete corrected Lean code between ```lean and ``` markers."
+        "## Instructions\n"
+        "Fix ALL errors in the code above. "
+        "Return ONLY the corrected Lean 4 code between ```lean and ``` markers. "
+        "Do NOT repeat definitions that are already imported or defined elsewhere — "
+        "only output the NEW declaration(s) needed for this block."
     )
 
     return "\n".join(parts)

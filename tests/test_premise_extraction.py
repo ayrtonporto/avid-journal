@@ -48,7 +48,7 @@ def _hash_file(path: Path) -> str:
 
 def test_cache_hit_returns_cached_without_subprocess(tmp_path):
     """When cache exists, result is returned without invoking subprocess."""
-    from src.novelty_v2.premise_extraction import (
+    from src.novelty.premise_extraction import (
         extract_premises, _cache_path, _write_cache,
     )
 
@@ -83,7 +83,7 @@ def test_cache_hit_returns_cached_without_subprocess(tmp_path):
 def test_cache_hit_instant(tmp_path):
     """Cache hit returns in << 1 second."""
     import time
-    from src.novelty_v2.premise_extraction import (
+    from src.novelty.premise_extraction import (
         extract_premises, _cache_path, _write_cache,
     )
 
@@ -114,7 +114,7 @@ def test_cache_hit_instant(tmp_path):
 
 def test_subprocess_failure_returns_none(tmp_path):
     """When subprocess fails, returns None without raising."""
-    from src.novelty_v2.premise_extraction import extract_premises
+    from src.novelty.premise_extraction import extract_premises
 
     lean_file = tmp_path / "fail.lean"
     lean_file.write_text("import Mathlib\n")
@@ -136,7 +136,7 @@ def test_subprocess_failure_returns_none(tmp_path):
 def test_timeout_returns_none(tmp_path):
     """When subprocess times out, returns None without raising."""
     import subprocess
-    from src.novelty_v2.premise_extraction import extract_premises
+    from src.novelty.premise_extraction import extract_premises
 
     lean_file = tmp_path / "timeout.lean"
     lean_file.write_text("import Mathlib\n")
@@ -160,7 +160,7 @@ def test_timeout_returns_none(tmp_path):
 
 def test_missing_file_returns_none():
     """Non-existent .lean file → None."""
-    from src.novelty_v2.premise_extraction import extract_premises
+    from src.novelty.premise_extraction import extract_premises
 
     result = extract_premises(
         "/nonexistent/path/file.lean",
@@ -171,7 +171,7 @@ def test_missing_file_returns_none():
 
 def test_missing_extractdata_returns_none(tmp_path):
     """Project without ExtractData.lean → None."""
-    from src.novelty_v2.premise_extraction import extract_premises
+    from src.novelty.premise_extraction import extract_premises
 
     lean_file = tmp_path / "test.lean"
     lean_file.write_text("theorem x : 1=1 := rfl\n")
@@ -190,7 +190,7 @@ def test_missing_extractdata_returns_none(tmp_path):
 
 def test_corrupt_cache_triggers_reextraction(tmp_path):
     """JSON malformed in cache → ignored, subprocess is called."""
-    from src.novelty_v2.premise_extraction import (
+    from src.novelty.premise_extraction import (
         extract_premises, _cache_path,
     )
 
@@ -231,7 +231,7 @@ def test_corrupt_cache_triggers_reextraction(tmp_path):
 
 def test_extract_for_theorem_filters_by_line(tmp_path):
     """extract_premises_for_theorem applies line range filter correctly."""
-    from src.novelty_v2.premise_extraction import (
+    from src.novelty.premise_extraction import (
         extract_premises, extract_premises_for_theorem,
         _cache_path, _write_cache,
     )
@@ -271,7 +271,7 @@ def test_extract_for_theorem_filters_by_line(tmp_path):
 
 def test_sha256_deterministic(tmp_path):
     """Same content → same hash."""
-    from src.novelty_v2.premise_extraction import _sha256_hex
+    from src.novelty.premise_extraction import _sha256_hex
 
     f1 = tmp_path / "a.lean"
     f2 = tmp_path / "b.lean"
@@ -284,7 +284,7 @@ def test_sha256_deterministic(tmp_path):
 
 def test_sha256_different_for_different_content(tmp_path):
     """Different content → different hash."""
-    from src.novelty_v2.premise_extraction import _sha256_hex
+    from src.novelty.premise_extraction import _sha256_hex
 
     f1 = tmp_path / "c.lean"
     f2 = tmp_path / "d.lean"
@@ -304,7 +304,7 @@ def test_real_extraction_t08a():
 
     Requires lean_project with Mathlib compiled and ExtractData.lean.
     """
-    from src.novelty_v2.premise_extraction import extract_premises_for_theorem
+    from src.novelty.premise_extraction import extract_premises_for_theorem
 
     proj = REPO_ROOT / "lean_project"
     lean_file = proj / "Papers" / "D3_Calibration" / "Paper.lean"
@@ -319,7 +319,7 @@ def test_real_extraction_t08a():
     assert len(result) > 0, "No premises extracted"
 
     # Verify the premises can be used with compute_d3 and produce 0.7222
-    from src.novelty_v2.dimensions.d3_premises import compute_d3
+    from src.novelty.dimensions.d3_premises import compute_d3
 
     # Extract T08b for comparison
     result_b = extract_premises_for_theorem(lean_file, proj, 100, 158)
@@ -344,7 +344,7 @@ def test_real_extraction_t08a():
 def test_real_extraction_cache_hit_second_call():
     """Second call to extract_premises should be a cache hit (instant)."""
     import time
-    from src.novelty_v2.premise_extraction import extract_premises
+    from src.novelty.premise_extraction import extract_premises
 
     proj = REPO_ROOT / "lean_project"
     lean_file = proj / "Papers" / "D3_Calibration" / "Paper.lean"

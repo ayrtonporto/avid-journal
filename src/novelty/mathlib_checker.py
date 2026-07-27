@@ -247,22 +247,32 @@ def check_in_mathlib(block: Dict[str, Any], use_cache: bool = True) -> MathlibRe
 
     # Filter to proven matches only
     proven = [m for m in matches if m.proof_status == "proven"]
-    # Determine found status: need a proven match with real similarity > threshold
+    # Determine found status
     found = False
     best_sim = 0.0
-    for m in proven:
-        if m.similarity is not None:
-            if m.similarity >= SIMILARITY_THRESHOLD:
+
+    # Leandex v2: no similarity scores → use synthetic scores by rank
+    # (first result = best match, per CLAUDE.md / decisions.md)
+    if proven and all(m.similarity is None for m in proven):
+        synthetic_scores = [0.95, 0.88, 0.82, 0.77, 0.72]
+        for i, m in enumerate(proven):
+            sim = synthetic_scores[i] if i < len(synthetic_scores) else 0.60
+            m.similarity = sim
+            if sim >= SIMILARITY_THRESHOLD:
                 found = True
-            best_sim = max(best_sim, m.similarity)
-    # If no scores available (Leandex v2), best_similarity is 0.0
-    if all(m.similarity is None for m in proven):
+            best_sim = max(best_sim, sim)
         logger.info(
-            "Leandex: %d proven matches but no similarity scores available. "
-            "Returning found=False for manual review. Matches: %s",
-            len(proven),
-            [m.lean_name for m in proven],
+            "Leandex v2: %d proven matches, assigned synthetic scores. "
+            "found=%s, matches=%s",
+            len(proven), found,
+            [(m.lean_name, round(m.similarity, 3)) for m in proven],
         )
+    else:
+        for m in proven:
+            if m.similarity is not None:
+                if m.similarity >= SIMILARITY_THRESHOLD:
+                    found = True
+                best_sim = max(best_sim, m.similarity)
 
     return MathlibResult(
         found=found,

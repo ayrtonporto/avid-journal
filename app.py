@@ -25,8 +25,8 @@ if str(REPO_ROOT) not in sys.path:
 import gradio as gr
 import requests
 
-from src.novelty_v2.orchestrator import check_novelty
-from src.novelty_v2.types import Verdict
+from src.novelty.orchestrator import check_novelty
+from src.novelty.types import Verdict
 from src.parser.latex_parser import parse_latex
 from src.formalization.orchestrator import (
     topological_sort,
@@ -35,11 +35,9 @@ from src.formalization.orchestrator import (
 )
 from src.formalization.providers.config import resolve_provider
 from src.formalization.providers.base import AgenticProvider
-from src.formalization.providers.claude_code import ClaudeCodeProvider
 from src.formalization.providers.openai_compatible import OpenAIChatProvider
 from src.formalization.providers.anthropic import AnthropicProvider
 from src.formalization.scripts.lean_checker import check_lean_file
-from src.lean_repl import compile_check
 from src.publication import submit, list_submissions, record_novel_run
 
 logging.basicConfig(level=logging.INFO)
@@ -143,9 +141,9 @@ FORMALIZE_BLOCK_PROMPT = """You are a Lean 4 expert using Mathlib 4. Formalize t
 mathematical block (statement + proof) into Lean 4 code.
 
 Rules:
-- Output ONLY valid Lean 4 code. No explanations.
-- Use `import Mathlib` at the top.
-- Write a proper `{keyword}` declaration with the statement and its proof.
+- Output ONLY the new Lean 4 declaration — just the `{keyword}` line and its proof/body.
+- Do NOT include `import Mathlib` (it's already in the file).
+- Do NOT repeat any declarations from the context below — they already exist in the file.
 - The proof must be complete — no `sorry`, no placeholders.
 - If the block is a definition, use `def` with `:=`.
 - IMPORTANT: never redeclare a name that already exists in Mathlib (e.g. `Even`,
@@ -155,7 +153,7 @@ Rules:
   in every later statement and proof.
 - Reference previously defined theorems and definitions by their exact Lean names
   as they appear in the context below.
-- Available context (already formalized above):
+- Available context (already in the file — do NOT repeat these):
 {context}
 - Wrap your response in ```lean ... ```.
 
@@ -220,6 +218,9 @@ def formalize_block_with_provider(
             on_progress("formalize", f"{progress_desc} — {msg}", progress_pct)
 
     try:
+        seen_hashes: set[str] = set()
+        repeat_count = 0
+
         for round_num in range(1, max_rounds + 1):
             _emit(f"round {round_num}/{max_rounds}: asking model for Lean…")
             response = provider.generate([{"role": "user", "content": prompt}])
@@ -234,6 +235,24 @@ def formalize_block_with_provider(
 
             logger.info(f"Formalization round {round_num} for {block.get('label')}: "
                        f"got {len(code)} chars, starts with: {code[:80]}")
+
+            # Detect identical code — model is stuck
+            import hashlib as _hl
+            code_hash = _hl.sha256(code.encode()).hexdigest()
+            if code_hash in seen_hashes:
+                repeat_count += 1
+                logger.warning(
+                    f"Formalization round {round_num}: identical code (repeat #{repeat_count})"
+                )
+                if repeat_count >= 2:
+                    logger.error(
+                        f"Formalization stuck: same output {repeat_count + 1} times "
+                        f"for {block.get('label')}. Aborting."
+                    )
+                    return None
+            else:
+                repeat_count = 0
+                seen_hashes.add(code_hash)
 
             # Quality check: reject sorry, missing declaration, too short
             if re.search(r":=\s*(by\s+)?sorry\b", code):
@@ -263,14 +282,11 @@ def formalize_block_with_provider(
             # loop rename the definition before it enters the context.
             if can_compile:
                 _emit(f"round {round_num}/{max_rounds}: compiling in Lean…")
-                # compile_check uses a resident Mathlib REPL (env 0) when the
-                # pool is enabled — no per-check `import Mathlib` (~27s saved),
-                # falling back to the cold check_lean_file when the pool is off
-                # or unavailable. It rewrites `target` in the fallback path, so
-                # `full_code` above stays the reference frame for line numbers.
-                has_error, has_sorry, stdout, stderr = compile_check(
-                    code, context_lean, target, lean_project_dir
-                )
+                # Pass a Path, not a str: find_lean_project_root() calls
+                # .is_file() on it, so a str raises inside check_lean_file and
+                # every compile silently reports has_error=True — no model
+                # output can ever pass. (target is already a Path.)
+                has_error, has_sorry, stdout, stderr = check_lean_file(target)
                 logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
                     _emit(f"round {round_num}/{max_rounds}: Lean errors, retrying…")
@@ -298,8 +314,10 @@ def formalize_block_with_provider(
                         f"The Lean code has compilation errors. Fix them.\n\n"
                         f"{formatted_errors}\n"
                         f"{explanation_text}\n\n"
-                        f"Current code:\n```lean\n{full_code}\n```\n\n"
-                        f"Rewrite the entire declaration to compile without errors or sorry. "
+                        f"Current file content:\n```lean\n{full_code}\n```\n\n"
+                        f"Output ONLY the corrected declaration (the `{keyword}` block). "
+                        f"Do NOT repeat `import Mathlib` or any declarations already "
+                        f"present in the context — rewrite just the failing declaration. "
                         f"Pay attention to the exact line numbers and error messages."
                     )
                     continue
@@ -326,35 +344,21 @@ def _build_context_lean(formalized: list[tuple[str, str]]) -> str:
 # Publishability check
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _block_blocks_publication(r: dict) -> bool:
-    """True if this block prevents the paper from being published.
-
-    Definitions are supporting scaffolding: they are very often already
-    known (e.g. `Even` is in Mathlib) and being known must NOT block a
-    paper. A definition only blocks publication if it failed to formalize.
-    Theorems/lemmas must be genuinely novel.
-    """
-    novel_verdicts = {
-        Verdict.NOVEDAD_ENUNCIADO.value,
-        Verdict.NOVEDAD_DEMOSTRACION.value,
-    }
-    if (r.get("type") or "").lower() == "definition":
-        # A known definition is fine; only a formalization failure blocks.
-        return r.get("veredicto") == "ERROR" or not r.get("formalized")
-    return r.get("veredicto") not in novel_verdicts
-
-
 def _is_publishable(results: List[dict]) -> bool:
-    """A paper is publishable if every theorem/lemma is novel and at least
-    one such claim exists. Definitions may be known (see
-    _block_blocks_publication) without disqualifying the paper."""
+    """A paper is auto-publishable if ALL non-definition blocks are NOVEDAD_ENUNCIADO.
+
+    D3-based verdicts (NOVEDAD_DEMOSTRACION, NO_NOVEDOSO_redundante, INCONCLUSIVE,
+    MATCH_ENCONTRADO_PENDIENTE_D3) require human review — they are not auto-publishable.
+    """
     if not results:
         return False
-    if any(_block_blocks_publication(r) for r in results):
-        return False
-    # Require at least one novel claim — a paper of only definitions is not
-    # a result.
-    return any((r.get("type") or "").lower() != "definition" for r in results)
+    for r in results:
+        v = r.get("veredicto")
+        if v == "DEFINITION":
+            continue
+        if v != Verdict.NOVEDAD_ENUNCIADO.value:
+            return False
+    return True
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -418,14 +422,7 @@ def process_tex(
     # Resolve provider: the client's own provider+key when supplied (transient,
     # never stored or logged), otherwise the server default (DeepSeek V4 Pro).
     try:
-        pname = (provider_name or "").strip().lower()
-        if pname in ("claude-code", "claude-cli", "claude-oauth"):
-            # Claude Code CLI: agentic, OAuth, server-local — no API key. It
-            # formalizes via the orchestrator's agentic path. Requires `claude`
-            # on PATH (see run_local_demo.ps1 / deploy notes).
-            provider = ClaudeCodeProvider(model=(model_name or None))
-            logger.info("Using agentic Claude Code (OAuth) provider")
-        elif provider_name and api_key_input.strip():
+        if provider_name and api_key_input.strip():
             provider = build_client_provider(provider_name, api_key_input, model=model_name)
             logger.info(f"Using client provider: {provider_name} model={model_name or '(default)'} ({type(provider).__name__})")
         else:
@@ -469,9 +466,6 @@ def process_tex(
                 paper_title=scratch_title,
                 parent_project=str(LEAN_PROJECT_DIR) if LEAN_PROJECT_DIR.exists() else None,
                 resume=False,
-                # formalize_paper rebuilds the provider from `model`; map the
-                # agentic Claude Code provider to the orchestrator's "claude".
-                model=("claude" if isinstance(provider, ClaudeCodeProvider) else None),
                 on_progress=fp_progress,
             )
             blocks_dir = Path(fp_summary["project_dir"]) / "Blocks"
@@ -544,6 +538,29 @@ def process_tex(
                 formalized_count += 1
                 formalized_context.append((label, lean_stmt))
 
+        # --- D3 premises extraction (candidate side, skip for definitions) ---
+        d3_premises_a = None
+        block_type = (block.get("type") or "").lower()
+        if formalized and lean_stmt and LEAN_PROJECT_DIR.exists() and block_type != "definition":
+            try:
+                from src.novelty.premise_extraction import extract_premises
+                import uuid as _uuid
+                # Create temp file under Papers/ so ExtractData can resolve the module
+                _d3_dir = LEAN_PROJECT_DIR / "Papers" / "_d3_temp"
+                _d3_dir.mkdir(parents=True, exist_ok=True)
+                _d3_path = _d3_dir / f"block_{_uuid.uuid4().hex[:8]}.lean"
+                full_lean = f"import Mathlib\n\n{context}\n\n{lean_stmt}\n"
+                _d3_path.write_text(full_lean, encoding="utf-8")
+                if on_progress:
+                    on_progress("d3", f"Extracting premises [{i+1}/{n}]: {title}", int(pct)+2)
+                d3_premises_a = extract_premises(_d3_path, LEAN_PROJECT_DIR)
+                if d3_premises_a:
+                    logger.info(f"  {label}: extracted {len(d3_premises_a)} premises for D3")
+                try: _d3_path.unlink()
+                except: pass
+            except Exception as _e:
+                logger.debug(f"D3 premise extraction skipped: {_e}")
+
         # --- D2 + D1 via orchestrator ---
         if on_progress: on_progress("novelty", f"Checking novelty [{i+1}/{n}]: {title}", int(pct)+5)
         try:
@@ -552,27 +569,46 @@ def process_tex(
                 lean_statement=lean_stmt or latex[:2000],
                 lean_project_dir=str(LEAN_PROJECT_DIR) if LEAN_PROJECT_DIR.exists() else None,
                 use_cache=True,
+                d3_premises_a=d3_premises_a,
+                on_progress=on_progress,
             )
-            mapped = {
-                "block_id": i,
-                "label": label,
-                "title": title,
-                "type": block.get("type", ""),
-                "content_preview": (block.get("content_latex") or "")[:300],
-                "veredicto": verdict.veredicto.value,
-                "detail": verdict.razonamiento or "",
-                "lean_statement": lean_stmt,
-                "formalized": formalized,
-                "match_C_F": verdict.d1.match_C_F if verdict.d1 else None,
-                "match_C_I": verdict.d1.match_C_I if verdict.d1 else None,
-            }
+            # Definitions are checked (D1/D2 verify correctness and corpus presence),
+            # but they don't affect the publishability verdict.
+            if block_type == "definition":
+                mapped = {
+                    "block_id": i,
+                    "label": label,
+                    "title": title,
+                    "type": block_type,
+                    "content_preview": (block.get("content_latex") or "")[:300],
+                    "veredicto": "DEFINITION",
+                    "detail": f"Definition (D1/D2 checked: {verdict.razonamiento or 'passed'})",
+                    "lean_statement": lean_stmt,
+                    "formalized": formalized,
+                    "match_C_F": verdict.d1.match_C_F if verdict.d1 else None,
+                    "match_C_I": verdict.d1.match_C_I if verdict.d1 else None,
+                }
+            else:
+                mapped = {
+                    "block_id": i,
+                    "label": label,
+                    "title": title,
+                    "type": block_type,
+                    "content_preview": (block.get("content_latex") or "")[:300],
+                    "veredicto": verdict.veredicto.value,
+                    "detail": verdict.razonamiento or "",
+                    "lean_statement": lean_stmt,
+                    "formalized": formalized,
+                    "match_C_F": verdict.d1.match_C_F if verdict.d1 else None,
+                    "match_C_I": verdict.d1.match_C_I if verdict.d1 else None,
+                }
         except Exception as e:
             logger.exception(f"Novelty check failed for {label}")
             mapped = {
                 "block_id": i,
                 "label": label,
                 "title": title,
-                "type": block.get("type", ""),
+                "type": block_type,
                 "content_preview": (block.get("content_latex") or "")[:300],
                 "veredicto": "ERROR",
                 "detail": str(e),
@@ -592,28 +628,28 @@ def process_tex(
     # Build downloadable Lean file
     lean_path = _build_lean_file(results, tex_path)
 
-    # Auto-persist the journal's authoritative record IF the paper passed and
-    # was verified novel. Personal data stays empty here; the publish form
-    # enriches this same record later (by submission_id). We never lose a novel
-    # result, even if the author walks away without submitting.
+    # Auto-persist EVERY run so no submission is ever lost. Personal data stays
+    # empty; the publish form enriches this same record later (by submission_id).
+    # The 'novel' flag tracks whether the paper passed all novelty checks.
     submission_id = None
-    if _is_publishable(results):
-        try:
-            counts: Dict[str, int] = {}
-            for r in results:
-                v = r.get("veredicto", "ERROR")
-                counts[v] = counts.get(v, 0) + 1
-            rec = record_novel_run(
-                tex_path=tex_path,
-                lean_path=lean_path,
-                verdicts={"total": len(results), "counts": counts},
-                n_theorems=len(results),
-                title=Path(tex_path).stem,
-            )
-            submission_id = rec["id"]
-            logger.info(f"Novel run auto-recorded as {submission_id}")
-        except Exception:
-            logger.exception("Failed to auto-record novel run")
+    try:
+        counts: Dict[str, int] = {}
+        for r in results:
+            v = r.get("veredicto", "ERROR")
+            counts[v] = counts.get(v, 0) + 1
+        is_novel = _is_publishable(results)
+        rec = record_novel_run(
+            tex_path=tex_path,
+            lean_path=lean_path,
+            verdicts={"total": len(results), "counts": counts},
+            n_theorems=len(results),
+            title=Path(tex_path).stem,
+            novel=is_novel,
+        )
+        submission_id = rec["id"]
+        logger.info(f"Run auto-recorded as {submission_id} (novel={is_novel})")
+    except Exception:
+        logger.exception("Failed to auto-record run")
 
     summary = _build_summary(results, formalized_count)
     if submission_id:
@@ -743,7 +779,7 @@ def _build_publication_section(
         </div>
         """
     else:
-        failed = [r for r in results if _block_blocks_publication(r)]
+        failed = [r for r in results if r.get("veredicto") != Verdict.NOVEDAD_ENUNCIADO.value]
         failed_list = "".join(
             f"<li><b>{r['title']}</b>: {r['veredicto']}</li>"
             for r in failed[:5]

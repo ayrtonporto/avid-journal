@@ -28,7 +28,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.parser.latex_parser import parse_latex
 from src.formalization.orchestrator import topological_sort
-from src.novelty_v2.types import D1Result, D2Result, Verdict
+from src.novelty.types import D1Result, D2Result, Verdict
 from src.publication import submit, list_submissions, load_manifest
 
 # Import app module functions (without Gradio UI)
@@ -84,7 +84,7 @@ def _mock_d2_result_not_trivial() -> D2Result:
 
 def _mock_novelty_verdict_novel():
     """Return a NoveltyVerdict for NOVEDAD_ENUNCIADO."""
-    from src.novelty_v2.types import NoveltyVerdict
+    from src.novelty.types import NoveltyVerdict
     return NoveltyVerdict(
         veredicto=Verdict.NOVEDAD_ENUNCIADO,
         razonamiento="No matches in Mathlib or arXiv.",
@@ -95,7 +95,7 @@ def _mock_novelty_verdict_novel():
 
 def _mock_novelty_verdict_trivial():
     """Return a NoveltyVerdict for NO_NOVEDOSO_trivial."""
-    from src.novelty_v2.types import NoveltyVerdict
+    from src.novelty.types import NoveltyVerdict
     return NoveltyVerdict(
         veredicto=Verdict.NO_NOVEDOSO_trivial,
         razonamiento="Closed by `norm_num`.",
@@ -162,10 +162,10 @@ Done."""
 class TestVerdictMapping:
     """Test verdict mapping via orchestrator's check_novelty."""
 
-    @patch("src.novelty_v2.orchestrator._check_cf")
-    @patch("src.novelty_v2.orchestrator.check_triviality")
+    @patch("src.novelty.orchestrator._check_cf")
+    @patch("src.novelty.orchestrator.check_triviality")
     def test_novel_enunciado(self, mock_d2, mock_cf):
-        from src.novelty_v2.orchestrator import check_novelty
+        from src.novelty.orchestrator import check_novelty
         mock_d2.return_value = _mock_d2_result_not_trivial()
         mock_cf.return_value = _mock_d1_result_novel()
         verdict = check_novelty(
@@ -174,10 +174,10 @@ class TestVerdictMapping:
         )
         assert verdict.veredicto == Verdict.NOVEDAD_ENUNCIADO
 
-    @patch("src.novelty_v2.orchestrator._check_cf")
-    @patch("src.novelty_v2.orchestrator.check_triviality")
+    @patch("src.novelty.orchestrator._check_cf")
+    @patch("src.novelty.orchestrator.check_triviality")
     def test_trivial(self, mock_d2, mock_cf):
-        from src.novelty_v2.orchestrator import check_novelty
+        from src.novelty.orchestrator import check_novelty
         mock_d2.return_value = _mock_d2_result_trivial()
         mock_cf.return_value = _mock_d1_result_novel()
         verdict = check_novelty(
@@ -186,10 +186,10 @@ class TestVerdictMapping:
         )
         assert verdict.veredicto == Verdict.NO_NOVEDOSO_trivial
 
-    @patch("src.novelty_v2.orchestrator._check_cf")
-    @patch("src.novelty_v2.orchestrator.check_triviality")
+    @patch("src.novelty.orchestrator._check_cf")
+    @patch("src.novelty.orchestrator.check_triviality")
     def test_match_mathlib(self, mock_d2, mock_cf):
-        from src.novelty_v2.orchestrator import check_novelty
+        from src.novelty.orchestrator import check_novelty
         mock_d2.return_value = _mock_d2_result_not_trivial()
         mock_cf.return_value = _mock_d1_result_found()
         verdict = check_novelty(
@@ -198,10 +198,10 @@ class TestVerdictMapping:
         )
         assert verdict.veredicto == Verdict.MATCH_ENCONTRADO_PENDIENTE_D3
 
-    @patch("src.novelty_v2.orchestrator._check_cf")
-    @patch("src.novelty_v2.orchestrator.check_triviality")
+    @patch("src.novelty.orchestrator._check_cf")
+    @patch("src.novelty.orchestrator.check_triviality")
     def test_all_fields_present(self, mock_d2, mock_cf):
-        from src.novelty_v2.orchestrator import check_novelty
+        from src.novelty.orchestrator import check_novelty
         mock_d2.return_value = _mock_d2_result_not_trivial()
         mock_cf.return_value = _mock_d1_result_novel()
         verdict = check_novelty(

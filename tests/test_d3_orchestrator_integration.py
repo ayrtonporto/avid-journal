@@ -17,9 +17,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.novelty_v2.dimensions.d3_premises import load_premises_from_ast
-from src.novelty_v2.orchestrator import check_novelty
-from src.novelty_v2.types import Verdict
+from src.novelty.dimensions.d3_premises import load_premises_from_ast
+from src.novelty.orchestrator import check_novelty
+from src.novelty.types import Verdict
 
 # Path to the pre-generated ast.json
 AST_JSON = (
@@ -75,7 +75,7 @@ def test_orchestrator_d3_t08_reproduces_distance(t08_premises_a, t08_premises_b)
     # Irrational (Real.sqrt 2) non-trivial (norm_num is blacklisted),
     # and D1 C_F requires Leandex (live API), we cannot run the full
     # pipeline here. Instead, we test _run_d3_if_possible directly.
-    from src.novelty_v2.orchestrator import _run_d3_if_possible
+    from src.novelty.orchestrator import _run_d3_if_possible
 
     result = _run_d3_if_possible(
         lean_statement=_LEAN_STMT,
@@ -103,7 +103,7 @@ def test_orchestrator_d3_t08_reproduces_distance(t08_premises_a, t08_premises_b)
 
 def test_orchestrator_d3_without_premises_returns_inactive():
     """Without d3_premises, _run_d3_if_possible returns activa=False."""
-    from src.novelty_v2.orchestrator import _run_d3_if_possible
+    from src.novelty.orchestrator import _run_d3_if_possible
 
     result = _run_d3_if_possible(
         lean_statement=_LEAN_STMT,
@@ -122,8 +122,8 @@ def test_orchestrator_d3_without_premises_returns_inactive():
 def test_orchestrator_d3_empty_sets_gives_inconclusive_verdict():
     """When compute_d3 returns None (empty sets), the orchestrator
     returns INCONCLUSIVE verdict."""
-    from src.novelty_v2.orchestrator import _run_d3_if_possible
-    from src.novelty_v2.types import D3Result
+    from src.novelty.orchestrator import _run_d3_if_possible
+    from src.novelty.types import D3Result
 
     # Create premises that will all be filtered out (Init. namespace)
     empty_premises = [
@@ -174,7 +174,7 @@ def test_inconclusive_verdict_enum_value():
 def test_orchestrator_d3_matches_validate_script(t08_premises_a, t08_premises_b):
     """The orchestrator's compute_d3 call should return the EXACT same
     number as the standalone validate_d3.py script."""
-    from src.novelty_v2.orchestrator import _run_d3_if_possible
+    from src.novelty.orchestrator import _run_d3_if_possible
 
     result = _run_d3_if_possible(
         lean_statement=_LEAN_STMT,
@@ -199,7 +199,7 @@ def test_orchestrator_d3_matches_validate_script(t08_premises_a, t08_premises_b)
 
 def test_to_dict_includes_new_d3_fields():
     """NoveltyVerdict.to_dict() includes intersection_size, union_size, flags."""
-    from src.novelty_v2.types import D3Result, NoveltyVerdict, Verdict
+    from src.novelty.types import D3Result, NoveltyVerdict, Verdict
 
     d3 = D3Result(
         activa=True,
