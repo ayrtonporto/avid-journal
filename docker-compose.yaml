@@ -37,6 +37,9 @@ services:
       # Default enforces sign-in. Requires the site be served over HTTPS on a real
       # domain (Google Sign-In does not work over plain http on a bare IP).
     volumes:
+      # Persist the users DB (users + activity log) across container recreation.
+      # Without this, `docker compose up --build` / image updates wipe all users.
+      - avid_users:/app/src/users
       - avid_cache:/app/cache
       - avid_lean:/app/lean_project/.lake
       - avid_submissions:/app/src/publication/submissions
@@ -60,6 +63,7 @@ services:
       - default
 
 volumes:
+  avid_users:
   avid_cache:
   avid_lean:
   avid_submissions:

@@ -937,13 +937,24 @@ async function analyze(file) {
         }
         lastLen = log.length;
 
-        if (data.status === "done" || data.status === "error") {
+        // While waiting for a free worker, show the queue position.
+        if (data.status === "queued") {
+          statusTitle.textContent = "avid: queued";
+          const pos = data.queue_position;
+          statusMsg.textContent = (pos && pos > 1)
+            ? ("In queue — position #" + pos + ", processed in order…")
+            : "In queue — starting shortly…";
+        } else if (statusTitle.textContent === "avid: queued") {
+          statusTitle.textContent = "avid: analyzing";
+        }
+
+        if (data.status === "done" || data.status === "error" || data.status === "cancelled") {
           clearInterval(poll);
           window.__avidRunning = false;
           setAnalysisRunning(false);
 
-          if (data.status === "error") {
-            statusTitle.textContent = "avid: error";
+          if (data.status === "error" || data.status === "cancelled") {
+            statusTitle.textContent = "avid: " + data.status;
             appendLog("err", (data.result && data.result.error) || "Unknown error", "#d98c95");
           } else if (data.result) {
             const r = data.result;
@@ -1029,7 +1040,12 @@ function renderResults(filename, summary, results, pubHtml) {
   resultsArea.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// Init on page load
+// Init on page load. The GIS script (accounts.google.com/gsi/client) loads
+// async+defer, so window.google usually doesn't exist yet on this first call
+// and the Google button never renders. GIS invokes window.onGoogleLibraryLoad
+// once it finishes loading — re-run updateAuthUI there to render the button
+// (idempotent; no-op cost when already signed in).
+window.onGoogleLibraryLoad = updateAuthUI;
 updateAuthUI();
 
 // ═══════════════════════════════════════════════════════════════════

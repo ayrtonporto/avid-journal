@@ -351,6 +351,105 @@ def _require_user(request: Request) -> str:
 _run_store: dict[str, dict] = {}
 import threading as _threading
 import uuid as _uuid
+import queue as _queue
+
+# ── Bounded analysis queue ──────────────────────────────────────────────────
+# A single FIFO queue fed by a fixed pool of worker threads, so at most
+# AVID_ANALYSIS_WORKERS analyses run concurrently (default = REPL pool size).
+# The API enqueues and returns immediately; workers pull one job at a time.
+# This bounds memory (each analysis holds Mathlib via the REPL pool, ~2.5GB) and
+# LLM concurrency, gives fair FIFO ordering, and lets clients see their position.
+_ANALYSIS_WORKERS = max(1, int(os.environ.get(
+    "AVID_ANALYSIS_WORKERS", os.environ.get("AVID_REPL_POOL_SIZE", "1"))))
+_MAX_QUEUE = int(os.environ.get("AVID_MAX_QUEUE", "50"))
+# Drop a still-queued job if its client stops polling (closed the tab) for this
+# long. The frontend polls every 1s, so ~20s of silence means it's gone.
+_QUEUE_POLL_TIMEOUT = float(os.environ.get("AVID_QUEUE_POLL_TIMEOUT", "20"))
+_job_queue: "_queue.Queue[str]" = _queue.Queue()
+_queue_waiting: list[str] = []          # run_ids still waiting (for position)
+_queue_lock = _threading.Lock()
+
+
+def _run_analysis(run_id: str) -> None:
+    """Run the full pipeline for one queued job, updating its _run_store entry."""
+    entry = _run_store.get(run_id)
+    if entry is None:
+        return
+    from app import process_tex
+    entry["status"] = "running"
+
+    def _on_progress(step, msg, _pct):
+        entry["log"].append({"step": step, "msg": msg, "ts": time_module.time()})
+
+    try:
+        class FakeFile:
+            name = entry["tex_path"]
+        summary, results, lean_path, pub_html = process_tex(
+            FakeFile(),
+            api_key_input=entry["api_key"],
+            provider_name=entry["provider"],
+            model_name=entry["model"],
+            on_progress=_on_progress,
+        )
+        entry["result"] = {
+            "summary": summary, "results": results,
+            "lean_path": lean_path, "pub_html": pub_html,
+        }
+        entry["status"] = "done"
+    except Exception as e:
+        logger.exception("Analysis %s failed", run_id)
+        entry["status"] = "error"
+        entry["result"] = {"error": str(e)}
+
+
+def _analysis_worker() -> None:
+    while True:
+        run_id = _job_queue.get()
+        try:
+            with _queue_lock:
+                if run_id in _queue_waiting:
+                    _queue_waiting.remove(run_id)
+            entry = _run_store.get(run_id)
+            # The reaper may have dropped this job (client closed the tab) while
+            # it waited — skip it instead of tying up a worker on abandoned work.
+            if entry is None or entry.get("status") == "cancelled":
+                continue
+            _run_analysis(run_id)
+        finally:
+            _job_queue.task_done()
+
+
+def _queue_reaper() -> None:
+    """Cancel queued jobs whose client stopped polling (closed the window). Only
+    touches jobs still waiting — a job already running is left to finish."""
+    while True:
+        time_module.sleep(5)
+        now = time_module.time()
+        dropped = []
+        with _queue_lock:
+            for rid in list(_queue_waiting):
+                e = _run_store.get(rid)
+                if e is None:
+                    _queue_waiting.remove(rid)
+                    continue
+                if now - e.get("last_poll", now) > _QUEUE_POLL_TIMEOUT:
+                    _queue_waiting.remove(rid)
+                    e["status"] = "cancelled"
+                    e["result"] = {"error": "cancelled: client disconnected"}
+                    dropped.append(rid)
+        for rid in dropped:
+            logger.info("Queue: dropped %s (client stopped polling)", rid)
+
+
+@app.on_event("startup")
+async def _start_analysis_workers() -> None:
+    for _ in range(_ANALYSIS_WORKERS):
+        _threading.Thread(target=_analysis_worker, daemon=True).start()
+    _threading.Thread(target=_queue_reaper, daemon=True).start()
+    logger.info(
+        "Analysis queue ready: %d worker(s), max queue %d, poll timeout %.0fs",
+        _ANALYSIS_WORKERS, _MAX_QUEUE, _QUEUE_POLL_TIMEOUT,
+    )
 
 
 @app.post("/api/analyze")
@@ -378,52 +477,38 @@ async def api_analyze(request: Request):
         tmp.write(content)
         tex_path = tmp.name
 
-    from app import process_tex
+    # Backpressure: reject when the queue is saturated rather than piling on.
+    with _queue_lock:
+        if len(_queue_waiting) >= _MAX_QUEUE:
+            raise HTTPException(
+                status_code=503,
+                detail="Analysis queue is full; please try again shortly.",
+            )
 
     run_id = _uuid.uuid4().hex[:12]
     _run_store[run_id] = {
         "log": [],
-        "status": "running",
+        "status": "queued",
         "result": None,
         "file": uploaded.filename,
+        "last_poll": time_module.time(),
+        # job params consumed by the worker
+        "tex_path": tex_path,
+        "provider": client_provider,
+        "model": client_model,
+        "api_key": client_api_key,
     }
-
-    def _on_progress(step, msg, _pct):
-        _run_store[run_id]["log"].append({
-            "step": step, "msg": msg,
-            "ts": time_module.time(),
-        })
-
-    def _run():
-        try:
-            class FakeFile:
-                name = tex_path
-            summary, results, lean_path, pub_html = process_tex(
-                FakeFile(),
-                api_key_input=client_api_key,
-                provider_name=client_provider,
-                model_name=client_model,
-                on_progress=_on_progress,
-            )
-            _run_store[run_id]["result"] = {
-                "summary": summary,
-                "results": results,
-                "lean_path": lean_path,
-                "pub_html": pub_html,
-            }
-            _run_store[run_id]["status"] = "done"
-        except Exception as e:
-            _run_store[run_id]["status"] = "error"
-            _run_store[run_id]["result"] = {"error": str(e)}
-
-    _threading.Thread(target=_run, daemon=True).start()
+    with _queue_lock:
+        _queue_waiting.append(run_id)
+        position = len(_queue_waiting)
+    _job_queue.put(run_id)
 
     if DEV_MODE:
         from src.users import upsert_user as _upsert
         _upsert("dev-user", "dev@localhost", "Dev Mode")
     log_action(google_id, "analyze", {"filename": uploaded.filename})
 
-    return JSONResponse({"run_id": run_id})
+    return JSONResponse({"run_id": run_id, "queue_position": position})
 
 
 @app.get("/api/progress/{run_id}")
@@ -432,9 +517,16 @@ async def api_progress(run_id: str):
     entry = _run_store.get(run_id)
     if entry is None:
         return JSONResponse({"status": "not_found"}, status_code=404)
+    entry["last_poll"] = time_module.time()   # heartbeat: the client is still here
+    position = None
+    if entry["status"] == "queued":
+        with _queue_lock:
+            if run_id in _queue_waiting:
+                position = _queue_waiting.index(run_id) + 1
     return JSONResponse({
         "status": entry["status"],
         "file": entry["file"],
+        "queue_position": position,
         "log": entry["log"],
         "result": entry.get("result"),
     })
