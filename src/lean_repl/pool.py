@@ -192,6 +192,20 @@ class ReplWorker:
         resp = self._read_response(timeout)
         return _resp_to_tuple(resp)
 
+    # ── raw command (for env chaining / metaprograms) ────────────────────────
+    def run_raw(self, cmd: str, env: Optional[int], timeout: float = CHECK_TIMEOUT) -> dict:
+        """Send one raw command against `env` and return the full REPL response
+        dict (includes the resulting `env` id and `messages`). Used by callers
+        that need the environment id (env chaining) or the raw message data
+        (metaprograms), not the compile-check tuple."""
+        assert self.proc and self.proc.stdin
+        payload: dict = {"cmd": cmd}
+        if env is not None:
+            payload["env"] = env
+        self.proc.stdin.write(json.dumps(payload) + "\n\n")
+        self.proc.stdin.flush()
+        return self._read_response(timeout)
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Pool: N workers behind an idle queue
@@ -272,6 +286,47 @@ class ReplPool:
         finally:
             self.idle.put(w)
 
+    def run_env_chain(
+        self,
+        cmd1: str,
+        cmd2: str,
+        timeout: float = CHECK_TIMEOUT,
+        acquire_timeout: float = ACQUIRE_TIMEOUT,
+    ) -> str:
+        """Elaborate `cmd1` on top of env 0 (Mathlib), then run `cmd2` against the
+        resulting environment, and return the concatenated `data` of cmd2's REPL
+        messages. `cmd1`'s imports are neutralised (env 0 already has Mathlib).
+
+        This lets a metaprogram (`cmd2`) inspect declarations introduced by
+        `cmd1` — e.g. query the used constants of a freshly-elaborated candidate
+        proof — reusing the resident Mathlib environment (sub-second)."""
+        w = self.idle.get(timeout=acquire_timeout)
+        try:
+            if not w.alive():
+                w.start()
+            r1 = w.run_raw(_neutralize_imports(cmd1), w.env0, timeout)
+            env1 = r1.get("env")
+            if env1 is None:
+                env1 = w.env0
+            r2 = w.run_raw(cmd2, env1, timeout)
+            w.n_checks += 1
+            if w.n_checks >= RECYCLE_AFTER:
+                logger.info("Recycling REPL worker %s after %d checks", w.wid, w.n_checks)
+                w.kill()
+                w.start()
+            messages = r2.get("messages") or []
+            return "\n".join((m.get("data", "") or "") for m in messages)
+        except (TimeoutError, EOFError, OSError, ValueError, json.JSONDecodeError) as e:
+            logger.warning("REPL worker %s env-chain failed (%s); restarting", w.wid, e)
+            w.kill()
+            try:
+                w.start()
+            except Exception as e2:
+                logger.error("REPL worker %s restart failed: %s", w.wid, e2)
+            raise
+        finally:
+            self.idle.put(w)
+
     def shutdown(self) -> None:
         for w in self.workers:
             w.kill()
@@ -331,6 +386,24 @@ def shutdown_pool() -> None:
         if _pool is not None:
             _pool.shutdown()
             _pool = None
+
+
+def query_env_chain(
+    cmd1: str,
+    cmd2: str,
+    project_dir: str | Path,
+) -> Optional[str]:
+    """Run `cmd1` then `cmd2` (against cmd1's env) on a resident worker and return
+    cmd2's message data. Returns None if the pool is disabled/unavailable or the
+    query fails — callers fall back to their cold path."""
+    pool = get_pool(project_dir)
+    if pool is None:
+        return None
+    try:
+        return pool.run_env_chain(cmd1, cmd2)
+    except Exception as e:
+        logger.warning("query_env_chain failed: %s", e)
+        return None
 
 
 def compile_check(

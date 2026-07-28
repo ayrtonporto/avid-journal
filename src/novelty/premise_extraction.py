@@ -410,3 +410,71 @@ def extract_match_premises_via_repl(
         "D3 side-B: %s → %d raw premises via REPL env", lean_name, len(premises),
     )
     return premises
+
+
+def extract_candidate_premises_via_repl(
+    candidate_code: str,
+    block_code: str,
+    lean_project_dir: str | Path,
+) -> Optional[List[dict]]:
+    """Lado A de D3 vía el pool residente (evita el ExtractData frío ~110s).
+
+    Elabora el candidato (contexto + enunciado) sobre el env 0 de Mathlib y luego
+    consulta las premisas de la prueba con el MISMO metaprograma del lado B contra
+    el entorno resultante. Así ambos lados de D3 usan el método idéntico
+    (getUsedConstants + expansión de auxiliares) y es sub-segundo. Devuelve None
+    si el pool está deshabilitado o falla — el caller cae a ExtractData.
+
+    Args:
+        candidate_code: contexto + enunciado del bloque (lo que se elabora).
+        block_code: SOLO el Lean del bloque actual, para extraer su nombre. Si el
+            bloque es anónimo (`example …`, sin nombre) devuelve None — no se puede
+            hacer D3 sobre una declaración sin nombre, y NO debe caer al nombre de
+            una declaración del contexto.
+    """
+    import re as _re
+
+    # Allow dotted (namespaced) names, e.g. `lemma PaperEven.add` — without the
+    # dot the regex would capture only `PaperEven` (the def) and query the wrong
+    # declaration.
+    names = _re.findall(
+        r"(?:^|\n)\s*(?:theorem|lemma|def)\s+([A-Za-z_][\w'.]*)", block_code
+    )
+    if not names:
+        logger.info(
+            "D3 side-A: block has no named declaration (anonymous example?); "
+            "skipping side A"
+        )
+        return None
+    target = names[-1]  # the block's own declaration
+
+    try:
+        from src.lean_repl.pool import query_env_chain, pool_enabled
+    except Exception as exc:
+        logger.warning("D3 side-A: pool import failed: %s", exc)
+        return None
+    if not pool_enabled():
+        return None
+
+    metaprog = _SIDEB_METAPROGRAM.replace("__NAME__", target)
+    out = query_env_chain(candidate_code, metaprog, lean_project_dir)
+    if out is None:
+        return None
+
+    m = _re.search(r"AVIDPREM_START\[(.*)\]AVIDPREM_END", out, _re.DOTALL)
+    if m is None:
+        logger.warning("D3 side-A: no AVIDPREM output for %s", target)
+        return None
+    inner = m.group(1).strip()
+    if not inner:
+        return []
+    try:
+        premises = json.loads("[" + inner + "]")
+    except json.JSONDecodeError as exc:
+        logger.warning("D3 side-A: bad JSON for %s: %s", target, exc)
+        return None
+
+    logger.info(
+        "D3 side-A: %s → %d raw premises via REPL env-chain", target, len(premises),
+    )
+    return premises
