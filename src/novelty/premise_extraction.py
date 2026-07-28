@@ -304,3 +304,109 @@ def extract_premises_for_theorem(
         len(result), len(all_premises), theorem_line_start, theorem_line_end,
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Side B via the resident REPL env (no source location needed)
+# ---------------------------------------------------------------------------
+
+# Lean metaprogram: given a fully-qualified constant name, walk its proof term's
+# used constants (expanding auto-generated `_proof_/_private/.match_` auxiliaries
+# so tactic proofs like `by grind` reveal their real premises), skip constants
+# that only appear in the statement (type), and emit each real premise as
+# {fullName, modName} JSON between AVIDPREM markers. Runs against env 0 (Mathlib
+# already loaded) so it is sub-second. Init./Lean. infra is left to D3 Filter 1.
+_SIDEB_METAPROGRAM = r'''open Lean in
+run_cmd do
+  let env ← getEnv
+  let target : Name := `__NAME__
+  let isAux : Name → Bool := fun nm =>
+    let s := toString nm
+    s.startsWith "_private" || (s.splitOn "_proof_").length > 1
+      || (s.splitOn ".match_").length > 1 || (s.splitOn "._eq_").length > 1
+      || (s.splitOn "._sunfold").length > 1 || (s.splitOn "._cstage").length > 1
+      || (s.splitOn "._unsafe").length > 1
+  match env.find? target with
+  | none => logInfo "AVIDPREM_START[]AVIDPREM_END"
+  | some ci =>
+    let typeConsts := ci.type.getUsedConstants
+    let mut visited : Array Name := #[]
+    let mut work : Array Name := (ci.value?.getD ci.type).getUsedConstants
+    let mut out : Array String := #[]
+    let mut fuel := 20000
+    while work.size > 0 && fuel > 0 do
+      fuel := fuel - 1
+      let c := work.back!
+      work := work.pop
+      if visited.contains c then continue
+      visited := visited.push c
+      if c == target then continue
+      if isAux c then
+        if let some ci2 := env.find? c then
+          work := work ++ (ci2.value?.getD ci2.type).getUsedConstants
+        continue
+      if typeConsts.contains c then continue
+      let modName := if let some idx := env.const2ModIdx.get? c then env.header.moduleNames[idx.toNat]! else env.header.mainModule
+      out := out.push ("{\"fullName\":\"" ++ toString c ++ "\",\"modName\":\"" ++ toString modName ++ "\"}")
+    logInfo ("AVIDPREM_START[" ++ String.intercalate "," out.toList ++ "]AVIDPREM_END")
+'''
+
+
+def extract_match_premises_via_repl(
+    lean_name: str,
+    lean_project_dir: str | Path,
+) -> Optional[List[dict]]:
+    """Extrae las premisas de la PRUEBA de un teorema ya compilado en Mathlib,
+    consultando el entorno residente del REPL pool (Mathlib en env 0).
+
+    Es el "lado B" de D3: en vez de re-localizar el fuente de Mathlib y correr
+    ExtractData (lento, y falla con nombres con namespace o de core), le pregunta
+    al entorno ya cargado qué constantes usa la prueba del teorema `lean_name`
+    (el nombre que Leandex ya devolvió como match). Sub-segundo, sin tocar disco.
+
+    Returns:
+        Lista de dicts {fullName, modName} (formato compatible con compute_d3),
+        [] si el nombre no existe, o None si el pool no está disponible / falla.
+        Nunca lanza excepción.
+    """
+    import re as _re
+
+    try:
+        from src.lean_repl.pool import pool_enabled, get_pool
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("D3 side-B: REPL pool import failed: %s", exc)
+        return None
+
+    if not pool_enabled():
+        logger.info("D3 side-B: REPL pool disabled; skipping env query")
+        return None
+
+    pool = get_pool(lean_project_dir)
+    if pool is None:
+        return None
+
+    code = _SIDEB_METAPROGRAM.replace("__NAME__", lean_name)
+    try:
+        _has_error, _has_sorry, stdout, _stderr = pool.check(code)
+    except Exception as exc:
+        logger.warning("D3 side-B: REPL query failed for %s: %s", lean_name, exc)
+        return None
+
+    m = _re.search(r"AVIDPREM_START\[(.*)\]AVIDPREM_END", stdout, _re.DOTALL)
+    if m is None:
+        logger.warning("D3 side-B: no AVIDPREM output for %s", lean_name)
+        return None
+
+    inner = m.group(1).strip()
+    if not inner:
+        return []
+    try:
+        premises = json.loads("[" + inner + "]")
+    except json.JSONDecodeError as exc:
+        logger.warning("D3 side-B: bad JSON for %s: %s", lean_name, exc)
+        return None
+
+    logger.info(
+        "D3 side-B: %s → %d raw premises via REPL env", lean_name, len(premises),
+    )
+    return premises

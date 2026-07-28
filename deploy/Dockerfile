@@ -61,6 +61,14 @@ COPY src/ ./src/
 COPY config/ ./config/
 COPY prompts/ ./prompts/
 COPY lean_project/ ./lean_project/
+
+# Register the `Papers` module root so D3 premise extraction (ExtractData) can
+# resolve the runtime temp files it writes under Papers/_d3_temp/. Compiling one
+# small module creates the Papers build dir; without it ExtractData aborts with
+# "unknown module prefix 'Papers'" and D3 (candidate side) is unavailable.
+RUN cd /app/lean_project && lake build Papers.Paper.Blocks.def_even \
+    || echo "Papers build failed — D3 candidate-side premise extraction disabled"
+
 COPY app.py .
 COPY server.py .
 COPY deploy/landing.html /app/deploy/landing.html
