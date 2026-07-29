@@ -1,245 +1,181 @@
 # AViD Journal
 
-**Automated Verification in Demonstrations** - The first fully automated mathematics journal.
+**Automated Verification in Demonstrations** — an automated pipeline that reads a
+mathematics paper, formalizes its proofs in Lean 4, and judges whether the results
+are *new* to the mathematical record.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Lean 4](https://img.shields.io/badge/Lean-4.29-orange.svg)](https://leanprover.github.io/)
 
 ---
 
-## 🎯 Vision
+## What it does
 
-AViD Journal accepts `.tex` files, formalizes proofs in Lean 4, verifies correctness, checks novelty against Mathlib + arXiv + TheoremSearch, and auto-publishes if valid.
+You give it a `.tex` file with theorems, lemmas and definitions. AViD:
 
-This is critical infrastructure for AI-driven mathematical research — when AIs discover theorems autonomously, they'll need automated verification and review.
+1. **Parses** the LaTeX into blocks and a dependency graph.
+2. **Formalizes** each block into **Lean 4** with an LLM agent, iterating against the
+   Lean compiler until it type-checks (or is marked for human review).
+3. **Checks novelty** across three dimensions and emits one of seven verdicts.
+4. **Publishes** the result if it clears the bar.
 
-> **Estado (jul 2026):** el veredicto de novedad activo vive en `src/novelty_v2/`
-> (árbol D2→D1→D3, 7 veredictos). El **demo web** es `app.py` (backend) + `server.py`
-> (FastAPI, sirve `deploy/landing.html`, SSE), acelerado por un **REPL pool Lean
-> residente** (`src/lean_repl/`). Fuentes C_I: arXiv + TheoremSearch (Semantic
-> Scholar retirado). Ver `CLAUDE.md` para el estado detallado y las decisiones.
+It ships as a **web app** (Google sign-in, a submission queue, live progress) and as a
+set of **Python modules** you can drive from the command line.
 
 ---
 
-## 🏗️ Architecture
+## The novelty metric (three dimensions, seven verdicts)
+
+Evaluated cheapest-first: **D2 → D1 → D3**.
+
+| Dim | Question | How |
+|---|---|---|
+| **D1** | Does it already exist? | Mathlib search (Leandex + `exact?`) for the formal corpus C_F; arXiv + an LLM judge for the informal corpus C_I. |
+| **D2** | Is it trivial? | Standard tactics (`decide`, `norm_num`, `simp`, `omega`, `tauto`, `aesop`) with budgets. If one closes the goal, it's trivial. |
+| **D3** | Is the *proof* structurally new? | Jaccard distance over the premise sets of the candidate proof vs. the matched Mathlib theorem. |
+
+**Verdicts:** `NOVEDAD_ENUNCIADO`, `NOVEDAD_DEMOSTRACION`, `CONOCIDO_LITERATURA`,
+`NO_NOVEDOSO_redundante`, `NO_NOVEDOSO_trivial`, `ZONA_GRIS`, `INCONCLUSIVE`.
+
+See [`src/novelty/README.md`](src/novelty/README.md) for the decision tree.
+
+---
+
+## Architecture
 
 ```
-.tex Paper
-    │
-    ▼
-┌─────────────────────────────┐
-│ PARSER                      │  → Extract blocks + dependency graph
-│ src/parser/                 │     (theorems, lemmas, definitions)
-└──────────────┬──────────────┘
-               │ blocks in topological order
-               ▼
-╔═════════════ orchestrator (src/formalization/) ═══════════════╗
-║                                                               ║
-║   for each block (resume mode skips done):                    ║
-║     ┌─────────────────────────────────────────────────────┐   ║
-║     │ FORMALIZATION + VERIFICATION (per-block loop)       │   ║
-║     │                                                     │   ║
-║     │   Claude Code session (Numina-derived runner):      │   ║
-║     │     • writes / edits Blocks/<lean_name>.lean        │   ║
-║     │     • calls lean_diagnostic_messages                │   ║
-║     │     • iterates until clean or max_rounds            │   ║
-║     │                                                     │   ║
-║     │   then orchestrator:                                │   ║
-║     │     • final lean_checker pass                       │   ║
-║     │     • appends declaration → Paper.lean              │   ║
-║     │     • updates PAPER_INDEX.md / REVIEW.md            │   ║
-║     │     • lake build Papers.<ModuleName>.Paper (olean)  │   ║
-║     └─────────────────────────────────────────────────────┘   ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
-               │
-               ▼
-┌─────────────────────────────┐
-│ NOVELTY CHECK (separate pass)│  → Check if new
-│ src/novelty/                 │     • Stage 0: Mathlib via Leandex
-│                              │     • Stages 1–3: ArXiv + LLM judge
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│ DECISION                    │  → Accept / Reject
-│ orchestrator + report       │     + Citation report
-└─────────────────────────────┘
+ .tex ─► src/parser ─► src/formalization ─► src/novelty ─► verdict ─► src/publication
+             │            (Lean 4 + LLM)     (D2 ► D1 ► D3)
+             │                   │                  │
+             └───────────────────┴──────────────────┘
+                    all Lean work shares one resident
+                    Mathlib process  ──►  src/lean_repl
 ```
 
-The agent that writes Lean is **Claude Code**, not Numina. AViD vendors Numina-Lean-Agent's runner scripts (`run_claude.py`, `runner.py`, `lean_checker.py`, …) and its coordinator / blueprint / sketch prompt pattern, but the agent loop itself is Claude Code calling `lean_diagnostic_messages` via [lean-lsp-mcp](https://github.com/leanprover-community/lean-lsp-mcp).
+Mathlib is heavy (thousands of `.olean` files, ~2 min to load cold). Instead of
+re-loading it for every compile, AViD keeps a **resident REPL pool**
+([`src/lean_repl/`](src/lean_repl/README.md)) with Mathlib loaded once and shared by
+formalization, D2 and D3. This is what makes a full run take ~2 min instead of ~15.
 
 ---
 
-## 📁 Project Structure
+## Running it
+
+### Option A — Web app via Docker (recommended)
+
+This is how a fresh machine should run it. Everything (Lean, Mathlib, Python) lives
+inside the image.
+
+```bash
+git clone https://github.com/ayrtonporto/avid-journal.git
+cd avid-journal
+cp .env.example .env      # fill in your keys — see Configuration below
+docker compose up -d --build
+docker compose logs -f    # wait for "REPL pool started" / "Analysis queue ready"
+```
+
+Then open `http://SERVER_IP:7860` (or your Cloudflare tunnel domain).
+
+> The first build is slow (~30–60 min: it downloads Mathlib and compiles). Requirements,
+> RAM/disk sizing and operations are documented separately in the **deploy guide**
+> (shared out-of-band — ask Ayrton). Deploy internals also live in
+> [`deploy/`](deploy/README.md).
+
+### Option B — Local Python / CLI (development)
+
+For hacking on the modules directly. Needs Lean 4 installed via
+[elan](https://leanprover-community.github.io/get_started.html) and Mathlib built once
+under [`lean_project/`](lean_project/README.md).
+
+```bash
+python -m venv .venv
+source .venv/Scripts/activate      # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# Parse a paper into blocks
+python -m src.parser.parse_tex tests/fixtures/sample_paper.tex --stats
+
+# Run the full pipeline on a paper
+python app.py tests/fixtures/sample_paper.tex
+```
+
+The [Spanish install-and-use walkthrough](docs/GUIA_INSTALACION_Y_USO.md) covers the
+local setup end to end (elan, Lake/Mathlib, Python, LLM keys).
+
+---
+
+## Configuration
+
+All secrets go in `.env` (gitignored). Copy [`.env.example`](.env.example) and fill in:
+
+| Variable | Needed for | Notes |
+|---|---|---|
+| `OPENCODE_GO_API_KEY` | Formalization + LLM judge | Must have credit. |
+| `GOOGLE_CLIENT_ID` | Web sign-in | OAuth Client ID (public, safe in the frontend). |
+| `AVID_DEV_MODE` | Local testing | `1` disables login. **Set to `0` in production.** |
+| `AVID_REPL_POOL_SIZE` / `AVID_ANALYSIS_WORKERS` | Concurrency | One unit ≈ 2.5 GB RAM. Keep them equal. |
+
+Never commit real keys. The full variable list is in `.env.example` and the deploy guide.
+
+---
+
+## Repository layout
 
 ```
 avid-journal/
-│
-├── examples/                       # LaTeX inputs with checked-in Lean output
-│   ├── tiny_even_numbers/paper.tex
-│   └── thesis_ayrton_porto/paper.tex
+├── app.py                  # Pipeline entry point (parse → formalize → novelty)
+├── server.py               # FastAPI web server: queue, SSE progress, auth
+├── docker-compose.yaml     # Web app + Cloudflare tunnel
 │
 ├── src/
-│   ├── parser/                     # LaTeX → blocks + dependency graph
-│   │   ├── latex_parser.py
-│   │   └── parse_tex.py
-│   │
-│   ├── novelty/                    # Novelty detection (Stages 0–3)
-│   │   ├── mathlib_checker.py      # Stage 0: Leandex search in Mathlib
-│   │   ├── arxiv_search.py         # Stage 1: arXiv + TheoremSearch (Semantic Scholar retired)
-│   │   ├── paper_extractor.py      # Stage 2: PDF download & text extraction
-│   │   ├── block_comparator.py     # Stage 3: block ↔ candidate comparison
-│   │   ├── llm_judge.py            # Claude judge for theorem equivalence
-│   │   ├── novelty_checker.py      # Orchestrates Stages 0–3
-│   │   └── _cache.py               # Disk cache for external API calls
-│   │
-│   └── formalization/              # Lean 4 formalization pipeline
-│       ├── orchestrator.py         # Main loop (topo sort + per-block driver)
-│       ├── lean_project.py         # Shared Lean project + per-paper sub-modules
-│       ├── complexity.py           # SIMPLE / MEDIUM / HARD / EXTERNAL classifier
-│       ├── mathlib_search.py       # Mathlib lookup for external results
-│       └── scripts/                # Numina-derived Claude runner + lean_checker
+│   ├── parser/             # LaTeX → blocks + dependency graph
+│   ├── formalization/      # LLM + Lean 4 formalization loop
+│   ├── novelty/            # D1/D2/D3 novelty metric + orchestrator
+│   ├── lean_repl/          # Resident Mathlib REPL pool
+│   ├── auth/               # Google sign-in verification
+│   ├── users/              # SQLite user store
+│   ├── publication/        # Publishing accepted submissions
+│   └── notifications/      # Outbound notifications
 │
-├── prompts/                        # Agent prompts driven by complexity mode
-│   ├── prompt_avid.txt             # SIMPLE
-│   ├── prompt_medium_mode_avid.txt # MEDIUM
-│   ├── prompt_hard_mode_avid.txt   # HARD
-│   └── docs/prompts/               # coordinator / blueprint / sketch / common
-│
-├── lean_project/                   # Shared Lean 4 project (Mathlib precompiled)
-│   ├── lakefile.toml
-│   ├── lean-toolchain
-│   └── Papers/<ModuleName>/        # One sub-module per formalized paper
-│
-├── scripts/
-│   └── formalization/              # CLI helpers (diagnose, rebuild, smoke, etc.)
-│
-├── tests/
-│   ├── test_orchestrator.py
-│   ├── test_novelty.py
-│   └── fixtures/
-│
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── PROGRESS.md
-│   └── GUIA_INSTALACION_Y_USO.md
-│
-├── .env.example
-├── .gitignore
-├── requirements.txt
-├── setup.sh
-└── README.md
+├── lean_project/           # Shared Lean 4 project (Mathlib built once)
+│   └── Papers/             # One sub-module per formalized paper
+├── prompts/                # LLM agent prompts (SIMPLE/MEDIUM/HARD + agent docs)
+├── deploy/                 # Dockerfile, landing page, deploy notes
+├── tests/                  # Test suite + fixtures
+├── docs/                   # Architecture + install/usage guides
+└── translation/            # LaTeX source of the paper (per-section)
+```
+
+Each folder has its own `README.md` with the details.
+
+---
+
+## Testing
+
+```bash
+pytest tests/                # full suite
+pytest -m "not live"         # skip tests that hit Leandex / arXiv / the LLM
 ```
 
 ---
 
-## 🚀 Quick Start
+## Documentation
 
-### Prerequisites
-
-- Python 3.8+
-- Lean 4 (for formalization)
-- Claude API key (for LLM judge)
-
-### Installation
-
-```bash
-# Clone repository
-git clone https://github.com/YOUR_USERNAME/avid-journal.git
-cd avid-journal
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Usage
-
-**1. Parse a LaTeX paper:**
-
-```bash
-python src/parser/parse_tex.py paper.tex --stats
-```
-
-**2. Check novelty (ArXiv search):**
-
-```bash
-python src/novelty/arxiv_search.py "Boolean algebra isomorphism" --top-k 10
-```
-
-**3. Full formalization pipeline:**
-
-```bash
-python -X utf8 -m src.formalization.orchestrator paper.tex --title "Paper Title"
-```
-
-Resume mode is on by default — blocks already marked `verified`/`axiom` in `PAPER_INDEX.md` are skipped. Use `--blocks-range "1-13"` to formalize a subset, `--dry-run` to validate the pipeline without spending Claude credits.
-
----
-
-## 📊 Current Status
-
-See [docs/PROGRESS.md](docs/PROGRESS.md) for the up-to-date breakdown of what's done, in progress, and planned.
-
----
-
-## 🧪 Testing
-
-```bash
-# Full test suite
-pytest tests/
-
-# Skip tests that hit Leandex / arXiv / TheoremSearch / Anthropic
-pytest -m "not live"
-
-# Orchestrator dry-run (no Claude credits spent)
-python tests/test_orchestrator.py
-```
-
----
-
-## 📖 Documentation
-
-- [docs/QUICKSTART.md](docs/QUICKSTART.md) — first 10 minutes after cloning
+- [docs/QUICKSTART.md](docs/QUICKSTART.md) — first steps after cloning
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — module-level design and data flow
-- [docs/GUIA_INSTALACION_Y_USO.md](docs/GUIA_INSTALACION_Y_USO.md) — full Spanish setup walkthrough (Lean/elan, Lake/Mathlib, Python, Claude CLI, orchestrator usage)
-- [docs/PROGRESS.md](docs/PROGRESS.md) — status of each component
-- [examples/README.md](examples/README.md) — worked LaTeX examples and how to reproduce their Lean output
-- [scripts/formalization/README.md](scripts/formalization/README.md) — helper CLI index
+- [docs/GUIA_INSTALACION_Y_USO.md](docs/GUIA_INSTALACION_Y_USO.md) — full Spanish setup walkthrough
 
 ---
 
-## 🤝 Contributing
+## License & credits
 
-This project is currently in early development. Contributions welcome once we reach v0.1.
+MIT — see [LICENSE](LICENSE).
 
----
+Built on **Lean 4** + **Mathlib**, **Leandex** (Mathlib semantic search), and a
+Numina-Lean-Agent–derived formalization runner. The paper is *Beyond Correctness —
+Toward Automated Novelty Verification with Lean 4*.
 
-## 📄 License
+**Author:** Ayrton Porto · <https://ayrtonporto.github.io/>
 
-MIT License - See [LICENSE](LICENSE) for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **Numina-Lean-Agent** - Autoformalization framework
-- **LeanDex** - Semantic search over Mathlib
-- **Lean Community** - For Mathlib and the Lean ecosystem
-- **MerLean** - Inspiration for autoformalization pipeline
-
----
-
-## 📧 Contact
-
-Ayrton Porto  
-Website: https://ayrtonporto.github.io/  
-Project: AViD Journal
-
----
-
-**Note:** This is research software in active development. Not production-ready.
+> Research software, under active development. Not production-hardened.

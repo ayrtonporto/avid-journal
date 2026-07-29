@@ -82,3 +82,18 @@ avid_journal.tex
 *.db-wal
 # D3 temp extraction files
 lean_project/Papers/_d3_temp/
+
+# Instrucciones internas para agentes de IA (roadmap/notas personales) — se
+# mantienen locales, no forman parte del repo público.
+CLAUDE.md
+
+# Andamiaje de workflow de IA por paper (docs de trabajo internos y copias de
+# prompts que el formalizador genera en runtime desde prompts/docs/prompts/).
+lean_project/Papers/**/docs/prompts/
+lean_project/Papers/**/REVIEW.md
+lean_project/Papers/**/TASK.md
+lean_project/Papers/**/PAPER_INDEX.md
+lean_project/Papers/**/SPLIT.md
+
+# Matches informales formalizados por batch_formalize_informal.py (runtime).
+lean_project/Papers/InformalMatches/

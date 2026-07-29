@@ -270,17 +270,15 @@ Si los compartes en GitHub, documenta cada uno con una línea en el README.
 
 ---
 
-## 8. Ejemplos LaTeX + Lean en el repo
+## 8. Lean formalizado en el repo
 
-Hay dos conjuntos documentados (fuentes `.tex` y salida en `lean_project/Papers/`):
+La salida Lean de cada paper vive en `lean_project/Papers/<Módulo>/` (ver
+[`lean_project/README.md`](../lean_project/README.md)):
 
-- Índice legible: **[`examples/README.md`](../examples/README.md)**
+| Módulo | Contenido |
+|--------|-----------|
+| `Papers/Paper/` | Ejemplo mínimo (`def_even`, `lem_even_sum`, `thm_four_evens`). |
+| `Papers/D3_Calibration/` | Teoremas de calibración de D3. |
+| `Papers/AyrtonPortoTesis/` | Bloques de la tesis del autor (topología/álgebra). |
 
-Resumen:
-
-| Ejemplo | LaTeX | Lean generado |
-|---------|-------|----------------|
-| Artículo mínimo (pares) | `examples/tiny_even_numbers/paper.tex` | `lean_project/Papers/TinyEvensPaperReal/` |
-| Tesis (corrida parcial) | `examples/thesis_ayrton_porto/paper.tex` | `lean_project/Papers/AyrtonPortoTesis/` |
-
-Los scripts en `scripts/formalization/` (`diagnose_thesis.py`, `list_thesis_blocks.py`, etc.) apuntan al `.tex` de `examples/thesis_ayrton_porto/paper.tex`. Ejecútalos desde la raíz del repo.
+Como entrada `.tex` de prueba, usá `tests/fixtures/sample_paper.tex`.

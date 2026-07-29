@@ -1,62 +1,55 @@
-# src/novelty_v2/ — Métrica de novedad según metric_spec.md
+# src/novelty — Novelty metric (D1 · D2 · D3)
 
-Implementación de la métrica de novedad de AViD Journal conforme a
-`paper/metric_spec.md` (documento de diseño v1).
+Given a formalized block, decide whether it is *new* to the mathematical record and
+return one of seven verdicts. Dimensions are evaluated **cheapest-first: D2 → D1 → D3**.
 
-## Relación con src/novelty/ (v1)
+## The three dimensions
 
-`src/novelty/` **está congelado** (solo fix-packs aprobados). Es la
-implementación previa de stages 0–3 (Leandex + arXiv + MiniLM + juez LLM).
-Este módulo la usa como dependencia externa:
+| Dim | Question | Method |
+|---|---|---|
+| **D2** — triviality | Does a standard tactic close it? | `decide`, `norm_num`, `simp`, `omega`, `tauto`, `aesop` with budgets, run on the resident REPL pool. `norm_num` is blacklisted for `Irrational`. |
+| **D1** — existence | Does it already exist? | **C_F** (formal): Mathlib via Leandex + `exact?` fallback. **C_I** (informal): arXiv + an LLM judge (DeepSeek). Every network/judge call is fail-open under timeout. |
+| **D3** — proof distance | Is the *proof* structurally new? | Jaccard over the premise sets of the candidate proof vs. the matched Mathlib theorem. Premises are extracted from the resident Lean env (side A via env-chaining, side B via a metaprogram over the match). |
 
-| Función importada de src/novelty/ | Reutilizada en |
+## The seven verdicts
+
+| Verdict | Condition |
 |---|---|
-| `mathlib_checker.check_in_mathlib()` | D1 sobre C_F |
-| `arxiv_search.search_arxiv()` | D1 sobre C_I etapa A (fuente primaria) |
-| `block_comparator` (MiniLM) | D1 sobre C_I etapa A (filtro grueso) |
-| `llm_judge.judge_theorem_pair()` | D1 sobre C_I etapa B (juez DeepSeek) |
-| `_cache.cache_or_fetch()` | caching compartido todas las dimensiones |
+| `NO_NOVEDOSO_trivial` | D2 closed it with a standard tactic |
+| `NO_NOVEDOSO_redundante` | match in C_F **and** D3 says the proof is close |
+| `NOVEDAD_DEMOSTRACION` | match in C_F **and** D3 says the proof is distant |
+| `CONOCIDO_LITERATURA` | match in C_I but not in C_F |
+| `NOVEDAD_ENUNCIADO` | no match in C_F or C_I, and not trivial |
+| `ZONA_GRIS` | generalization/specialization per the LLM judge |
+| `INCONCLUSIVE` | D3 could not decide (e.g. all match premises filtered out) |
 
-> **Nota (2026-07-25):** Semantic Scholar quedó fuera del path activo; las
-> fuentes de C_I son arXiv (primaria) + TheoremSearch (nivel-teorema) + Matlas
-> (gated). D1 envuelve toda llamada de red y el juez en timeouts fail-open, y
-> D2 rutea las tácticas por el REPL pool residente (`src/lean_repl/`). El spec
-> `paper/metric_spec.md` **no está presente en el repo** (referencia externa).
-
-## Estructura
+## Decision tree
 
 ```
-novelty_v2/
-├── __init__.py          ← exporta NoveltyVerdict, Verdict, D1/D2/D3Result
-├── types.py             ← dataclasses de veredictos (los 5 de la spec + ZONA_GRIS)
-├── dimensions/
-│   ├── d1_existence.py  ← Día 5 (adelantado): no-existencia en C_F y C_I
-│   ├── d2_triviality.py ← Día 4: cierre por tácticas T_auto
-│   └── d3_premises.py   ← Días 8-9: LeanDojo + Jaccard
-└── orchestrator.py      ← Día 8: árbol de decisión combinado
+1. D2 — if a tactic closes it → NO_NOVEDOSO_trivial, done
+2. D1 on C_F (Leandex) — if match → go to step 4
+3. D1 on C_I (cheap stage A; expensive judge stage B only if A fires)
+     no match                         → NOVEDAD_ENUNCIADO, done
+     match in C_I but not C_F          → CONOCIDO_LITERATURA, done
+     generalization/specialization     → ZONA_GRIS, done
+4. D3 (Jaccard over premises)
+     distant proofs → NOVEDAD_DEMOSTRACION
+     close proofs   → NO_NOVEDOSO_redundante
 ```
 
-## Los cinco veredictos (spec §6)
+## Key files
 
-| Veredicto | Condición |
+| File | Role |
 |---|---|
-| `NO_NOVEDOSO_trivial` | D2 cerró con táctica estándar |
-| `NO_NOVEDOSO_redundante` | match en C_F + D3 pruebas cercanas |
-| `NOVEDAD_DEMOSTRACION` | match en C_F + D3 pruebas distantes |
-| `CONOCIDO_LITERATURA` | match en C_I pero no en C_F |
-| `NOVEDAD_ENUNCIADO` | sin match en C_F ni C_I, no trivial |
-| `ZONA_GRIS` | generalización/especialización según juez LLM |
-
-## Orden de decisión (árbol, spec §6)
-
-```
-1. D2 (trivialidad) — si cierra → NO_NOVEDOSO_trivial, fin
-2. D1 sobre C_F (Leandex) — si match → ir a paso 4
-3. D1 sobre C_I (etapa A barata, etapa B cara si A dispara)
-   - sin match → NOVEDAD_ENUNCIADO, fin
-   - match en C_I pero no C_F → CONOCIDO_LITERATURA, fin
-   - generalization/specialization → ZONA_GRIS, fin
-4. D3 (Jaccard sobre premisas)
-   - distantes → NOVEDAD_DEMOSTRACION
-   - cercanas  → NO_NOVEDOSO_redundante
-```
+| `orchestrator.py` | The D2→D1→D3 tree; emits the final verdict. |
+| `types.py` | `Verdict` enum + `D1/D2/D3Result` dataclasses. |
+| `dimensions/d1_existence.py` | D1: Leandex C_F + arXiv/judge C_I. |
+| `dimensions/d2_triviality.py` | D2: the six tactics + `Irrational` blacklist. |
+| `dimensions/d3_premises.py` | D3: `compute_d3()`, Jaccard + premise filters. |
+| `premise_extraction.py` | Extracts premise sets from the resident REPL env (sides A/B). |
+| `mathlib_checker.py` | Leandex v2 API client. |
+| `llm_judge.py` | DeepSeek judge via the OpenCode Go API. |
+| `arxiv_search.py` | arXiv candidate search. |
+| `_cache.py` | Shared disk cache for external calls. |
+| `run_eval_full.py` | Evaluation harness with checkpoint/resume. |
+| `d3_extraction_map.yaml` | Maps eval theorem IDs → `.lean` files for D3. |
