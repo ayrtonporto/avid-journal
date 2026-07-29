@@ -1,3 +1,0 @@
-[submodule "vendor/numina-lean-agent"]
-	path = vendor/numina-lean-agent
-	url = https://github.com/project-numina/numina-lean-agent.git

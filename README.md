@@ -144,7 +144,7 @@ avid-journal/
 ├── deploy/                 # Dockerfile, landing page, deploy notes
 ├── tests/                  # Test suite + fixtures
 ├── docs/                   # Architecture + install/usage guides
-└── translation/            # LaTeX source of the paper (per-section)
+└── paper/                  # The manuscript (LaTeX)
 ```
 
 Each folder has its own `README.md` with the details.

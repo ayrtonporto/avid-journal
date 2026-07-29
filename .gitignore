@@ -52,7 +52,7 @@ audit/
 # Proyectos Lean standalone generados por el orquestador (--standalone / tests)
 lean_papers/
 
-# Copia local de Numina (el oficial va como submodulo en vendor/numina-lean-agent)
+# Copia local de Numina (upstream)
 Numina Lean Agent/
 
 # Lean (por si .gitignore del subproyecto no aplica en algún caso)
@@ -75,8 +75,9 @@ src/users/users.db
 # Ephemeral Lean compile scratch written into lean_project/ at runtime
 lean_project/tmp*.lean
 lean_project/_prewarm_*.lean
-# Locally-built Lean REPL binary (prod builds it in the Docker image)
-vendor/repl/
+# Vendored/locally-built artifacts. The Lean REPL binary is built into the
+# Docker image (and locally under vendor/repl/); nothing in vendor/ is tracked.
+vendor/
 avid_journal.tex
 *.db-shm
 *.db-wal
@@ -97,3 +98,11 @@ lean_project/Papers/**/SPLIT.md
 
 # Matches informales formalizados por batch_formalize_informal.py (runtime).
 lean_project/Papers/InformalMatches/
+
+# Fuente LaTeX del paper (se usó para construir el manuscrito, no es parte del
+# software que corre un tercero).
+translation/
+
+# Launcher local de demo atado al layout de worktree del autor (.venv y repl
+# locales); un tercero corre por Docker, no lo necesita.
+run_local_demo.ps1
