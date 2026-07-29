@@ -58,7 +58,6 @@ WORKDIR /app/lean_project
 # ── Source code ───────────────────────────────────────────────────────────
 WORKDIR /app
 COPY src/ ./src/
-COPY config/ ./config/
 COPY prompts/ ./prompts/
 COPY lean_project/ ./lean_project/
 
