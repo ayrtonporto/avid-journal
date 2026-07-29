@@ -337,8 +337,33 @@ def _run_d3_if_possible(
             statement_lines_b=d3_statement_lines_b,
         )
 
-    # ── Side A only → try auto-locate Side B ──────────────────────────
+    # ── Side A only → get Side B from the resident Mathlib env (fast) ──
     if d3_premises_a is not None and lean_project_dir is not None:
+        try:
+            from src.novelty.premise_extraction import (
+                extract_match_premises_via_repl,
+            )
+            prems_b = extract_match_premises_via_repl(
+                lean_name_existente, lean_project_dir,
+            )
+            if prems_b:
+                logger.info(
+                    "D3: Side B via REPL env: %s → %d premises",
+                    lean_name_existente, len(prems_b),
+                )
+                return compute_d3(
+                    premises_a=d3_premises_a,
+                    premises_b=prems_b,
+                    statement_lines_a=d3_statement_lines_a,
+                    statement_lines_b=None,
+                )
+        except Exception as exc:
+            logger.warning(
+                "D3: Side B REPL query error for '%s': %s",
+                lean_name_existente, exc,
+            )
+
+        # Fallback: locate the Mathlib source and run ExtractData on it.
         logger.info(
             "D3: auto-locating Side B for '%s'", lean_name_existente,
         )

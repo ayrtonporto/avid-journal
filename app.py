@@ -282,11 +282,15 @@ def formalize_block_with_provider(
             # loop rename the definition before it enters the context.
             if can_compile:
                 _emit(f"round {round_num}/{max_rounds}: compiling in Lean…")
-                # Pass a Path, not a str: find_lean_project_root() calls
-                # .is_file() on it, so a str raises inside check_lean_file and
-                # every compile silently reports has_error=True — no model
-                # output can ever pass. (target is already a Path.)
-                has_error, has_sorry, stdout, stderr = check_lean_file(target)
+                # Use the resident REPL pool (Mathlib preloaded in env 0) when
+                # available so each verification is sub-second instead of a fresh
+                # ~130s `lake env lean`. compile_check falls back to the cold
+                # check_lean_file — writing full_code to `target` (a Path, so
+                # find_lean_project_root's .is_file() works) — if the pool is off.
+                from src.lean_repl.pool import compile_check
+                has_error, has_sorry, stdout, stderr = compile_check(
+                    code, context_lean, target, lean_project_dir or str(target.parent),
+                )
                 logger.info(f"Compilation check: has_error={has_error}, has_sorry={has_sorry}")
                 if has_error or has_sorry:
                     _emit(f"round {round_num}/{max_rounds}: Lean errors, retrying…")
@@ -543,21 +547,32 @@ def process_tex(
         block_type = (block.get("type") or "").lower()
         if formalized and lean_stmt and LEAN_PROJECT_DIR.exists() and block_type != "definition":
             try:
-                from src.novelty.premise_extraction import extract_premises
-                import uuid as _uuid
-                # Create temp file under Papers/ so ExtractData can resolve the module
-                _d3_dir = LEAN_PROJECT_DIR / "Papers" / "_d3_temp"
-                _d3_dir.mkdir(parents=True, exist_ok=True)
-                _d3_path = _d3_dir / f"block_{_uuid.uuid4().hex[:8]}.lean"
-                full_lean = f"import Mathlib\n\n{context}\n\n{lean_stmt}\n"
-                _d3_path.write_text(full_lean, encoding="utf-8")
                 if on_progress:
                     on_progress("d3", f"Extracting premises [{i+1}/{n}]: {title}", int(pct)+2)
-                d3_premises_a = extract_premises(_d3_path, LEAN_PROJECT_DIR)
+                # Fast path: elaborate the candidate in the resident REPL env and
+                # query its proof premises (same method as D3 side B, sub-second).
+                from src.novelty.premise_extraction import (
+                    extract_candidate_premises_via_repl,
+                )
+                _candidate_code = f"{context}\n\n{lean_stmt}\n"
+                d3_premises_a = extract_candidate_premises_via_repl(
+                    _candidate_code, lean_stmt, str(LEAN_PROJECT_DIR),
+                )
+                # Fallback: cold ExtractData on a temp file under Papers/.
+                if not d3_premises_a:
+                    from src.novelty.premise_extraction import extract_premises
+                    import uuid as _uuid
+                    _d3_dir = LEAN_PROJECT_DIR / "Papers" / "_d3_temp"
+                    _d3_dir.mkdir(parents=True, exist_ok=True)
+                    _d3_path = _d3_dir / f"block_{_uuid.uuid4().hex[:8]}.lean"
+                    _d3_path.write_text(
+                        f"import Mathlib\n\n{context}\n\n{lean_stmt}\n", encoding="utf-8",
+                    )
+                    d3_premises_a = extract_premises(_d3_path, LEAN_PROJECT_DIR)
+                    try: _d3_path.unlink()
+                    except: pass
                 if d3_premises_a:
-                    logger.info(f"  {label}: extracted {len(d3_premises_a)} premises for D3")
-                try: _d3_path.unlink()
-                except: pass
+                    logger.info(f"  {label}: extracted {len(d3_premises_a)} premises for D3 (side A)")
             except Exception as _e:
                 logger.debug(f"D3 premise extraction skipped: {_e}")
 
