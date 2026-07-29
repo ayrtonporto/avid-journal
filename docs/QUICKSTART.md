@@ -54,7 +54,7 @@ The first build is slow (downloads + compiles Mathlib). Subsequent runs read the
 ## 3. Sanity-check the parser
 
 ```bash
-python src/parser/parse_tex.py examples/tiny_even_numbers/paper.tex --stats
+python -m src.parser.parse_tex tests/fixtures/sample_paper.tex --stats
 ```
 
 Should print three extracted blocks (one definition, one lemma, one theorem).
@@ -83,7 +83,6 @@ pytest -m "not live"
 
 ## 6. Next steps
 
-- [CONTEXT.md](CONTEXT.md) — design decisions and the "why" behind PAPER_INDEX.md, axiom policy, search order
 - [ARCHITECTURE.md](ARCHITECTURE.md) — module-level design and data flow
 - [GUIA_INSTALACION_Y_USO.md](GUIA_INSTALACION_Y_USO.md) — full setup walkthrough in Spanish
-- [examples/README.md](../examples/README.md) — reproduce the worked Lean output for both example papers
+- [../src/README.md](../src/README.md) — index of the pipeline modules

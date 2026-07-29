@@ -11,15 +11,24 @@ lean_project/
 ├── LeanProject.lean       # default library entry point
 └── Papers/
     └── <ModuleName>/      # one sub-module per formalized paper
-        ├── Paper.lean             # cumulative module (orchestrator-owned)
-        ├── PAPER_INDEX.md         # per-block log (status, line, deps)
-        ├── REVIEW.md              # axioms / failures / human-review notes
-        ├── Blocks/<lean_name>.lean # per-block file (edited by Claude)
-        ├── TASK.md                # current block context (orchestrator-written)
-        └── docs/prompts/          # agent prompts copied for the session
+        ├── Paper.lean              # cumulative module (orchestrator-owned)
+        └── Blocks/<lean_name>.lean # per-block file (edited by the LLM agent)
 ```
 
 The Lean module path for a paper is `Papers.<ModuleName>.Paper`.
+
+> The orchestrator also writes per-paper working files at runtime — `PAPER_INDEX.md`
+> (block log), `REVIEW.md` (human-review notes), `TASK.md` (current block context) and
+> a copied `docs/prompts/`. These are **gitignored**: they are AI-workflow scaffolding,
+> not part of the tracked source.
+
+## Checked-in Papers
+
+| Sub-module | Purpose |
+|---|---|
+| `Papers/Paper/` | Small worked example (`def_even`, `lem_even_sum`, …). One module is built in the Docker image to register the `Papers` root for D3. |
+| `Papers/D3_Calibration/` | Calibration theorems referenced by `src/novelty/d3_extraction_map.yaml`. |
+| `Papers/AyrtonPortoTesis/` | Author's thesis blocks (topology/algebra), kept as extra formalized material. |
 
 ## Setup
 
@@ -48,4 +57,4 @@ The orchestrator runs this automatically after every verified block so the next 
 ## Pointers
 
 - [docs/GUIA_INSTALACION_Y_USO.md](../docs/GUIA_INSTALACION_Y_USO.md) — full install + usage walkthrough (Spanish)
-- [examples/README.md](../examples/README.md) — worked examples (TinyEvensPaperReal, AyrtonPortoTesis) with the LaTeX source and the formalized Lean checked in
+- [src/lean_repl/README.md](../src/lean_repl/README.md) — the resident Mathlib pool that reuses these oleans at runtime
