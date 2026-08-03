@@ -5,11 +5,21 @@
 # ── Core ────────────────────────────────────────────────────────────────
 requests>=2.31.0
 python-dotenv>=1.0.0
-numpy>=1.24.0
+numpy==2.4.6
 
 # ── ML / embeddings (D1 similarity, MiniLM) ─────────────────────────────
-sentence-transformers>=2.2.0
-faiss-cpu>=1.7.4
+# Pinned to the exact set proven working in the Linux Docker image. These float
+# fast and break on fresh installs: an unpinned `torch` pulls the newest release
+# (which may drop CPU wheels or need a newer toolchain) and numpy 2.x churns ABI.
+# If you must bump, change all of these together and rebuild from a clean image.
+torch==2.13.0
+sentence-transformers==5.6.1
+transformers==5.14.1
+tokenizers==0.22.2
+huggingface_hub==1.25.1
+scikit-learn==1.9.0
+scipy==1.17.1
+faiss-cpu==1.14.3
 
 # ── PDF + arXiv (D1 existence) ──────────────────────────────────────────
 PyMuPDF>=1.23.0
