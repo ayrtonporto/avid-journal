@@ -37,3 +37,8 @@ docker-compose.yaml
 
 # Large caches (will be rebuilt/generated in container)
 cache/
+
+# Lean build dir — several GB of oleans. Never ship it as raw build context;
+# the offline Mathlib cache is passed as mathlib-cache.tar.gz instead (kept).
+lean_project/.lake/
+**/.lake/

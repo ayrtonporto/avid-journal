@@ -36,10 +36,25 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # ── Lean project with Mathlib ─────────────────────────────────────────────
 # Copy lakefile + toolchain first (caching: only rebuild Mathlib if these change)
 COPY lean_project/lakefile.toml lean_project/lean-toolchain /app/lean_project/
-WORKDIR /app/lean_project
 
-# Download precompiled Mathlib oleans (~2 GB, cached in Docker layer)
-RUN lake exe cache get || echo "Cache download failed — will need to build from source"
+# Offline Mathlib cache (optional). The upstream Mathlib olean cache that
+# `lake exe cache get` pulls is occasionally pruned/unavailable for a given
+# revision. To be independent of it, drop a gzip of a working `lean_project/.lake`
+# named `mathlib-cache.tar.gz` at the repo root (the build context); the build
+# will use it instead of the network. Create it on a machine that already has the
+# oleans with:
+#     cd lean_project && tar czf ../mathlib-cache.tar.gz .lake
+# The `lean-toolchain` anchor guarantees this COPY has a source when the tarball
+# is absent (glob matches nothing); in that case we fall back to the network.
+COPY lean_project/lean-toolchain mathlib-cache.tar.gz* /opt/mathlib-cache/
+WORKDIR /app/lean_project
+RUN if [ -f /opt/mathlib-cache/mathlib-cache.tar.gz ]; then \
+      echo ">> Using offline Mathlib cache from build context" && \
+      tar xzf /opt/mathlib-cache/mathlib-cache.tar.gz -C /app/lean_project ; \
+    else \
+      echo ">> No offline cache found; fetching Mathlib oleans from upstream" && \
+      (lake exe cache get || echo "cache get failed — lake build will compile from source") ; \
+    fi && rm -rf /opt/mathlib-cache
 RUN lake build || echo "Build failed — D2 will be disabled"
 
 # ── Lean REPL (resident Mathlib pool) ──────────────────────────────────────

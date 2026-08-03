@@ -84,6 +84,9 @@ avid_journal.tex
 # D3 temp extraction files
 lean_project/Papers/_d3_temp/
 
+# Offline Mathlib cache tarball for the Docker build (several GB, machine-local).
+mathlib-cache.tar.gz
+
 # Instrucciones internas para agentes de IA (roadmap/notas personales) — se
 # mantienen locales, no forman parte del repo público.
 CLAUDE.md
